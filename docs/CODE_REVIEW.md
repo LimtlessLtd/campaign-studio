@@ -16,6 +16,10 @@ Foundry compatibility certification. Tests use synthetic campaigns and fake prov
 | New UI and legacy UI implementations overlapped                                         | Removed unreachable dashboard/map/art renderers; formatted JS/CSS/Python                   |
 | Agent guidance described content generation but lacked development/review/release gates | AGENTS, development/architecture docs, PR templates, regression tests and CI               |
 
+The release gate also caught intermittent Windows file replacement failures. Source now retries temporary
+sharing/access errors while holding the document lock; permanent errors still fail after a bounded wait.
+Regression tests cover both outcomes, and test subprocesses are cleaned up even when an assertion fails.
+
 ## Structural assessment
 
 The filesystem model is understandable and suitable for a local prototype. Separating workflows,

@@ -60,8 +60,14 @@ for number in range(20):
                 subprocess.Popen([sys.executable, '-c', code, str(ROOT / 'DM'), path, str(n)])
                 for n in range(4)
             ]
-            for process in processes:
-                self.assertEqual(process.wait(timeout=30), 0)
+            try:
+                codes = [process.wait(timeout=30) for process in processes]
+                self.assertEqual(codes, [0] * len(processes))
+            finally:
+                for process in processes:
+                    if process.poll() is None:
+                        process.terminate()
+                        process.wait(timeout=10)
             entries = json.loads(Path(path).read_text(encoding='utf-8'))['items']
             self.assertEqual(len(entries), 80)
             self.assertEqual(len(set(entries)), 80)
@@ -77,3 +83,23 @@ for number in range(20):
                 json.loads(Path(path).read_text(encoding='utf-8')), {'items': ['fixture']}
             )
             self.assertFalse(list(Path(temporary).glob('*.tmp-*')))
+
+    def test_atomic_replace_retries_a_temporary_windows_sharing_failure(self):
+        sharing_error = PermissionError('Synthetic sharing violation')
+        sharing_error.winerror = 32
+        with (
+            patch.object(storage.os, 'name', 'nt'),
+            patch.object(storage.os, 'replace', side_effect=[sharing_error, None]) as replace,
+        ):
+            storage.atomic_replace('source', 'target')
+            self.assertEqual(replace.call_count, 2)
+
+    def test_atomic_replace_does_not_hide_a_permanent_permission_failure(self):
+        permission_error = PermissionError('Synthetic permanent denial')
+        permission_error.winerror = 5
+        with (
+            patch.object(storage.os, 'name', 'nt'),
+            patch.object(storage.os, 'replace', side_effect=permission_error),
+        ):
+            with self.assertRaises(PermissionError):
+                storage.atomic_replace('source', 'target', timeout=0)
