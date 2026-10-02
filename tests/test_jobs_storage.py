@@ -5,17 +5,70 @@ import queue
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
-import server
+import campaign_core as core
 import storage
+from job_service import JobService
 
 
 class JobsStorageTests(unittest.TestCase):
+    def test_restart_fails_only_unfinished_jobs_once(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            restarted = []
+            service = JobService(
+                lambda: temporary,
+                lambda: temporary,
+                threading.RLock(),
+                lambda *_: None,
+                lambda *_: None,
+                lambda job: restarted.append(job['id']),
+            )
+            pending = service.new_job('forge', 'fixture', 'Pending', [])
+            finished = service.new_job('art', 'fixture', 'Finished', [])
+            finished['status'] = 'done'
+            service.save_job(finished)
+
+            service.recover_unfinished()
+            service.recover_unfinished()
+
+            self.assertEqual(restarted, [pending['id']])
+            self.assertEqual(
+                json.loads(Path(service.job_file(finished['id'])).read_text())['status'], 'done'
+            )
+            self.assertEqual(
+                json.loads(Path(service.job_file(pending['id'])).read_text())['status'], 'failed'
+            )
+
+    def test_subprocess_job_records_completion_and_log(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            finished = []
+            service = JobService(
+                lambda: temporary,
+                lambda: temporary,
+                threading.RLock(),
+                lambda job, code, tail: finished.append((job['id'], code, tail)),
+                lambda *_: None,
+                lambda *_: None,
+            )
+            job = service.new_job(
+                'forge', 'fixture', 'Run fixture', [sys.executable, '-c', "print('SLUG fixture')"]
+            )
+            queued_job, cmd, stdin = service.lanes['forge'].get_nowait()
+            service.execute_job(queued_job, cmd, stdin)
+            service.lanes['forge'].task_done()
+
+            saved = json.loads(Path(service.job_file(job['id'])).read_text())
+            self.assertEqual(saved['status'], 'done')
+            self.assertEqual(saved['slug'], 'fixture')
+            self.assertEqual(saved['returncode'], 0)
+            self.assertEqual(finished, [(job['id'], 0, 'SLUG fixture\n')])
+
     def test_worker_survives_result_processing_failure(self):
         lane = queue.Queue()
         first = {'id': 'first', 'kind': 'fixture', 'status': 'queued'}
@@ -35,13 +88,13 @@ class JobsStorageTests(unittest.TestCase):
             job['status'] = 'done'
 
         with (
-            patch.dict(server.LANES, fixture=lane),
+            patch.dict(core.LANES, fixture=lane),
             patch.object(lane, 'get', take),
-            patch.object(server, 'execute_job', execute),
-            patch.object(server, 'save_job') as saved,
+            patch.object(core.JOBS_SERVICE, 'execute_job', execute),
+            patch.object(core.JOBS_SERVICE, 'save_job') as saved,
         ):
             with self.assertRaises(StopIteration):
-                server.worker('fixture')
+                core.worker('fixture')
             saved.assert_called_once_with(first)
         self.assertEqual(first['status'], 'failed')
         self.assertEqual(second['status'], 'done')
