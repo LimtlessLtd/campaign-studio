@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- General Requests now produce validated codex/session prep proposals for GM review before application.
+  Claude runs without filesystem or shell tools; existing request records remain readable.
 - Split the local server into HTTP routes, campaign operations, background job service and a small startup
   entry point. Existing HTTP APIs and stored job formats are unchanged.
 - Added subprocess completion and restart recovery regression tests alongside the existing worker survival

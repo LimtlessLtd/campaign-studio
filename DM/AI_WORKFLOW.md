@@ -21,5 +21,5 @@ The map studio owns campaign writes. Models propose JSON, then the GM reviews an
 
 Never edit a Foundry database directly. Do not publish campaign data. Do not include credentials in prompts.
 The structured AI runner has no filesystem/shell tools. Portable users can export/import proposals with
-any assistant able to follow the supplied schema. Legacy general requests have a separate file-editing
-Claude runner; use the structured map workflow for map-based content.
+any assistant able to follow the supplied schema. General Requests use their own structured entity/prep
+schema and GM review flow. Use the map workflow for map-based content.

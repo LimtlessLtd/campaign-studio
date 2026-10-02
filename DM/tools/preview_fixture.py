@@ -1,6 +1,6 @@
 """Disposable UI fixture; never reads or writes the live campaign."""
 
-from test_workflows import StudioIntegration, workflow
+from test_workflows import StudioIntegration, http_routes, workflow
 from unittest.mock import patch
 
 fixture = StudioIntegration()
@@ -9,7 +9,7 @@ try:
     slug, brief = fixture.import_map()
     workflow.stage(workflow.create(slug, brief), fixture.proposal())
     print('FIXTURE_URL ' + fixture.url + '/#/maps/' + slug, flush=True)
-    with patch('server.shutil.which', return_value=None):
+    with patch.object(http_routes.shutil, 'which', return_value=None):
         input('Press Enter to close the disposable preview.\n')
 finally:
     fixture.tearDown()
