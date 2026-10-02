@@ -85,6 +85,10 @@ The release workflow has write permission only in its final publication job. PR 
 permissions and do not use secrets or `pull_request_target`. Actions are pinned to reviewed commit SHAs.
 Dependency updates open reviewable PRs through Dependabot.
 
+Python dependency updates preserve existing compatible ranges using
+[`increase-if-necessary`](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/controlling-dependencies-updated).
+Raising a minimum version must preserve the supported Python versions and pass the matrix checks.
+
 To update an existing private installation, stop its server, back up its runtime directories, and copy new
 source files without overwriting `DM/data`, `DM/maps` or `DM/uploads`. Read migration notes before restarting.
 Keep any private campaign instructions local. Do not move the private installation into the public repo.
