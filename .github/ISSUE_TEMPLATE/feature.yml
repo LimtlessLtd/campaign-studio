@@ -1,0 +1,20 @@
+name: Feature request
+description: Propose a campaign management improvement.
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome
+      description: What should a GM be able to do? Include a synthetic example.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      description: What would demonstrate that the workflow is complete?
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Integration considerations
+      description: Relevant game systems, Foundry versions, providers or existing saved data.

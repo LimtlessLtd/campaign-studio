@@ -1,0 +1,106 @@
+# Architecture
+
+Campaign Studio is a single-user local app. Python serves static browser files and JSON APIs; no database
+or frontend compilation is required. Runtime files are ignored by Git and excluded from release archives.
+
+```mermaid
+flowchart LR
+  UI[Browser app] --> HTTP[server.py]
+  HTTP --> Docs[JSON documents and history]
+  HTTP --> WF[workflow.py: validate, stage, apply]
+  HTTP --> Queue[Job lanes]
+  Queue --> AI[Claude CLI: JSON proposals]
+  AI --> WF
+  Queue --> Forge[forge: render plan and scene]
+  Queue --> Art[image_worker: configured provider]
+  Forge --> Maps[Local maps and keys]
+  HTTP --> Export[maps_io: Foundry export]
+  Export --> Macro[GM runs import macro in Foundry]
+```
+
+## Modules
+
+| File                                  | Responsibility                                                                         |
+| ------------------------------------- | -------------------------------------------------------------------------------------- |
+| `DM/server.py`                        | HTTP routes, input validation, document revisions/history, job orchestration           |
+| `DM/config.py`                        | Local settings, world manifest and Data directory detection                            |
+| `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                           |
+| `DM/workflow.py`                      | Proposal schemas, layout DSL, stale draft checks, staging and idempotent content apply |
+| `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                    |
+| `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory           |
+| `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration             |
+| `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                               |
+| `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                                  |
+| `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                         |
+| `DM/app/app.js`                       | Shared DOM/API/autosave/merge helpers, routing, codex/threads/prep/inbox views         |
+| `DM/app/studio.js`                    | Studio navigation, map workspace/wizard, proposals, settings and image queue           |
+| `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                                  |
+
+The `DM` directory name and `wotg-maps`/`wotgForge` export identifiers are compatibility names. They do not
+require the original campaign. Change export identifiers only with a migration for existing scenes.
+
+## Persistence and concurrency
+
+Settings, codex, threads, art, inbox, prep, workflows and jobs live under `DM/data`. A map's plan, key,
+generated files and checkpoints live under `DM/maps/<slug>`. Images live in `DM/uploads`.
+
+Browser document saves use `X-Rev` and return HTTP 409 plus the latest document on conflict. The browser
+merges edits by stable object IDs. Previous document versions are retained under `data/.history` (50 per
+document). Server route mutations use a reentrant lock. Shared map catalogue read/modify/write holds a
+`storage.file_lock`, which also coordinates forge subprocesses on Windows and POSIX. JSON replacement uses
+unique temporary files. External editors must cooperate with this lock to avoid lost updates.
+
+Content application spans several JSON documents. Stable workflow-derived IDs and retry checks prevent
+duplicate content after interruption; this is not a transactional database commit. A crash can expose a
+partial application until retried. Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
+
+## Workflows and jobs
+
+| Object       | States                                                           |
+| ------------ | ---------------------------------------------------------------- |
+| Workflow     | queued/ready → running → review → applied; failed can be retried |
+| Job          | queued → running → done or failed                                |
+| Image brief  | queued → generating → ready or failed                            |
+| Story thread | open, planned, foreshadowed, resolved (GM managed)               |
+
+Layout/content proposals are validated against a bounded schema. Layout fingerprints cover plan bytes
+and numbered location identities/coordinates; changes make old proposals stale. They do not fingerprint
+all codex text. Applying a layout checkpoints the map, then queues a render; applying content links entries,
+journals, events, threads and art briefs. The model never calls persistence directly in structured workflows.
+
+One worker runs per lane (forge, Claude, art). Lanes may run concurrently. State postprocessing happens
+under the server lock, before the job is reported complete. Exceptions fail the job and leave its worker
+available. On restart, saved unfinished jobs are marked failed; the queue does not automatically resume.
+Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
+is rendering that map.
+
+## APIs and providers
+
+- `GET /api/state`, `/api/settings`, `/api/jobs`, `/api/doc/<name>` return local state.
+- `PUT /api/doc/<name>` uses `X-Rev`; `PUT /api/plan/<slug>` checkpoints a valid plan.
+- `POST /api/maps/create`, `/api/maps/import` create maps; `/api/maps/<slug>/populate|revise` create workflows.
+- `/api/workflow/<id>/pack` exports prompt/schema; POST `run|stage|feedback|apply` operates on a proposal.
+- `/api/maps/<slug>/checkpoint|restore|export` manages iteration and Foundry preparation.
+- `/api/upload-image`, `/api/art/generate` handle uploaded/generated artwork.
+- `/api/package` builds the public source allowlist; it never packages runtime content.
+
+Writes require `X-DM-Site: 1`. Only localhost Host values are accepted. File routes enforce canonical path
+containment. The legacy file roots support older installations; normal image selection uses studio uploads.
+Read-only `Website/content` references are disabled by default; enable `legacy_references` in local settings
+for an existing compatible site. Local reference notes can be added as `DM/data/notes.txt`.
+
+The image adapter posts `{model, prompt, size, n: 1}` and requires `data[0].b64_json`. It uses an environment
+variable for the key and permits HTTP only on loopback. Claude's structured runner uses no file/shell tools;
+exported prompt packs permit other assistants. Legacy general inbox requests use a separate file-editing
+CLI invocation and must not be treated as a security sandbox.
+
+## Foundry boundary
+
+Only `world.json` is read for world identity/system information. Assets and JSON are copied to
+`Data/wotg-maps`; the user runs the macro as GM. No world database is written by Python. Imported documents
+carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
+and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
+
+The scene schema targets v12. D&D 5e NPC/item mechanics remain descriptive notes; other systems get journal
+content. Live two-way world browsing/synchronization, mechanical stat block adapters and broad version
+compatibility are future work.

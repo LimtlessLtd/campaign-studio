@@ -1,0 +1,26 @@
+name: Bug report
+description: Report a problem using a synthetic example.
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach private campaigns, API keys, raw world databases or private prompt/job logs.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: App release, OS, Python/browser; Foundry and system versions if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction
+      description: Steps and a minimal synthetic example.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

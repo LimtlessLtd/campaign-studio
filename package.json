@@ -1,0 +1,12 @@
+{
+  "name": "campaign-studio-dev",
+  "private": true,
+  "scripts": {
+    "format": "prettier --write DM/app DM/forge/foundry-import-macro.js .github docs *.md *.json",
+    "format:check": "prettier --check DM/app DM/forge/foundry-import-macro.js .github docs *.md *.json",
+    "check:js": "node --check DM/app/app.js && node --check DM/app/studio.js && node tools/check_macro.cjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9"
+  }
+}

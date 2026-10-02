@@ -1,0 +1,8 @@
+DM/data/
+DM/maps/
+DM/uploads/
+DM/exports/
+node_modules/
+.venv/
+dist/
+package-lock.json

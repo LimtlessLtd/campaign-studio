@@ -1,0 +1,19 @@
+# Runtime campaigns, assets, prompts, logs and credentials are private.
+/DM/data/
+/DM/maps/
+/DM/uploads/
+/DM/exports/
+/dist/
+__pycache__/
+*.py[cod]
+*.log
+*.tmp-*
+.venv/
+venv/
+node_modules/
+.ruff_cache/
+.env
+.env.*
+.DS_Store
+Thumbs.db
+/.local/

@@ -1,0 +1,2 @@
+-r DM/requirements.txt
+ruff==0.16.10

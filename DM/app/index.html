@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Campaign Studio</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M16 2 29 9v14l-13 7-13-7V9z%22 fill=%22%23F0904A%22/%3E%3Ctext x=%2216%22 y=%2221%22 font-size=%2213%22 text-anchor=%22middle%22 fill=%22%230C1117%22 font-family=%22Georgia%22%3E20%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="studio.css" />
+  </head>
+  <body>
+    <aside id="side">
+      <a class="brand" href="#/">Campaign Studio<small>Local campaign</small></a>
+      <nav>
+        <a href="#/">Dashboard</a>
+        <a href="#/prep" data-nav="prep">Session prep</a>
+        <a href="#/threads">Threads</a>
+        <a href="#/codex" data-nav="codex">Codex</a>
+        <a href="#/maps" data-nav="maps">Battle maps</a>
+        <a href="#/art" data-nav="art">Artwork queue</a>
+        <a href="#/handouts">Handouts</a>
+        <a href="#/inbox">Requests</a>
+        <a href="#/notes">Notes.txt</a>
+      </nav>
+      <div id="jobs" aria-live="polite"></div>
+      <div id="saved" aria-live="polite"></div>
+      <p class="private">Private · runs only on this PC · never pushed</p>
+    </aside>
+    <main id="main"><p class="muted">Loading…</p></main>
+    <div id="lightbox" hidden>
+      <img alt="" />
+      <p></p>
+    </div>
+    <script src="app.js"></script>
+    <script src="studio.js"></script>
+  </body>
+</html>
