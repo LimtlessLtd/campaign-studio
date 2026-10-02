@@ -15,6 +15,7 @@ Foundry compatibility certification. Tests use synthetic campaigns and fake prov
 | Public source carried private campaign examples and hardcoded notes                     | Generic examples, local notes path, opt-in legacy references; manifest/private-path checks |
 | New UI and legacy UI implementations overlapped                                         | Removed unreachable dashboard/map/art renderers; formatted JS/CSS/Python                   |
 | Agent guidance described content generation but lacked development/review/release gates | AGENTS, development/architecture docs, PR templates, regression tests and CI               |
+| HTTP routes and job lifecycle shared one large server module                            | Separate route, campaign core, job service and startup modules with queue/recovery tests   |
 
 The release gate also caught intermittent Windows file replacement failures. Source now retries temporary
 sharing/access errors while holding the document lock; permanent errors still fail after a bounded wait.
@@ -26,16 +27,14 @@ The filesystem model is understandable and suitable for a local prototype. Separ
 revisions, map I/O, rendering and configuration already gives useful boundaries. A no-build frontend makes
 installation straightforward. The renderer is independent of AI: walls and image geometry share one plan.
 
-The main pressure points are the large HTTP/orchestration module and shared global frontend state.
-Splitting these should follow tested boundaries, rather than changing the stack during the initial release.
-Formatting and removing dead renderers make the current structure easier to review; the module split is
-still needed as features grow.
+The HTTP transport, campaign operations, job lifecycle and startup now have separate modules. Complex
+route bodies and shared global frontend state are the main remaining structure pressure points. Further
+route decomposition should follow tested business boundaries as features grow.
 
 ## Prioritized development work
 
 | Priority | Work                                                                           | Acceptance criteria                                                                        |
 | -------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| 1        | Extract a job service and route handlers from server.py                        | Existing APIs/state transitions unchanged; recovery and queue tests pass                   |
 | 1        | Replace broad legacy file-editing requests with structured entity/prep schemas | Review/apply flow for general requests; no model filesystem tools needed                   |
 | 1        | Strengthen multi-document commit recovery                                      | Crash at each write boundary recovers without dangling links or duplicates                 |
 | 1        | Add a versioned campaign schema and migration tool                             | Realistic old fixtures migrate with backups; unknown future versions are rejected          |

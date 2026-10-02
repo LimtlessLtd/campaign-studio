@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Split the local server into HTTP routes, campaign operations, background job service and a small startup
+  entry point. Existing HTTP APIs and stored job formats are unchanged.
+- Added subprocess completion and restart recovery regression tests alongside the existing worker survival
+  and integration checks.
+
 ## 0.1.1 — 2026-10-02
 
 - Retry temporary Windows file replacement failures while holding the document lock; permanent failures

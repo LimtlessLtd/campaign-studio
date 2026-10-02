@@ -21,7 +21,8 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
-import server
+import campaign_core
+import http_routes
 import workflow
 import revisions
 import maps_io
@@ -55,13 +56,19 @@ class StudioIntegration(unittest.TestCase):
         }
         (self.dm / 'data' / 'settings.json').write_text(json.dumps(settings))
         assignments = {
-            server: {
+            campaign_core: {
                 'HERE': str(self.dm),
                 'CAMPAIGN': str(self.root),
                 'DATA': str(self.dm / 'data'),
                 'MAPS': str(self.dm / 'maps'),
                 'HISTORY': str(self.dm / 'data/.history'),
                 'JOBS': str(self.dm / 'data/jobs'),
+                'UPLOADS': str(self.dm / 'uploads'),
+            },
+            http_routes: {
+                'HERE': str(self.dm),
+                'DATA': str(self.dm / 'data'),
+                'MAPS': str(self.dm / 'maps'),
                 'UPLOADS': str(self.dm / 'uploads'),
             },
             config: {'HOME': str(self.dm), 'CONFIG_PATH': str(self.dm / 'data/settings.json')},
@@ -79,7 +86,7 @@ class StudioIntegration(unittest.TestCase):
                 p = patch.object(module, key, value)
                 p.start()
                 self.patches.append(p)
-        self.http = ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
+        self.http = ThreadingHTTPServer(('127.0.0.1', 0), http_routes.Handler)
         self.http_thread = threading.Thread(target=self.http.serve_forever, daemon=True)
         self.http_thread.start()
         self.url = 'http://127.0.0.1:' + str(self.http.server_address[1])
@@ -128,7 +135,7 @@ class StudioIntegration(unittest.TestCase):
             '/api/maps/import', {'name': 'Fixture map', 'cell': 100, 'image': upload['path']}
         )
         slug = result['slug']
-        key = server.read_json(server.doc_path('mapkey/' + slug))
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
         key['areas'] = [
             {
                 'n': 1,
@@ -144,8 +151,8 @@ class StudioIntegration(unittest.TestCase):
                 'images': [],
             }
         ]
-        server.write_doc('mapkey/' + slug, key)
-        brief = server.read_json(server.doc_path('mapbrief/' + slug))
+        campaign_core.write_doc('mapkey/' + slug, key)
+        brief = campaign_core.read_json(campaign_core.doc_path('mapbrief/' + slug))
         brief['content'] = {
             'npcs': 1,
             'items': 1,
@@ -154,7 +161,7 @@ class StudioIntegration(unittest.TestCase):
             'threads': True,
             'art': True,
         }
-        server.write_doc('mapbrief/' + slug, brief)
+        campaign_core.write_doc('mapbrief/' + slug, brief)
         return slug, brief
 
     def proposal(self):
@@ -233,12 +240,13 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/workflow/' + wf['id'] + '/stage', {'draft': self.proposal()})
         applied = self.request('/api/workflow/' + wf['id'] + '/apply', {})
         self.assertEqual(applied['counts']['npcs'], 1)
-        key = server.read_json(server.doc_path('mapkey/' + slug))
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
         self.assertEqual(key['areas'][0]['text'], 'Established description')
         self.assertEqual(len(key['areas'][0]['journal']), 2)
-        self.assertEqual(len(server.read_json(server.doc_path('art'))['items']), 4)
+        self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 4)
         self.assertEqual(
-            server.read_json(server.doc_path('threads'))['threads'][0]['status'], 'foreshadowed'
+            campaign_core.read_json(campaign_core.doc_path('threads'))['threads'][0]['status'],
+            'foreshadowed',
         )
         self.request('/api/workflow/' + wf['id'] + '/apply', {}, expected=400)
         self.request(f'/api/maps/{slug}/export', {})
@@ -250,12 +258,15 @@ class StudioIntegration(unittest.TestCase):
         )
         checkpoint = self.request(f'/api/maps/{slug}/checkpoint', {'label': 'Before annotation'})
         key['areas'][0]['name'] = 'Changed location'
-        server.write_doc('mapkey/' + slug, key)
-        revisions.restore(slug, checkpoint['id'], server.write_doc)
+        campaign_core.write_doc('mapkey/' + slug, key)
+        revisions.restore(slug, checkpoint['id'], campaign_core.write_doc)
         self.assertEqual(
-            server.read_json(server.doc_path('mapkey/' + slug))['areas'][0]['name'], 'Landing'
+            campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))['areas'][0]['name'],
+            'Landing',
         )
-        self.assertEqual(len(server.read_json(server.doc_path('codex'))['entries']), 2)
+        self.assertEqual(
+            len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 2
+        )
 
     def test_invalid_content_and_stale_drafts_are_refused(self):
         slug, brief = self.import_map()
@@ -271,11 +282,11 @@ class StudioIntegration(unittest.TestCase):
             with self.assertRaises(ValueError):
                 workflow.stage(value, draft)
         workflow.stage(value, self.proposal())
-        key = server.read_json(server.doc_path('mapkey/' + slug))
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
         key['areas'][0]['at'] = [0, 0]
-        server.write_doc('mapkey/' + slug, key)
+        campaign_core.write_doc('mapkey/' + slug, key)
         self.request('/api/workflow/' + value['id'] + '/apply', {}, expected=400)
-        self.assertFalse(os.path.isfile(server.doc_path('codex')))
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
 
     def test_partial_content_application_can_retry_without_duplicates(self):
         slug, brief = self.import_map()
@@ -284,17 +295,21 @@ class StudioIntegration(unittest.TestCase):
         def failing_save(name, doc):
             if name.startswith('mapkey/'):
                 raise OSError('Simulated interrupted write')
-            return server.write_doc(name, doc)
+            return campaign_core.write_doc(name, doc)
 
         with self.assertRaises(OSError):
             workflow.apply_content(value, failing_save)
-        workflow.apply_content(value, server.write_doc)
-        self.assertEqual(len(server.read_json(server.doc_path('codex'))['entries']), 2)
-        self.assertEqual(len(server.read_json(server.doc_path('threads'))['threads']), 1)
-        self.assertEqual(len(server.read_json(server.doc_path('art'))['items']), 4)
+        workflow.apply_content(value, campaign_core.write_doc)
+        self.assertEqual(
+            len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 2
+        )
+        self.assertEqual(
+            len(campaign_core.read_json(campaign_core.doc_path('threads'))['threads']), 1
+        )
+        self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 4)
 
     def test_layout_operations_and_revision_recover_original_plan(self):
-        brief = server.normal_brief(
+        brief = campaign_core.normal_brief(
             {
                 'name': 'Fixture layout',
                 'type': 'custom',
@@ -340,8 +355,8 @@ class StudioIntegration(unittest.TestCase):
         folder = self.dm / 'maps/fixture-layout'
         original = staged['draft']['plan']
         (folder / 'plan.txt').write_text(original)
-        server.write_doc('mapkey/fixture-layout', {'areas': draft['areas']})
-        server.write_doc('mapbrief/fixture-layout', brief)
+        campaign_core.write_doc('mapkey/fixture-layout', {'areas': draft['areas']})
+        campaign_core.write_doc('mapbrief/fixture-layout', brief)
         forge.forge(str(folder / 'plan.txt'), foundry_copy=False, jobs=1)
         self.assertTrue((folder / 'fixture-layout.webp').is_file())
         scene = json.loads((folder / 'fixture-layout.foundry.json').read_text())
@@ -359,7 +374,7 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assertNotEqual(changed['draft']['plan'], original)
         (folder / 'plan.txt').write_text(changed['draft']['plan'])
-        revisions.restore('fixture-layout', checkpoint['id'], server.write_doc)
+        revisions.restore('fixture-layout', checkpoint['id'], campaign_core.write_doc)
         self.assertEqual((folder / 'plan.txt').read_text(), original)
         for op in (
             {'type': 'rect', 'row': 19, 'col': 0, 'width': 5, 'height': 5, 'fill': '.'},
@@ -404,8 +419,8 @@ class StudioIntegration(unittest.TestCase):
                 endpoint=f'http://127.0.0.1:{provider.server_address[1]}/images',
                 model='fixture-model',
             )
-            server.write_doc('settings', settings)
-            server.write_doc(
+            campaign_core.write_doc('settings', settings)
+            campaign_core.write_doc(
                 'art', {'items': [{'id': 'fixture-image', 'prompt': 'A guard portrait.'}]}
             )
             path = image_worker.generate('fixture-image')

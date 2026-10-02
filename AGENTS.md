@@ -23,7 +23,9 @@ user. Follow the same development workflow whether you are a human contributor o
 
 ## Implementation boundaries
 
-- HTTP validation and orchestration live in `DM/server.py`; business rules belong in focused modules.
+- HTTP validation and routing live in `DM/http_routes.py`; document and workflow orchestration lives in
+  `DM/campaign_core.py`. `DM/server.py` binds the local server and starts the job workers. Background job
+  queueing, subprocesses, logs and restart recovery belong in `DM/job_service.py`.
 - Use `storage.file_lock` around shared read/modify/write, including map catalogue updates from subprocesses.
   Atomic replacement alone does not prevent lost updates. Preserve document revision conflict handling,
   saved history, workflow fingerprints, stable IDs and retry idempotency.

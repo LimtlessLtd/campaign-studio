@@ -5,10 +5,11 @@ or frontend compilation is required. Runtime files are ignored by Git and exclud
 
 ```mermaid
 flowchart LR
-  UI[Browser app] --> HTTP[server.py]
-  HTTP --> Docs[JSON documents and history]
-  HTTP --> WF[workflow.py: validate, stage, apply]
-  HTTP --> Queue[Job lanes]
+  UI[Browser app] --> HTTP[http_routes.py]
+  HTTP --> Core[campaign_core.py]
+  Core --> Docs[JSON documents and history]
+  Core --> WF[workflow.py: validate, stage, apply]
+  Core --> Queue[job_service.py: job lanes]
   Queue --> AI[Claude CLI: JSON proposals]
   AI --> WF
   Queue --> Forge[forge: render plan and scene]
@@ -22,7 +23,10 @@ flowchart LR
 
 | File                                  | Responsibility                                                                         |
 | ------------------------------------- | -------------------------------------------------------------------------------------- |
-| `DM/server.py`                        | HTTP routes, input validation, document revisions/history, job orchestration           |
+| `DM/server.py`                        | Local server startup, interrupted-job recovery and worker threads                      |
+| `DM/http_routes.py`                   | HTTP routes, request validation, response handling and static files                    |
+| `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results            |
+| `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection     |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                            |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                           |
 | `DM/workflow.py`                      | Proposal schemas, layout DSL, stale draft checks, staging and idempotent content apply |
@@ -68,9 +72,10 @@ and numbered location identities/coordinates; changes make old proposals stale. 
 all codex text. Applying a layout checkpoints the map, then queues a render; applying content links entries,
 journals, events, threads and art briefs. The model never calls persistence directly in structured workflows.
 
-One worker runs per lane (forge, Claude, art). Lanes may run concurrently. State postprocessing happens
-under the server lock, before the job is reported complete. Exceptions fail the job and leave its worker
-available. On restart, saved unfinished jobs are marked failed; the queue does not automatically resume.
+One worker runs per lane (forge, Claude, art). Lanes may run concurrently. `JobService` persists queue and
+process transitions; application callbacks settle image, workflow and inbox documents. State postprocessing
+happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
+worker available. On restart, saved unfinished jobs are marked failed; the queue does not automatically resume.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 

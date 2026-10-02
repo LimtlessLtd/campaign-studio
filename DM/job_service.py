@@ -1,0 +1,143 @@
+"""Persistent background job lanes and subprocess lifecycle.
+
+Campaign-specific result handling is supplied by the application. The service owns
+queueing, process execution, job records, logs, and restart recovery.
+"""
+
+import datetime
+import json
+import os
+import queue
+import re
+import subprocess
+import sys
+import time
+
+import config
+import storage
+
+NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
+
+
+class JobService:
+    def __init__(self, jobs_dir, campaign_root, lock, on_finish, on_failure, on_restart):
+        self.jobs_dir = jobs_dir
+        self.campaign_root = campaign_root
+        self.lock = lock
+        self.on_finish = on_finish
+        self.on_failure = on_failure
+        self.on_restart = on_restart
+        self.lanes = {'forge': queue.Queue(), 'claude': queue.Queue(), 'art': queue.Queue()}
+        self.running = {}
+
+    def job_file(self, job_id, ext='json'):
+        return os.path.join(self.jobs_dir(), f'{job_id}.{ext}')
+
+    def save_job(self, job):
+        os.makedirs(self.jobs_dir(), exist_ok=True)
+        with self.lock:
+            path = self.job_file(job['id'])
+            with open(path + '.tmp', 'w', encoding='utf-8') as file:
+                json.dump(job, file, indent=1)
+            storage.atomic_replace(path + '.tmp', path)
+
+    def new_job(self, lane, kind, label, cmd, stdin_text=None, **extra):
+        job_id = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + os.urandom(2).hex()
+        job = dict(
+            id=job_id,
+            lane=lane,
+            kind=kind,
+            label=label,
+            status='queued',
+            created=time.time(),
+            **extra,
+        )
+        self.save_job(job)
+        self.lanes[lane].put((job, cmd, stdin_text))
+        return job
+
+    @staticmethod
+    def child_env():
+        env = dict(os.environ)
+        for key in list(env):
+            if key == 'CLAUDECODE' or key.startswith('CLAUDE_CODE_'):
+                env.pop(key)
+        env['PYTHONIOENCODING'] = 'utf-8'
+        env['FOUNDRY_DATA'] = config.foundry_data()
+        return env
+
+    def worker(self, lane):
+        while True:
+            job, cmd, stdin_text = self.lanes[lane].get()
+            try:
+                self.execute_job(job, cmd, stdin_text)
+            except Exception as error:
+                with self.lock:
+                    job.update(status='failed', ended=time.time(), note=str(error))
+                    self.save_job(job)
+                    try:
+                        self.on_failure(job, error)
+                    except Exception as recovery_error:
+                        sys.stderr.write(f'Job {job["id"]} recovery failed: {recovery_error}\n')
+            finally:
+                self.lanes[lane].task_done()
+
+    def execute_job(self, job, cmd, stdin_text):
+        job.update(status='running', started=time.time())
+        self.save_job(job)
+        with open(self.job_file(job['id'], 'log'), 'w', encoding='utf-8', errors='replace') as log:
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=self.campaign_root(),
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=self.child_env(),
+                    stdin=subprocess.PIPE if stdin_text else subprocess.DEVNULL,
+                    creationflags=NO_WINDOW,
+                )
+                self.running[job['id']] = proc
+                if stdin_text:
+                    proc.stdin.write(stdin_text.encode('utf-8'))
+                    proc.stdin.close()
+                code = proc.wait()
+            except OSError as error:
+                log.write(f'\ncould not start: {error}\n')
+                code = -1
+            finally:
+                self.running.pop(job['id'], None)
+        with self.lock:
+            tail = self.log_tail(job['id'], 400)
+            slug = re.findall(r'^SLUG (\S+)', tail, re.M)
+            job.update(status='done' if code == 0 else 'failed', ended=time.time(), returncode=code)
+            if slug:
+                job['slug'] = slug[-1]
+            self.on_finish(job, code, tail)
+            self.save_job(job)
+
+    def log_tail(self, job_id, lines=60):
+        try:
+            with open(self.job_file(job_id, 'log'), encoding='utf-8', errors='replace') as file:
+                return ''.join(file.readlines()[-lines:])
+        except FileNotFoundError:
+            return ''
+
+    def list_jobs(self, limit=30):
+        if not os.path.isdir(self.jobs_dir()):
+            return []
+        out = []
+        for name in sorted(os.listdir(self.jobs_dir()), reverse=True):
+            if name.endswith('.json'):
+                with open(os.path.join(self.jobs_dir(), name), encoding='utf-8') as file:
+                    out.append(json.load(file))
+                if len(out) >= limit:
+                    break
+        return out
+
+    def recover_unfinished(self):
+        for job in self.list_jobs(200):
+            if job and job.get('status') in ('queued', 'running'):
+                job['status'] = 'failed'
+                job['note'] = 'the DM site stopped while this was running'
+                self.save_job(job)
+                self.on_restart(job)
