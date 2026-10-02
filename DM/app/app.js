@@ -614,20 +614,46 @@ async function addRequest(fields) {
 async function sendToClaude(item) {
   if (!S.state.claude) {
     alert(
-      'The claude command is not installed on this PC, so ask in the Claude app instead: "do my DM requests".',
+      'Claude Code is unavailable. Export the prompt pack and import a proposal from another assistant.',
     );
     return;
   }
   if (S.pending.inbox) await flush('inbox');
   try {
-    await post('/api/claude', { request: item.id });
+    await post('/api/requests/' + item.id + '/run', {});
   } catch (e) {
     alert(e.message);
     return;
   }
   await load('inbox', { items: [] });
   await poll();
-  refreshSoon();
+  route(true);
+}
+async function importRequestProposal(item) {
+  if (S.pending.inbox) await flush('inbox');
+  const f = { text: item.draft ? JSON.stringify(item.draft, null, 2) : '' };
+  modal(
+    item.draft ? 'Edit proposal' : 'Import proposal',
+    'Paste or edit the JSON proposal, then validate it before applying.',
+    formInput(f, 'text', 'Proposal JSON', { type: 'textarea', rows: 12 }),
+    async () => {
+      await post('/api/requests/' + item.id + '/stage', { draft: JSON.parse(f.text) });
+      await load('inbox', { items: [] });
+      route(true);
+    },
+    'Validate & review',
+  );
+}
+async function applyRequestProposal(item) {
+  if (S.pending.inbox) await flush('inbox');
+  try {
+    await post('/api/requests/' + item.id + '/apply', {});
+    await load('inbox', { items: [] });
+    await poll();
+    route(true);
+  } catch (e) {
+    alert(e.message);
+  }
 }
 function statusChip(it) {
   const job = it.job && S.jobs.find((j) => j.id === it.job);
@@ -635,18 +661,23 @@ function statusChip(it) {
     it.status === 'doing'
       ? job && job.status === 'queued'
         ? 'queued for Claude'
-        : 'Claude is on it…'
-      : it.status;
+        : 'Claude is drafting…'
+      : it.status === 'review'
+        ? 'Ready to review'
+        : it.status;
   return h(
     'span',
     {
       class:
-        'chip st-' + ({ new: 'open', doing: 'planned', done: 'resolved' }[it.status] || 'open'),
+        'chip st-' +
+        ({ new: 'open', doing: 'planned', review: 'planned', done: 'resolved' }[it.status] ||
+          'open'),
     },
     txt,
   );
 }
 function requestCard(it, box, draw) {
+  const isMap = ['battle map', 'stock map'].includes(it.kind);
   return h(
     'div',
     { class: 'card', style: 'margin-bottom:10px' + (it.status === 'done' ? ';opacity:.8' : '') },
@@ -666,20 +697,56 @@ function requestCard(it, box, draw) {
       h(
         'div',
         { class: 'row' },
-        it.status !== 'doing' && it.status !== 'done'
-          ? h('button', { class: 'primary', onclick: () => sendToClaude(it) }, 'Send to Claude')
+        isMap
+          ? h('a', { class: 'btn primary', href: '#/maps/new' }, 'Open map studio')
+          : it.status !== 'doing' && it.status !== 'done'
+            ? h(
+                'button',
+                { class: 'primary', onclick: () => sendToClaude(it) },
+                it.status === 'review' ? 'Draft again' : 'Draft with Claude',
+              )
+            : null,
+        !isMap && it.status !== 'doing' && it.status !== 'done'
+          ? h(
+              'a',
+              {
+                class: 'btn',
+                href: '/api/requests/' + it.id + '/pack',
+                download: 'request-' + it.id + '.json',
+              },
+              'Export prompt pack',
+            )
+          : null,
+        !isMap && it.status !== 'doing' && it.status !== 'done'
+          ? h(
+              'button',
+              { onclick: () => importRequestProposal(it) },
+              it.draft ? 'Edit proposal' : 'Import proposal',
+            )
+          : null,
+        it.status === 'review'
+          ? h(
+              'button',
+              { class: 'primary', onclick: () => applyRequestProposal(it) },
+              'Apply to campaign',
+            )
           : null,
         it.status === 'done'
           ? h(
               'button',
               {
-                onclick: () => {
-                  it.status = 'new';
-                  save('inbox');
-                  draw();
+                onclick: async () => {
+                  if (it.applied) {
+                    await addRequest({ kind: it.kind, session: it.session || '' });
+                    route(true);
+                  } else {
+                    it.status = 'new';
+                    save('inbox');
+                    draw();
+                  }
                 },
               },
-              'Reopen',
+              it.applied ? 'New follow-up' : 'Reopen',
             )
           : null,
         h(
@@ -703,8 +770,45 @@ function requestCard(it, box, draw) {
       rows: 2,
       placeholder: 'What do you want made?',
     }),
+    h(
+      'label',
+      {},
+      'Session prep (needed for scenes and handouts)',
+      h(
+        'select',
+        {
+          onchange: (event) => {
+            it.session = event.target.value;
+            save('inbox');
+            draw();
+          },
+        },
+        h('option', { value: '', selected: !it.session }, 'No session'),
+        (S.state.prep || []).map((name) =>
+          h('option', { value: name, selected: it.session === name }, name.toUpperCase()),
+        ),
+      ),
+    ),
     it.result
       ? h('div', {}, h('label', {}, 'Result'), h('pre', { class: 'file' }, it.result))
+      : null,
+    it.error ? h('p', { class: 'err' }, it.error) : null,
+    it.status === 'review' && it.draft
+      ? h(
+          'details',
+          { open: true },
+          h('summary', {}, 'Review additions'),
+          ...['entries', 'threads', 'scenes', 'handouts', 'goals', 'loot', 'checklist', 'notes']
+            .filter((key) => it.draft[key]?.length)
+            .map((key) =>
+              h(
+                'div',
+                {},
+                h('b', {}, key),
+                h('pre', { class: 'file' }, JSON.stringify(it.draft[key], null, 2)),
+              ),
+            ),
+        )
       : null,
     h(
       'div',
@@ -782,6 +886,7 @@ async function prepPage(name) {
     return;
   }
   p.loot = p.loot || [];
+  p.handouts = p.handouts || [];
   const threads = (await doc('threads', { threads: [] })).threads;
   await doc('codex', { entries: [] });
   const scenesBox = h('div');
@@ -950,6 +1055,54 @@ async function prepPage(name) {
       },
       '+ Add scene',
     ),
+    h('h2', {}, 'Handouts for this session'),
+    ...p.handouts.map((handout) =>
+      h(
+        'div',
+        { class: 'card' },
+        field(docName, handout, 'title', { label: 'Title' }),
+        field(docName, handout, 'player_text', {
+          label: 'Player text',
+          type: 'textarea',
+          rows: 5,
+        }),
+        field(docName, handout, 'secrets', {
+          label: 'GM secrets',
+          type: 'textarea',
+          rows: 3,
+        }),
+        h(
+          'button',
+          {
+            class: 'danger',
+            onclick: () => {
+              if (confirm('Remove this handout?')) {
+                p.handouts.splice(p.handouts.indexOf(handout), 1);
+                save(docName);
+                route(true);
+              }
+            },
+          },
+          'Remove handout',
+        ),
+      ),
+    ),
+    h(
+      'button',
+      {
+        onclick: () => {
+          p.handouts.push({
+            id: uid('handout'),
+            title: '',
+            player_text: '',
+            secrets: '',
+          });
+          save(docName);
+          route(true);
+        },
+      },
+      '+ Add handout',
+    ),
     h('h2', {}, 'Loot for this session'),
     rowsEditor(
       docName,
@@ -1015,7 +1168,6 @@ async function makePanel(session) {
     );
   };
   const hints = {
-    'battle map': 'e.g. A harbour customs house: two floors, a cell block and patrols.',
     npc: 'e.g. A harbour captain: proud, by the book and hiding a divided loyalty.',
     item: 'e.g. An enchanted reward for resolving the temple dispute.',
     encounter: 'e.g. A patrol boards the party’s ship; negotiation may avoid combat.',
@@ -1023,50 +1175,8 @@ async function makePanel(session) {
     other: 'Anything else to prepare.',
   };
   const open = (kind) => {
-    const f = { how: 'claude' };
     const ta = h('textarea', { rows: 3, placeholder: hints[kind] || '' });
-    const genOpts = kind === 'battle map' ? genForm({ session, compact: true }) : null;
-    if (genOpts) genOpts.hidden = true;
-    const choice = genOpts
-      ? h(
-          'div',
-          { class: 'row', style: 'margin:8px 0' },
-          h(
-            'label',
-            { class: 'radio' },
-            h('input', {
-              type: 'radio',
-              name: 'how',
-              checked: true,
-              onchange: () => {
-                f.how = 'claude';
-                genOpts.hidden = true;
-                ta.hidden = false;
-              },
-            }),
-            'Claude designs it from my description',
-          ),
-          h(
-            'label',
-            { class: 'radio' },
-            h('input', {
-              type: 'radio',
-              name: 'how',
-              onchange: () => {
-                f.how = 'now';
-                genOpts.hidden = false;
-                ta.hidden = true;
-              },
-            }),
-            'Generate one now from settings',
-          ),
-        )
-      : null;
     const submit = async (now) => {
-      if (f.how === 'now') {
-        await genOpts.run();
-        return;
-      }
       if (!ta.value.trim()) {
         ta.focus();
         return;
@@ -1082,22 +1192,12 @@ async function makePanel(session) {
         'div',
         { class: 'card', style: 'margin:10px 0;background:var(--bg2)' },
         h('b', {}, 'New ' + (KINDS[kind] || kind).toLowerCase()),
-        choice,
         ta,
-        genOpts,
         h(
           'div',
           { class: 'row', style: 'margin-top:8px' },
-          h(
-            'button',
-            { class: 'primary', onclick: () => submit(true) },
-            kind === 'battle map' ? 'Make it' : 'Send to Claude now',
-          ),
-          h(
-            'button',
-            { onclick: () => submit(false) },
-            kind === 'battle map' ? 'Save request for later' : 'Save for later',
-          ),
+          h('button', { class: 'primary', onclick: () => submit(true) }, 'Draft with Claude'),
+          h('button', { onclick: () => submit(false) }, 'Save for later'),
           h('button', { onclick: () => render(formBox) }, 'Close'),
         ),
       ),
@@ -1112,15 +1212,16 @@ async function makePanel(session) {
       h(
         'div',
         { class: 'row' },
-        ['battle map', 'npc', 'item', 'encounter', 'handout', 'other'].map((k) =>
+        ['npc', 'item', 'encounter', 'handout', 'other'].map((k) =>
           h('button', { onclick: () => open(k) }, '+ ' + KINDS[k]),
         ),
+        h('a', { class: 'btn', href: '#/maps/new' }, '+ Battle map'),
       ),
     ),
     h(
       'p',
       { class: 'muted', style: 'margin:6px 0 0' },
-      "Describe what you need; Claude makes it and files it in the codex, this prep, or a map's DM key. Maps come with numbered areas, loot and events, and import into Foundry with their journal.",
+      'Describe what you need. Review the structured draft before adding it to the codex or this session prep. Use the map studio for maps and keyed locations.',
     ),
     formBox,
     list,
@@ -1830,7 +1931,7 @@ async function inboxPage() {
     },
     h('option', { value: '' }, '+ New request…'),
     Object.entries(KINDS)
-      .filter(([k]) => !['stock map', 'event', 'journal'].includes(k))
+      .filter(([k]) => !['battle map', 'stock map', 'event', 'journal'].includes(k))
       .map(([k, v]) => h('option', { value: k }, v)),
   );
   render(
@@ -1840,8 +1941,8 @@ async function inboxPage() {
       'p',
       { class: 'sub' },
       S.state.claude
-        ? 'Everything you have asked Claude to make. “Send to Claude” runs it now in the background (a minute or two); results land in the codex, session prep or map keys, and a summary shows here.'
-        : 'Everything you have asked Claude to make. Open Claude in the campaign folder and say “do my DM requests”.',
+        ? 'Requests become structured drafts for you to review before applying. Claude can draft in the background; prompt packs work with other assistants too.'
+        : 'Requests become structured drafts for you to review before applying. Export a prompt pack and import a proposal from another assistant.',
     ),
     list,
   );

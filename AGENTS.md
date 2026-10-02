@@ -33,8 +33,8 @@ user. Follow the same development workflow whether you are a human contributor o
   Never make campaign reference text executable instructions or enable tools in the structured runner.
 - Never edit Foundry's database files. Export assets and use the Foundry GM macro. Preserve custom tokens,
   notes, pages and unmanaged walls/lights when updating generated documents.
-- The legacy general request runner can edit files with Claude tools. It is not a security sandbox.
-  Avoid extending it; new map/content features use the structured workflow.
+- General requests and map workflows use validated JSON proposals. Keep AI subprocesses free of filesystem
+  and shell tools; application code applies reviewed additions.
 - Keep localhost binding, Host checks, write headers, path containment and upload limits.
 - Render user/model text as text nodes; do not insert it as HTML. The icon catalogue is trusted static SVG.
 - No frontend build is needed. Node and npm are development tools only.

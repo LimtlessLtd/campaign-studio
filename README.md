@@ -51,6 +51,9 @@ Install and authenticate Claude Code separately to use the built-in AI runner. T
 `--json-schema`, `--restricted`, `--tools` and `--strict-mcp-config`. Optionally set its model in Settings.
 Structured workflows run with file and shell tools disabled. **Export prompt pack** and **Import proposal**
 let you use another assistant without the CLI. See `DM/AI_WORKFLOW.md`.
+General Requests use the same draft, review and apply pattern for codex entries, threads and session prep.
+Link a session before requesting encounters or handouts. Applied requests keep their stable IDs; use a new
+follow-up request for more additions. Existing map requests open the map studio.
 
 Image briefs are queued with their content. Upload artwork, or configure a local HTTP / remote HTTPS
 image endpoint. The request contract is `{model, prompt, size, n: 1}`; the response must include
@@ -74,6 +77,7 @@ The scene format targets Foundry v12. Live compatibility with each Foundry/syste
 Runtime content lives in `DM/data`, maps in `DM/maps`, artwork in `DM/uploads`. Back up these directories.
 Document saves retain previous versions in `DM/data/.history`; layout checkpoints live beside each map.
 Story thread statuses are open, planned, foreshadowed and resolved. Session prep and the codex remain editable.
+Text handouts drafted for a session appear in that session's prep, with player text and GM secrets separated.
 Local reference notes can be added as `DM/data/notes.txt`. An existing neighbouring `Website/content`
 folder can supply read-only legacy session/hero references if `legacy_references: true` is added to local
 settings; this compatibility import is disabled by default. Handouts shows uploaded studio images.
@@ -88,7 +92,7 @@ This initial alpha supports the map-driven preparation workflow. Selecting a Fou
 its manifest and prepares exports; it does not yet browse or synchronize all existing world documents.
 The [code review and roadmap](docs/CODE_REVIEW.md) describe the remaining work toward managing an entire
 campaign. Live AI availability depends on your provider; live Foundry compatibility needs version-specific
-verification. General inbox requests use a legacy Claude runner with file-editing tools and are not sandboxed.
+verification. Existing inbox requests remain readable and can be drafted through the structured workflow.
 
 See [CONTRIBUTING](CONTRIBUTING.md), [development workflow](docs/DEVELOPMENT.md),
 [architecture](docs/ARCHITECTURE.md), and [coding-agent instructions](AGENTS.md).

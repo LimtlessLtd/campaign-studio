@@ -37,6 +37,7 @@
   "DM/packaging_source.py",
   "DM/requirements.txt",
   "DM/revisions.py",
+  "DM/request_workflow.py",
   "DM/server.py",
   "DM/storage.py",
   "DM/tools/image_worker.py",

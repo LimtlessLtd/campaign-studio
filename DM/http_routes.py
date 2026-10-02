@@ -13,12 +13,12 @@ from pathlib import Path
 import config
 import maps_io
 import packaging_source
+import request_workflow
 import revisions
 import storage
 import workflow
 from campaign_core import (
     APP,
-    CLAUDE_PROMPT,
     DATA,
     FORGE,
     HERE,
@@ -29,7 +29,6 @@ from campaign_core import (
     UPLOADS,
     apply_layout,
     campaign_path,
-    claude_cmd,
     doc_path,
     generate_cmd,
     job_file,
@@ -42,7 +41,11 @@ from campaign_core import (
     normal_brief,
     public_content,
     read_json,
+    request_item,
+    request_pack,
+    request_read,
     rev_of,
+    start_request,
     start_workflow,
     write_doc,
 )
@@ -159,6 +162,15 @@ class Handler(SimpleHTTPRequestHandler):
                         }
                     )
                 return self.send_json(value)
+            if path.startswith('/api/requests/') and path.endswith('/pack'):
+                rid = path.split('/')[3]
+                if not request_workflow.REQUEST_ID.fullmatch(rid):
+                    raise ValueError('Invalid request ID.')
+                box = read_json(doc_path('inbox'), {'items': []})
+                item = request_item(box, rid)
+                if not item:
+                    return self.fail(404, 'No such request.')
+                return self.send_json(request_pack(item))
             if path.startswith('/api/maps/') and path.endswith('/workspace'):
                 slug = path.split('/')[3]
                 if not SLUG.fullmatch(slug):
@@ -303,6 +315,30 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError('The request must be a JSON object.')
             if path == '/api/package':
                 return self.send_json(packaging_source.build())
+            if path.startswith('/api/requests/'):
+                parts = path.split('/')
+                if len(parts) != 5 or not request_workflow.REQUEST_ID.fullmatch(parts[3]):
+                    raise ValueError('Invalid request route.')
+                rid, action = parts[3:]
+                if action == 'run':
+                    return self.send_json(start_request(rid))
+                if action not in ('stage', 'apply'):
+                    raise ValueError('Unknown request action.')
+                with LOCK:
+                    box = read_json(doc_path('inbox'), {'items': []})
+                    item = request_item(box, rid)
+                    if not item:
+                        return self.fail(404, 'No such request.')
+                    if item.get('status') in ('doing', 'done') or item.get('applied'):
+                        return self.fail(
+                            409, 'Reopen or wait for this request before changing its draft.'
+                        )
+                    if action == 'stage':
+                        request_workflow.stage(item, p['draft'], request_read)
+                    else:
+                        request_workflow.apply(item, request_read, write_doc)
+                    write_doc('inbox', box)
+                    return self.send_json(item)
             if path == '/api/maps/import':
                 with LOCK:
                     return self.send_json(maps_io.import_image(p, write_doc))
@@ -616,27 +652,9 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             if path == '/api/claude':
                 rid = str(p.get('request', ''))
-                if not re.fullmatch(r'[a-z0-9-]{1,60}', rid):
+                if not request_workflow.REQUEST_ID.fullmatch(rid):
                     return self.fail(400, 'bad request id')
-                with LOCK:
-                    box = read_json(doc_path('inbox'), {'items': []})
-                    item = next((x for x in box['items'] if x.get('id') == rid), None)
-                    if not item:
-                        return self.fail(404, 'no such request')
-                    if item.get('status') == 'doing':
-                        return self.fail(409, 'already being done')
-                    item['status'] = 'doing'
-                    job = new_job(
-                        'claude',
-                        'claude',
-                        'Claude: ' + (item.get('text') or item.get('kind', ''))[:60],
-                        claude_cmd(),
-                        CLAUDE_PROMPT.format(rid=rid),
-                        request=rid,
-                    )
-                    item['job'] = job['id']
-                    write_doc('inbox', box)
-                return self.send_json(job)
+                return self.send_json(start_request(rid))
         except (ValueError, KeyError, TypeError, OSError) as e:
             return self.fail(400, str(e))
         return self.fail(404, 'unknown endpoint')

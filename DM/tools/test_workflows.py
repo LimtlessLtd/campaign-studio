@@ -24,6 +24,7 @@ import config
 import campaign_core
 import http_routes
 import workflow
+import request_workflow
 import revisions
 import maps_io
 import forge
@@ -307,6 +308,177 @@ class StudioIntegration(unittest.TestCase):
             len(campaign_core.read_json(campaign_core.doc_path('threads'))['threads']), 1
         )
         self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 4)
+
+    def request_proposal(self):
+        return {
+            'summary': 'A harbour watch encounter and a sealed notice.',
+            'entries': [
+                {
+                    'id': 'watcher',
+                    'type': 'npc',
+                    'name': 'Harbour Watcher',
+                    'public': 'A vigilant guard.',
+                    'secrets': 'Works for a rival.',
+                    'notes': 'AC 12; HP 10.',
+                    'image_prompt': 'Guard portrait',
+                }
+            ],
+            'threads': [
+                {
+                    'id': 'rival',
+                    'title': 'The rival captain',
+                    'detail': 'Find who commands the watcher.',
+                    'status': 'open',
+                }
+            ],
+            'scenes': [
+                {
+                    'id': 'gate',
+                    'title': 'At the gate',
+                    'where': 'Harbour gate',
+                    'encounter': 'The watcher challenges the party.',
+                    'notes': 'A cautious conversation.',
+                    'npcs': ['watcher'],
+                }
+            ],
+            'handouts': [
+                {
+                    'id': 'notice',
+                    'title': 'Sealed notice',
+                    'player_text': 'Report to the harbour gate.',
+                    'secrets': 'The seal is forged.',
+                }
+            ],
+            'goals': ['Learn who issued the notice.'],
+            'loot': [{'item': 'Copper badge', 'where': 'Watch post', 'value': '2 sp'}],
+            'checklist': ['Prepare the watch patrol.'],
+            'notes': 'The rival captain is nearby.',
+        }
+
+    def test_general_request_review_apply_and_retry(self):
+        prep = {
+            'title': 'Session 1',
+            'scenes': [],
+            'handouts': [],
+            'goals': [],
+            'loot': [],
+            'checklist': [],
+            'notes': 'Existing notes.',
+        }
+        campaign_core.write_doc('prep/s1', prep)
+        item = {
+            'id': 'req-one',
+            'kind': 'encounter',
+            'text': 'Create a harbour encounter.',
+            'session': 's1',
+            'status': 'new',
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        pack = self.request('/api/requests/req-one/pack')
+        self.assertIn('Create a harbour encounter.', pack['prompt'])
+        self.assertIn('scenes', pack['schema']['properties'])
+        self.request('/api/requests/req-one/stage', {'draft': self.request_proposal()})
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        staged = campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]
+
+        def interrupted_save(name, doc):
+            if name == 'prep/s1':
+                raise OSError('Simulated interrupted prep write')
+            return campaign_core.write_doc(name, doc)
+
+        with self.assertRaises(OSError):
+            request_workflow.apply(staged, campaign_core.request_read, interrupted_save)
+        applied = self.request('/api/requests/req-one/apply', {})
+        self.assertEqual(applied['status'], 'done')
+        self.assertTrue(applied['applied'])
+        self.request('/api/requests/req-one/apply', {}, expected=409)
+        box = campaign_core.read_json(campaign_core.doc_path('inbox'))
+        box['items'][0]['status'] = 'new'
+        campaign_core.write_doc('inbox', box)
+        self.request(
+            '/api/requests/req-one/stage', {'draft': self.request_proposal()}, expected=409
+        )
+        saved = campaign_core.read_json(campaign_core.doc_path('prep/s1'))
+        self.assertEqual(saved['scenes'][0]['npcs'], ['req-one-watcher'])
+        self.assertEqual(saved['handouts'][0]['player_text'], 'Report to the harbour gate.')
+        self.assertEqual(saved['notes'], 'Existing notes.\n\nThe rival captain is nearby.')
+        self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 1)
+        self.assertEqual(
+            len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 1
+        )
+        self.assertEqual(
+            len(campaign_core.read_json(campaign_core.doc_path('prep/s1'))['goals']), 1
+        )
+
+    def test_general_request_validation_and_stale_source(self):
+        campaign_core.write_doc('prep/s1', {'scenes': [], 'goals': []})
+        item = {
+            'id': 'req-two',
+            'kind': 'npc',
+            'text': 'Create a watch officer.',
+            'session': 's1',
+            'status': 'new',
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        draft = self.request_proposal()
+        draft['scenes'][0]['npcs'] = ['unknown']
+        self.request('/api/requests/req-two/stage', {'draft': draft}, expected=400)
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        self.request('/api/requests/req-two/stage', {'draft': self.request_proposal()})
+        box = campaign_core.read_json(campaign_core.doc_path('inbox'))
+        box['items'][0]['text'] = 'Changed request.'
+        campaign_core.write_doc('inbox', box)
+        self.request('/api/requests/req-two/apply', {}, expected=400)
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        unsupported = dict(item, id='req-map', kind='battle map')
+        campaign_core.write_doc('inbox', {'items': [unsupported]})
+        self.request('/api/requests/req-map/pack', expected=403)
+
+    def test_general_request_runner_uses_structured_output_without_tools(self):
+        campaign_core.write_doc(
+            'inbox',
+            {
+                'items': [
+                    {
+                        'id': 'req-run',
+                        'kind': 'npc',
+                        'text': 'Create a watch officer.',
+                        'status': 'new',
+                    }
+                ]
+            },
+        )
+        captured = {}
+
+        def fake_job(lane, kind, label, cmd, prompt, **extra):
+            captured.update(lane=lane, kind=kind, cmd=cmd, prompt=prompt)
+            return {'id': 'job-test', 'request': extra['request'], 'source': extra['source']}
+
+        with (
+            patch.object(campaign_core.shutil, 'which', return_value='claude'),
+            patch.object(campaign_core, 'new_job', side_effect=fake_job),
+        ):
+            job = self.request('/api/requests/req-run/run', {})
+        self.assertEqual(captured['kind'], 'request-draft')
+        self.assertEqual(captured['cmd'][captured['cmd'].index('--tools') + 1], '')
+        self.assertIn('--restricted', captured['cmd'])
+        self.assertIn('--strict-mcp-config', captured['cmd'])
+        self.assertNotIn('--allowedTools', captured['cmd'])
+        self.assertEqual(
+            campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]['status'],
+            'doing',
+        )
+        log = Path(campaign_core.job_file(job['id'], 'log'))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        draft = self.request_proposal()
+        for field in ('scenes', 'handouts', 'goals', 'loot', 'checklist'):
+            draft[field] = []
+        draft['notes'] = ''
+        log.write_text(json.dumps({'structured_output': draft}))
+        campaign_core.finish_request(job, 0, '')
+        saved = campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]
+        self.assertEqual(saved['status'], 'review')
+        self.assertEqual(saved['draft']['entries'][0]['id'], 'watcher')
 
     def test_layout_operations_and_revision_recover_original_plan(self):
         brief = campaign_core.normal_brief(

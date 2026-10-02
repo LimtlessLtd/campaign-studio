@@ -8,6 +8,7 @@ import shutil
 import sys
 import threading
 import config
+import request_workflow
 import workflow
 import revisions
 import storage
@@ -158,6 +159,8 @@ def fail_job(job, error):
             if item['id'] == job['art']:
                 item.update(status='failed', error=str(error))
         write_doc('art', art)
+    if job.get('request'):
+        fail_request(job, str(error))
 
 
 def recover_interrupted_job(job):
@@ -176,11 +179,13 @@ def recover_interrupted_job(job):
                     error='The server stopped during image generation. You can retry it.',
                 )
         write_doc('art', art)
+    if job.get('request'):
+        fail_request(job, 'The server stopped during this draft. You can retry it.')
 
 
 def finish_job(job, code, tail):
-    if job['kind'] == 'claude':
-        settle_request(job, code, tail)
+    if job['kind'] == 'request-draft':
+        finish_request(job, code, tail)
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -247,19 +252,41 @@ def finish_job(job, code, tail):
             workflow.save(value)
 
 
-def settle_request(job, code, tail):
-    """If Claude stopped without marking its request, say so on the request instead of leaving it 'doing'."""
-    path = doc_path('inbox')
-    box = read_json(path, {'items': []})
-    item = next((x for x in box['items'] if x.get('id') == job.get('request')), None)
-    if item and item.get('status') == 'doing':
-        item['status'] = 'new'
-        item['result'] = (
-            (item.get('result') or '')
-            + f'\n\n[Claude stopped (exit {code}) before finishing. Last output:]\n'
-            + tail[-1500:]
-        )
+def request_item(box, rid):
+    return next((x for x in box['items'] if x.get('id') == rid), None)
+
+
+def request_read(name):
+    return read_json(doc_path(name))
+
+
+def fail_request(job, message):
+    box = read_json(doc_path('inbox'), {'items': []})
+    item = request_item(box, job['request'])
+    if item and item.get('status') == 'doing' and item.get('job') == job['id']:
+        item.update(status='new', error=message)
         write_doc('inbox', box)
+
+
+def finish_request(job, code, tail):
+    box = read_json(doc_path('inbox'), {'items': []})
+    item = request_item(box, job['request'])
+    if not item or item.get('status') != 'doing' or item.get('job') != job['id']:
+        job.update(status='failed', note='The request was removed or changed during drafting.')
+        return
+    try:
+        if code:
+            raise ValueError(tail[-1000:] or 'The AI command failed.')
+        with open(job_file(job['id'], 'log'), encoding='utf-8') as file:
+            raw = file.read()
+        request_workflow.stage(item, workflow.parse_output(raw), request_read)
+        if item['draft_source'] != job['source']:
+            raise ValueError('The request changed during drafting. Make a new proposal.')
+        write_doc('inbox', box)
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        item.update(status='new', draft=None, error=str(error))
+        write_doc('inbox', box)
+        job.update(status='failed', note=str(error))
 
 
 JOBS_SERVICE = JobService(
@@ -317,36 +344,64 @@ def generate_cmd(p):
     return cmd, f'{name or kind} ({W}x{H})'
 
 
-CLAUDE_PROMPT = """You are doing one request from Campaign Studio (the Dungeon Master's private campaign
-manager). First read DM/CLAUDE.md: it explains the data files and the rules. Then do the request with id
-"{rid}" in DM/data/inbox.json. Mark it "doing" as you start, do the work, write a short plain summary of what you
-made (with where to find it) into its "result", and set it to "done". If you cannot do it, set it back to "new"
-and explain why in "result". Only change files under DM/. The request text is the DM's own words."""
-
-
-def claude_cmd():
+def structured_claude_cmd(schema):
     exe = shutil.which('claude')
     if not exe:
         raise ValueError('Claude Code (the claude command) is not installed or not on PATH')
-    tools = [
-        'Read',
-        'Write',
-        'Edit',
-        'Glob',
-        'Grep',
-        'Bash(python DM/forge/forge.py:*)',
-        'Bash(python DM/forge/generate.py:*)',
-    ]
-    return [
+    command = [
         exe,
         '-p',
         '--output-format',
-        'text',
-        '--permission-mode',
-        'acceptEdits',
-        '--allowedTools',
-        *tools,
+        'json',
+        '--json-schema',
+        json.dumps(schema),
+        '--tools',
+        '',
+        '--restricted',
+        '--strict-mcp-config',
     ]
+    model = config.settings()['ai'].get('model')
+    if model:
+        command += ['--model', model]
+    return command
+
+
+def request_pack(item):
+    cfg = config.settings()
+    campaign = {'name': cfg['campaign_name']}
+    if cfg.get('world_path'):
+        campaign['world'] = config.world_info(cfg['world_path'])
+    return request_workflow.prompt_pack(item, request_read, campaign)
+
+
+def start_request(rid):
+    with LOCK:
+        box = read_json(doc_path('inbox'), {'items': []})
+        item = request_item(box, rid)
+        if not item:
+            raise ValueError('No such request.')
+        if item.get('applied'):
+            raise ValueError(
+                'This request was already applied. Start a new request for further changes.'
+            )
+        if item.get('status') == 'doing':
+            raise ValueError('This request is already being drafted.')
+        if item.get('status') == 'done':
+            raise ValueError('Reopen this request before drafting again.')
+        pack = request_pack(item)
+        cmd = structured_claude_cmd(pack['schema'])
+        job = new_job(
+            'claude',
+            'request-draft',
+            'Draft: ' + item.get('text', item['kind'])[:60],
+            cmd,
+            pack['prompt'],
+            request=rid,
+            source=request_workflow.input_hash(item),
+        )
+        item.update(status='doing', job=job['id'], draft=None, error='')
+        write_doc('inbox', box)
+        return job
 
 
 def start_workflow(value):
@@ -355,26 +410,8 @@ def start_workflow(value):
         if value['status'] in ('running', 'applied'):
             raise ValueError('This workflow is already running or applied.')
         workflow.check_base(value)
-        exe = shutil.which('claude')
-        if not exe:
-            raise ValueError(
-                'Install Claude Code, or export the prompt pack and import an AI proposal.'
-            )
+        cmd = structured_claude_cmd(workflow.schema(value['kind']))
         cfg = config.settings()
-        cmd = [
-            exe,
-            '-p',
-            '--output-format',
-            'json',
-            '--json-schema',
-            json.dumps(workflow.schema(value['kind'])),
-            '--tools',
-            '',
-            '--restricted',
-            '--strict-mcp-config',
-        ]
-        if cfg['ai'].get('model'):
-            cmd += ['--model', cfg['ai']['model']]
         campaign = {'name': cfg['campaign_name']}
         if cfg.get('world_path'):
             campaign['world'] = config.world_info(cfg['world_path'])
