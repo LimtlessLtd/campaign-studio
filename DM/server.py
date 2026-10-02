@@ -116,7 +116,7 @@ def write_doc(name, value):
         tmp = path + '.tmp-' + os.urandom(6).hex()
         with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
             json.dump(value, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
+        storage.atomic_replace(tmp, path)
         return rev_of(path)
 
 
@@ -174,7 +174,7 @@ def save_job(job):
         path = job_file(job['id'])
         with open(path + '.tmp', 'w', encoding='utf-8') as f:
             json.dump(job, f, indent=1)
-        os.replace(path + '.tmp', path)
+        storage.atomic_replace(path + '.tmp', path)
 
 
 def new_job(lane, kind, label, cmd, stdin_text=None, **extra):
@@ -573,7 +573,7 @@ def apply_layout(wid):
         plan_path = os.path.join(folder, 'plan.txt')
         with open(plan_path + '.tmp', 'w', encoding='utf-8', newline='\n') as f:
             f.write(draft['plan'])
-        os.replace(plan_path + '.tmp', plan_path)
+        storage.atomic_replace(plan_path + '.tmp', plan_path)
         key['session'] = value['brief'].get('session', key.get('session', ''))
         write_doc('mapkey/' + slug, key)
         value.update(status='applied', draft=draft)

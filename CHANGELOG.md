@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 — 2026-10-02
+
+- Retry temporary Windows file replacement failures while holding the document lock; permanent failures
+  still propagate after a bounded wait. Added sharing/permanent-failure regression tests.
+- Ensure concurrent test subprocesses finish before temporary campaign cleanup, even on failure.
+
+The v0.1.0 tag's release checks caught an intermittent Windows replacement failure and blocked publication.
+0.1.1 is the first downloadable alpha release.
+
 ## 0.1.0 — 2026-10-02
 
 Initial public alpha release.

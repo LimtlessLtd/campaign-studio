@@ -50,7 +50,7 @@ def file_lock(path, timeout=30):
                     break
                 except (BlockingIOError, OSError):
                     if time.monotonic() >= deadline:
-                        raise TimeoutError('Timed out waiting for document lock: ' + path)
+                        raise TimeoutError('Timed out waiting for document lock: ' + str(path))
                     time.sleep(0.02)
             depths.add(key)
             try:
@@ -64,6 +64,27 @@ def file_lock(path, timeout=30):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+def atomic_replace(source, target, timeout=2):
+    """Retry temporary Windows sharing/access failures without dropping the lock.
+
+    Readers and filesystem scanners can briefly prevent replacement on Windows.
+    Permanent permission failures still propagate after a bounded wait.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError as error:
+            if (
+                os.name != 'nt'
+                or getattr(error, 'winerror', None) not in (5, 32, 33)
+                or time.monotonic() >= deadline
+            ):
+                raise
+            time.sleep(0.02)
+
+
 def atomic_json(path, value):
     """Replace a complete JSON document. Hold file_lock for read/modify/write."""
     target = Path(path)
@@ -71,7 +92,7 @@ def atomic_json(path, value):
     temporary = target.with_name(target.name + '.tmp-' + os.urandom(8).hex())
     try:
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=1), encoding='utf-8')
-        os.replace(temporary, target)
+        atomic_replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
 
