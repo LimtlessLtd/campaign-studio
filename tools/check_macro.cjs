@@ -77,26 +77,29 @@ testUpgradeInventory()
       active,
       toObject: () => ({ compatibility: {}, relationships: {} }),
     });
-    await script(
-      {
-        user: { isGM: true },
-        version: '14.368',
-        world: { id: 'fixture-world', title: 'Fixture' },
-        system: pack('dnd5e', true),
-        modules: new Map([['alpha', pack('alpha', true)]]),
-        settings: { get: () => ({ alpha: true, Plutonium: false }) },
-      },
-      { notifications: { info() {}, warn() {}, error() {} } },
-      { createElement: () => ({ click() {}, remove() {} }), body: { append() {} } },
-      { createObjectURL: (blob) => ((downloaded = blob), 'blob:fixture'), revokeObjectURL() {} },
-      Blob,
-      () => {},
-    );
-    const exported = JSON.parse(await downloaded.text());
-    assert.equal(exported.phase, 'migrated-clone');
-    assert.equal(exported.world.coreVersion, '14.368');
-    assert.deepEqual(exported.enabledModuleIds, ['alpha']);
-    console.log('Foundry macro syntax and v12/v14 inventory fixtures passed.');
+    for (const version of ['13.351', '14.368']) {
+      downloaded = undefined;
+      await script(
+        {
+          user: { isGM: true },
+          version,
+          world: { id: 'fixture-world', title: 'Fixture' },
+          system: pack('dnd5e', true),
+          modules: new Map([['alpha', pack('alpha', true)]]),
+          settings: { get: () => ({ alpha: true, Plutonium: false }) },
+        },
+        { notifications: { info() {}, warn() {}, error() {} } },
+        { createElement: () => ({ click() {}, remove() {} }), body: { append() {} } },
+        { createObjectURL: (blob) => ((downloaded = blob), 'blob:fixture'), revokeObjectURL() {} },
+        Blob,
+        () => {},
+      );
+      const exported = JSON.parse(await downloaded.text());
+      assert.equal(exported.phase, 'migrated-clone');
+      assert.equal(exported.world.coreVersion, version);
+      assert.deepEqual(exported.enabledModuleIds, ['alpha']);
+    }
+    console.log('Foundry macro syntax and v12/v13/v14 inventory fixtures passed.');
   })
   .catch((error) => {
     console.error(error);
