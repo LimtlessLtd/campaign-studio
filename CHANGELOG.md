@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a GM-attested v12 clone module review after excluded modules are disabled. It checks both saved and
+  active module states, installed package versions and the clone plan, then saves a review beside the backup.
 - Added verified v12 clone preparation after a GM-confirmed restore test. The saved plan lists excluded
   modules, package releases and the target Foundry build; migration and cutover remain future steps.
 - Fixed the v12 inventory macro to read `game.modules` as a Map and capture the world module configuration.

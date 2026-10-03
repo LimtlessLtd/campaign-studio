@@ -21,6 +21,13 @@ try:
     (world / 'world.json').write_text((fixture.world / 'world.json').read_text())
     (world / 'maps').mkdir()
     (world / 'maps' / 'bridge.png').write_bytes(fixture.png)
+    system = fixture.root / 'Foundry User Data' / 'Data' / 'systems' / 'dnd5e'
+    system.mkdir(parents=True)
+    (system / 'system.json').write_text(json.dumps({'id': 'dnd5e', 'version': '3.0.0'}))
+    for module_id in ('fixture-module', 'Plutonium'):
+        module = fixture.root / 'Foundry User Data' / 'Data' / 'modules' / module_id
+        module.mkdir(parents=True)
+        (module / 'module.json').write_text(json.dumps({'id': module_id, 'version': '1.0.0'}))
     os.environ['FOUNDRY_DATA'] = str(fixture.root / 'Foundry User Data')
     os.environ['LOCALAPPDATA'] = str(fixture.root)
     (fixture.dm / 'forge').mkdir()
@@ -130,13 +137,18 @@ try:
         },
     }
     backup = {'path': ''}
+    restored = {'receipt_path': ''}
     if '--first-run' not in sys.argv:
         with patch.object(foundry_backup, 'running_foundry', return_value=[]):
             backup = foundry_backup.create(str(fixture.root / 'backups'), confirmed_closed=True)
+            restored = foundry_backup.rehearse(
+                backup['path'], str(fixture.root / 'synthetic-restore-test')
+            )
     print('FIXTURE_URL ' + url, flush=True)
     print('SNAPSHOT_PATH ' + str(snapshot_path), flush=True)
     print('INVENTORY_PATH ' + str(inventory_path), flush=True)
     print('BACKUP_PATH ' + backup['path'], flush=True)
+    print('RESTORE_RECEIPT_PATH ' + restored['receipt_path'], flush=True)
     with (
         patch.object(http_routes.shutil, 'which', return_value=None),
         patch.object(foundry_upgrade, 'collect_catalog', return_value=fixture_catalog),

@@ -839,3 +839,211 @@ def prepare_clone(
         json.dump(plan, stream, indent=2, ensure_ascii=False)
     plan['plan_path'] = str(plan_path)
     return plan
+
+
+def _installed_clone_packages(clone, kind):
+    """Read package manifests in the clone without following links out of it."""
+    root = clone / 'Data' / kind
+    if (
+        not root.is_dir()
+        or root.is_symlink()
+        or getattr(root, 'is_junction', lambda: False)()
+        or not foundry_backup._within(root.resolve(), clone)
+    ):
+        raise ValueError(f'The clone has no safe {kind} directory.')
+    packages = {}
+    filename = 'system.json' if kind == 'systems' else 'module.json'
+    for folder in root.iterdir():
+        if (
+            not folder.is_dir()
+            or folder.is_symlink()
+            or getattr(folder, 'is_junction', lambda: False)()
+            or not foundry_backup._within(folder.resolve(), clone)
+            or not ID_RE.fullmatch(folder.name)
+        ):
+            raise ValueError(f'Invalid or linked package folder in the clone: {folder.name}')
+        manifest = folder / filename
+        if (
+            manifest.is_symlink()
+            or not manifest.is_file()
+            or not foundry_backup._within(manifest.resolve(), clone)
+            or manifest.stat().st_size > MAX_MANIFEST
+        ):
+            raise ValueError(f'Missing, linked or oversized clone manifest: {folder.name}')
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        if (
+            not isinstance(data, dict)
+            or data.get('id') != folder.name
+            or not isinstance(data.get('version'), str)
+            or not data['version']
+        ):
+            raise ValueError(f'Invalid clone package manifest: {folder.name}')
+        packages[folder.name] = data['version']
+    return packages
+
+
+def review_clone(plan_path, inventory, confirmed_clone=False):
+    """Compare a new GM v12 export with the saved plan and untouched package versions.
+
+    The export's origin is GM-attested: Foundry's inventory does not expose a
+    trustworthy User Data path. A match is a gate for later clone work, not proof
+    that migration or runtime module behavior will succeed.
+    """
+    if confirmed_clone is not True:
+        raise ValueError('Confirm that this inventory was exported from the isolated v12 clone.')
+    selected_plan = foundry_backup._absolute(plan_path, 'Clone plan')
+    if not selected_plan.is_file() or selected_plan.stat().st_size > 256 * 1024:
+        raise ValueError('Select a saved clone plan.')
+    preliminary = json.loads(selected_plan.read_text(encoding='utf-8'))
+    if not isinstance(preliminary, dict):
+        raise ValueError('Invalid clone plan.')
+    backup = foundry_backup.verify(preliminary.get('backup_path'))
+    backup_path = Path(backup['path'])
+    plan_file, plan = _sidecar(selected_plan, backup_path, 'upgrade-clone-plan-', 256 * 1024)
+    report_file, report_data = _sidecar(
+        plan.get('report_path'), backup_path, 'upgrade-report-', 20 * 1024 * 1024
+    )
+    receipt_file, receipt = _sidecar(
+        plan.get('clone_receipt_path'), backup_path, 'restore-test-', 64 * 1024
+    )
+    clone = foundry_backup._absolute(plan.get('clone_path'), 'Upgrade clone')
+    backup_manifest = foundry_backup._read_manifest(backup_path)
+    original_root = foundry_backup._absolute(
+        backup_manifest.get('source_user_data'), 'Original Foundry User Data'
+    )
+    report_modules = report_data.get('modules')
+    if not isinstance(report_modules, list) or any(
+        not isinstance(item, dict) for item in report_modules
+    ):
+        raise ValueError('The saved compatibility report has invalid module decisions.')
+    expected_selected = [
+        {
+            'id': item['id'],
+            'version': item.get('selected_version'),
+            'manifest': item.get('selected_manifest'),
+        }
+        for item in report_modules
+        if item.get('proposed_enabled') is True
+    ]
+    expected_disabled = [
+        {'id': item['id'], 'reason': item['disabled_reason']}
+        for item in report_modules
+        if item.get('original_enabled') and item.get('proposed_enabled') is False
+    ]
+    expected_later = [
+        item['id']
+        for item in report_modules
+        if not item.get('original_enabled') and item.get('proposed_enabled') is True
+    ]
+    plan_world = plan.get('world')
+    if (
+        plan.get('format') != 'campaign-studio-foundry-clone-plan'
+        or plan.get('status') != 'awaiting_v12_module_review'
+        or plan.get('backup_path') != str(backup_path)
+        or plan.get('report_sha256') != foundry_backup._digest(report_file)
+        or plan.get('target_build') != report_data.get('recommended_build')
+        or not isinstance(plan_world, dict)
+        or plan_world != report_data.get('world')
+        or plan_world.get('id') != backup['world']['id']
+        or plan_world.get('system') != backup['world']['system']
+        or plan_world.get('coreVersion') != backup['world']['core_version']
+        or plan.get('selected_system') != report_data.get('system')
+        or plan.get('selected_modules') != expected_selected
+        or plan.get('selected_dependencies') != (report_data.get('dependencies') or [])
+        or plan.get('disable_in_v12') != expected_disabled
+        or plan.get('enable_after_review') != expected_later
+        or plan.get('migration_ready') is not False
+        or receipt.get('format') != 'campaign-studio-foundry-restore-test'
+        or receipt.get('backup_path') != str(backup_path)
+        or receipt.get('backup_manifest_sha256')
+        != foundry_backup._digest(backup_path / foundry_backup.MANIFEST)
+        or receipt.get('restore_path') != str(clone)
+        or receipt.get('world') != backup['world']
+        or not clone.is_dir()
+        or foundry_backup._within(clone, original_root)
+        or foundry_backup._within(clone, backup_path)
+        or foundry_backup._within(backup_path, clone)
+    ):
+        raise ValueError('The clone plan, report, receipt and verified backup do not match.')
+    if (
+        not isinstance(inventory, dict)
+        or len(json.dumps(inventory).encode('utf-8')) > 2 * 1024 * 1024
+    ):
+        raise ValueError('Import a v12 clone inventory under 2 MB.')
+    _inventory(inventory)
+    world = plan['world']
+    if any(
+        inventory['world'].get(key) != world.get(key) for key in ('id', 'system', 'coreVersion')
+    ):
+        raise ValueError('The inventory is for a different world or Foundry build.')
+    world_manifest = clone / foundry_backup._relative(backup['world']['manifest_path'])
+    if (
+        world_manifest.is_symlink()
+        or not world_manifest.is_file()
+        or not foundry_backup._within(world_manifest.resolve(), clone)
+        or world_manifest.stat().st_size > MAX_MANIFEST
+    ):
+        raise ValueError('The clone world manifest is missing or linked.')
+    clone_world = json.loads(world_manifest.read_text(encoding='utf-8'))
+    if not isinstance(clone_world, dict):
+        raise ValueError('Invalid clone world manifest.')
+    systems = _installed_clone_packages(clone, 'systems')
+    modules = _installed_clone_packages(clone, 'modules')
+    expected = {item['id'] for item in plan['selected_modules']} - set(plan['enable_after_review'])
+    configured = set(inventory['enabledModuleIds'])
+    active = {item['id'] for item in inventory['modules'] if item['enabled']}
+    exported = {item['id']: item['version'] for item in inventory['modules']}
+    problems = []
+    if (
+        clone_world.get('id') != world['id']
+        or clone_world.get('system') != world['system']
+        or clone_world.get('coreVersion') != world['coreVersion']
+    ):
+        problems.append('The clone world manifest no longer describes the original v12 world.')
+    original_system = report_data['system']
+    if systems.get(world['system']) != original_system['original_version']:
+        problems.append('The clone game system no longer has its original v12 version.')
+    if inventory['system']['version'] != systems.get(world['system']):
+        problems.append('The GM system version disagrees with the clone system manifest.')
+    original_modules = {item['id']: item['original_version'] for item in report_data['modules']}
+    for package_id in sorted(set(original_modules) | set(modules) | set(exported)):
+        if modules.get(package_id) != original_modules.get(package_id):
+            problems.append(f'{package_id}: installed module differs from the original v12 backup.')
+        if package_id in exported and exported[package_id] != modules.get(package_id):
+            problems.append(f'{package_id}: GM module version differs from the clone manifest.')
+    for package_id in sorted(configured ^ active):
+        problems.append(f'{package_id}: saved configuration and active state disagree.')
+    for package_id in sorted(expected - configured):
+        problems.append(f'{package_id}: retained module is not enabled in the clone.')
+    for package_id in sorted(configured - expected):
+        problems.append(f'{package_id}: module must remain disabled at the v12 review stage.')
+    result = {
+        'format': 'campaign-studio-foundry-clone-review',
+        'status': 'v12_modules_reviewed' if not problems else 'blocked',
+        'reviewed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'backup_path': str(backup_path),
+        'clone_path': str(clone),
+        'plan_path': str(plan_file),
+        'plan_sha256': foundry_backup._digest(plan_file),
+        'report_path': str(report_file),
+        'clone_receipt_path': str(receipt_file),
+        'target_build': plan['target_build'],
+        'expected_enabled': sorted(expected),
+        'configured_enabled': sorted(configured),
+        'runtime_active': sorted(active),
+        'disabled_in_v12': plan['disable_in_v12'],
+        'blockers': problems,
+        'confirmed_clone_export': True,
+        'migration_ready': False,
+    }
+    suffix = uuid.uuid4().hex
+    inventory_file = backup_path / f'clone-review-inventory-{suffix}.json'
+    review_file = backup_path / f'clone-review-{suffix}.json'
+    with inventory_file.open('x', encoding='utf-8') as stream:
+        json.dump(inventory, stream, indent=2, ensure_ascii=False)
+    result['inventory_path'] = str(inventory_file)
+    result['inventory_sha256'] = foundry_backup._digest(inventory_file)
+    result['review_path'] = str(review_file)
+    with review_file.open('x', encoding='utf-8') as stream:
+        json.dump(result, stream, indent=2, ensure_ascii=False)
+    return result

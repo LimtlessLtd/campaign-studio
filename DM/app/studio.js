@@ -2327,7 +2327,9 @@ function foundryBackupCard(hasWorld) {
 function foundryUpgradeCard(hasWorld) {
   const form = { backup: '', disabled: '', approved: '' };
   const cloneForm = { report: '', receipt: '', destination: '', inspected: false, reviewed: false };
+  const reviewForm = { plan: '', confirmed: false };
   let inventory = null;
+  let cloneInventory = null;
   const status = h(
     'div',
     { class: 'provider-status', role: 'status' },
@@ -2335,11 +2337,15 @@ function foundryUpgradeCard(hasWorld) {
   );
   const output = h('div', { class: 'upgrade-report', 'aria-live': 'polite' });
   const cloneOutput = h('div', { class: 'upgrade-report', role: 'status' });
+  const reviewOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reportInput = formInput(cloneForm, 'report', 'Saved compatibility report', {
     help: 'The latest report fills this in automatically. You can paste an earlier report path.',
   });
   const cloneDestinationInput = formInput(cloneForm, 'destination', 'New upgrade clone folder', {
     help: 'Must be a new path, separate from the live world, backup and restore test copy.',
+  });
+  const reviewPlanInput = formInput(reviewForm, 'plan', 'Saved clone plan', {
+    help: 'The latest clone plan fills this in automatically. You can paste an earlier plan path.',
   });
   const input = h('input', {
     type: 'file',
@@ -2348,6 +2354,7 @@ function foundryUpgradeCard(hasWorld) {
       attempt(async () => {
         const file = event.target.files?.[0];
         if (!file) return;
+        inventory = null;
         if (file.size > 2 * 1024 * 1024) throw new Error('The inventory must be under 2 MB.');
         inventory = JSON.parse(await file.text());
         if (inventory.format !== 'campaign-studio-foundry-upgrade-inventory')
@@ -2534,6 +2541,8 @@ function foundryUpgradeCard(hasWorld) {
               confirmed_v12_restore: cloneForm.inspected,
               confirmed_report: cloneForm.reviewed,
             });
+            reviewForm.plan = plan.plan_path;
+            reviewPlanInput.querySelector('input').value = plan.plan_path;
             render(
               cloneOutput,
               h('h4', {}, `v12 clone prepared for Foundry ${plan.target_build}`),
@@ -2558,6 +2567,69 @@ function foundryUpgradeCard(hasWorld) {
         }),
     },
     'Prepare isolated v12 clone',
+  );
+  const cloneInventoryInput = h('input', {
+    type: 'file',
+    accept: '.json,application/json',
+    onchange: (event) =>
+      attempt(async () => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        cloneInventory = null;
+        if (file.size > 2 * 1024 * 1024) throw new Error('The inventory must be under 2 MB.');
+        cloneInventory = JSON.parse(await file.text());
+        if (cloneInventory.format !== 'campaign-studio-foundry-upgrade-inventory')
+          throw new Error('Choose a GM upgrade inventory export from the v12 clone.');
+        render(
+          reviewOutput,
+          `Imported ${cloneInventory.world?.title || 'world'} · Foundry ${cloneInventory.world?.coreVersion || '?'} · ${cloneInventory.enabledModuleIds?.length || 0} configured modules`,
+        );
+      }),
+  });
+  const reviewClone = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          if (!cloneInventory) throw new Error('Import a fresh inventory from the v12 clone.');
+          reviewClone.disabled = true;
+          render(reviewOutput, 'Checking the clone against its saved plan and backup…');
+          try {
+            const review = await post('/api/foundry/upgrade/review-clone', {
+              plan_path: reviewForm.plan,
+              inventory: cloneInventory,
+              confirmed_clone: reviewForm.confirmed,
+            });
+            render(
+              reviewOutput,
+              h(
+                'h4',
+                {},
+                review.status === 'v12_modules_reviewed'
+                  ? 'v12 module review passed'
+                  : 'v12 module review blocked',
+              ),
+              h('p', {}, `Expected enabled: ${review.expected_enabled.join(', ') || 'none'}.`),
+              h('p', {}, `Saved configuration: ${review.configured_enabled.join(', ') || 'none'}.`),
+              h('p', {}, `Active in Foundry: ${review.runtime_active.join(', ') || 'none'}.`),
+              ...review.blockers.map((blocker) => h('p', { class: 'error-text' }, blocker)),
+              h('p', { class: 'backup-path' }, `Saved review: ${review.review_path}`),
+              h(
+                'p',
+                { class: 'small-note' },
+                review.status === 'v12_modules_reviewed'
+                  ? `Keep the clone isolated. The next steps are to install the plan's selected releases, run Foundry ${review.target_build} on this clone, and manually inspect the migrated world. Studio has not approved migration or cutover.`
+                  : 'Resolve the listed differences in the v12 clone, save and reload its module configuration, export a fresh inventory, and review again.',
+              ),
+            );
+          } finally {
+            reviewClone.disabled = false;
+          }
+        }),
+    },
+    'Review v12 clone modules',
   );
   return h(
     'section',
@@ -2612,6 +2684,20 @@ function foundryUpgradeCard(hasWorld) {
     }),
     prepareClone,
     cloneOutput,
+    h('hr'),
+    h('h3', {}, 'Review v12 clone modules'),
+    h(
+      'p',
+      { class: 'muted' },
+      'After disabling excluded modules in Foundry v12, save and reload the clone, then run the GM inventory macro there again. This checks the saved and active module states against the plan without changing the clone.',
+    ),
+    reviewPlanInput,
+    h('label', {}, 'Import fresh v12 clone inventory JSON', cloneInventoryInput),
+    formInput(reviewForm, 'confirmed', 'I exported this inventory from the isolated v12 clone', {
+      type: 'checkbox',
+    }),
+    reviewClone,
+    reviewOutput,
   );
 }
 

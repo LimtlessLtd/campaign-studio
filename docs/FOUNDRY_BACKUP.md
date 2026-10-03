@@ -136,3 +136,16 @@ disable the plan's excluded modules, including Plutonium, and save and reload. C
 that required eligible modules remain on. Keep the backup and v12 installer intact. Installing selected
 releases, starting a newer Foundry build, testing its migration, validating the result and live cutover remain
 future wizard steps. Do not open the clone in a newer build before its v12 module review is complete.
+
+## Review the v12 clone's module state
+
+After saving and reloading the isolated clone in Foundry v12, run the GM inventory macro **in that clone**
+again. In **Review v12 clone modules**, select the saved clone plan, import the fresh JSON, and confirm where
+it was exported. Studio checks the saved module configuration against Foundry's active module state, the
+plan's retained and excluded modules, and installed system/module versions. It saves the input and a review
+beside the backup. A blocked review lists each mismatch; resolve it in the v12 clone and export again.
+
+This review does not change packages or the world. The macro does not prove which User Data folder produced
+its export, so the GM must confirm the clone source. A passing review establishes only that the v12 module
+state and installed versions match the plan. It does not mark migration ready: package installation, the
+newer Foundry launch, runtime checks and cutover are still separate steps.

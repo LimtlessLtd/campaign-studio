@@ -576,6 +576,12 @@ class StudioIntegration(unittest.TestCase):
         world = user_data / 'Data' / 'worlds' / 'fixture-world'
         world.mkdir(parents=True)
         (world / 'world.json').write_text((self.world / 'world.json').read_text())
+        system = user_data / 'Data' / 'systems' / 'dnd5e'
+        system.mkdir(parents=True)
+        (system / 'system.json').write_text(json.dumps({'id': 'dnd5e', 'version': '3.0.0'}))
+        plutonium = user_data / 'Data' / 'modules' / 'Plutonium'
+        plutonium.mkdir(parents=True)
+        (plutonium / 'module.json').write_text(json.dumps({'id': 'Plutonium', 'version': '1.0.0'}))
         (user_data / 'Data' / 'assets').mkdir()
         (user_data / 'Data' / 'assets' / 'fixture.png').write_bytes(self.png)
         self.request('/api/settings', {'world_path': str(world)})
@@ -651,6 +657,20 @@ class StudioIntegration(unittest.TestCase):
             self.assertEqual(prepared['status'], 'awaiting_v12_module_review')
             self.assertEqual(prepared['disable_in_v12'][0]['id'], 'Plutonium')
             self.assertTrue(Path(prepared['plan_path']).is_file())
+            clone_inventory = json.loads(json.dumps(inventory))
+            clone_inventory['enabledModuleIds'] = []
+            clone_inventory['modules'][0]['enabled'] = False
+            review_payload = {
+                'plan_path': prepared['plan_path'],
+                'inventory': clone_inventory,
+                'confirmed_clone': True,
+            }
+            self.request(
+                '/api/foundry/upgrade/review-clone', review_payload, expected=403, writable=False
+            )
+            review = self.request('/api/foundry/upgrade/review-clone', review_payload)
+            self.assertEqual(review['status'], 'v12_modules_reviewed')
+            self.assertFalse(review['migration_ready'])
 
     def test_first_run_world_picker_and_read_only_library(self):
         user_data = self.root / 'Foundry User Data'
