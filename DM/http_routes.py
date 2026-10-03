@@ -13,6 +13,7 @@ from pathlib import Path
 import config
 import foundry_backup
 import foundry_library
+import foundry_upgrade
 import maps_io
 import packaging_source
 import request_workflow
@@ -372,6 +373,25 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json(foundry_backup.verify(p.get('path')))
             if path == '/api/foundry/backup/rehearse':
                 return self.send_json(foundry_backup.rehearse(p.get('path'), p.get('destination')))
+            if path == '/api/foundry/upgrade/report':
+                return self.send_json(
+                    foundry_upgrade.report(
+                        p.get('inventory'),
+                        p.get('backup_path'),
+                        p.get('disabled_modules') or [],
+                        p.get('approved_dependencies') or [],
+                    )
+                )
+            if path == '/api/foundry/upgrade/prepare-clone':
+                return self.send_json(
+                    foundry_upgrade.prepare_clone(
+                        p.get('report_path'),
+                        p.get('restore_receipt_path'),
+                        p.get('destination'),
+                        p.get('confirmed_v12_restore') is True,
+                        p.get('confirmed_report') is True,
+                    )
+                )
             if path.startswith('/api/requests/'):
                 parts = path.split('/')
                 if len(parts) != 5 or not request_workflow.REQUEST_ID.fullmatch(parts[3]):

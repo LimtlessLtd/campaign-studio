@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 import campaign_core
 import foundry_backup
+import foundry_upgrade
 import http_routes
 import workflow
 import request_workflow
@@ -601,6 +602,55 @@ class StudioIntegration(unittest.TestCase):
             )
             self.assertTrue(restored['verified'])
             self.assertEqual(Path(restored['world_path']).name, 'fixture-world')
+            self.assertTrue(Path(restored['receipt_path']).is_file())
+            inventory = {
+                'format': foundry_upgrade.INVENTORY_FORMAT,
+                'schema': 2,
+                'world': {
+                    'id': 'fixture-world',
+                    'title': 'Fixture',
+                    'system': 'dnd5e',
+                    'coreVersion': '12.331',
+                },
+                'system': {'id': 'dnd5e', 'version': '3.0.0'},
+                'enabledModuleIds': ['Plutonium'],
+                'modules': [{'id': 'Plutonium', 'version': '1.0.0', 'enabled': True}],
+            }
+            compatibility = {'minimum': '13', 'maximum': '13', 'verified': '13'}
+            selected = {
+                'id': 'dnd5e',
+                'version': '4.0.0',
+                'manifest': 'https://example.org/dnd5e/system.json',
+                'compatibility': compatibility,
+                'manifest_compatibility': compatibility,
+                'requires': [],
+                'systems': [],
+            }
+            catalog = {
+                'source': 'synthetic-integration',
+                'builds': ['13.351', '12.331'],
+                'packages': {
+                    'dnd5e': {'status': 'listed', 'releases': [selected]},
+                    'Plutonium': {'status': 'unlisted', 'releases': []},
+                },
+            }
+            with patch.object(foundry_upgrade, 'collect_catalog', return_value=catalog):
+                report = self.request(
+                    '/api/foundry/upgrade/report',
+                    {'inventory': inventory, 'backup_path': backup['path']},
+                )
+            self.assertEqual(report['recommended_build'], '13.351')
+            payload = {
+                'report_path': report['report_path'],
+                'restore_receipt_path': restored['receipt_path'],
+                'destination': str(self.root / 'upgrade-clone'),
+            }
+            self.request('/api/foundry/upgrade/prepare-clone', payload, expected=400)
+            payload.update(confirmed_v12_restore=True, confirmed_report=True)
+            prepared = self.request('/api/foundry/upgrade/prepare-clone', payload)
+            self.assertEqual(prepared['status'], 'awaiting_v12_module_review')
+            self.assertEqual(prepared['disable_in_v12'][0]['id'], 'Plutonium')
+            self.assertTrue(Path(prepared['plan_path']).is_file())
 
     def test_first_run_world_picker_and_read_only_library(self):
         user_data = self.root / 'Foundry User Data'

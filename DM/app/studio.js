@@ -2276,6 +2276,7 @@ function foundryBackupCard(hasWorld) {
             showResult(
               h('b', {}, 'Restore copy verified: '),
               h('span', { class: 'backup-path' }, restored.path),
+              h('p', { class: 'backup-path' }, `Restore receipt: ${restored.receipt_path}`),
               h(
                 'p',
                 {},
@@ -2321,6 +2322,297 @@ function foundryBackupCard(hasWorld) {
   if (hasWorld) refresh();
   else render(scan, 'Save a local Foundry world in Settings to scan its User Data.');
   return card;
+}
+
+function foundryUpgradeCard(hasWorld) {
+  const form = { backup: '', disabled: '', approved: '' };
+  const cloneForm = { report: '', receipt: '', destination: '', inspected: false, reviewed: false };
+  let inventory = null;
+  const status = h(
+    'div',
+    { class: 'provider-status', role: 'status' },
+    'Import a GM inventory first.',
+  );
+  const output = h('div', { class: 'upgrade-report', 'aria-live': 'polite' });
+  const cloneOutput = h('div', { class: 'upgrade-report', role: 'status' });
+  const reportInput = formInput(cloneForm, 'report', 'Saved compatibility report', {
+    help: 'The latest report fills this in automatically. You can paste an earlier report path.',
+  });
+  const cloneDestinationInput = formInput(cloneForm, 'destination', 'New upgrade clone folder', {
+    help: 'Must be a new path, separate from the live world, backup and restore test copy.',
+  });
+  const input = h('input', {
+    type: 'file',
+    accept: '.json,application/json',
+    onchange: (event) =>
+      attempt(async () => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) throw new Error('The inventory must be under 2 MB.');
+        inventory = JSON.parse(await file.text());
+        if (inventory.format !== 'campaign-studio-foundry-upgrade-inventory')
+          throw new Error('Choose the GM upgrade inventory export.');
+        render(
+          status,
+          `${inventory.world?.title || 'World'} · Foundry ${inventory.world?.coreVersion || '?'} · ${inventory.modules?.filter((m) => m.enabled).length || 0} enabled modules`,
+        );
+        render(output);
+      }),
+  });
+  const ids = (value) =>
+    value
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  const compatibility = (value) =>
+    value
+      ? `Foundry ${value.minimum || '?'}–${value.maximum || 'later'}, verified ${value.verified || 'unknown'}`
+      : 'No compatible release selected';
+  const run = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          if (!inventory) throw new Error('Import the GM inventory first.');
+          run.disabled = true;
+          render(output, h('p', {}, 'Verifying the backup and checking Foundry package releases…'));
+          try {
+            const report = await post('/api/foundry/upgrade/report', {
+              inventory,
+              backup_path: form.backup,
+              disabled_modules: ids(form.disabled),
+              approved_dependencies: ids(form.approved),
+            });
+            cloneForm.report = report.report_path;
+            reportInput.querySelector('input').value = cloneForm.report;
+            if (!cloneForm.destination) {
+              cloneForm.destination = report.backup_path + '-upgrade-clone';
+              cloneDestinationInput.querySelector('input').value = cloneForm.destination;
+            }
+            render(
+              output,
+              h(
+                'h3',
+                {},
+                report.recommended_build ? `Foundry ${report.recommended_build}` : 'No full match',
+              ),
+              h(
+                'p',
+                {},
+                report.recommended_build
+                  ? `${report.needs_clone_testing ? 'Needs clone testing. ' : ''}System ${report.system.id}: ${report.system.original_version} → ${report.system.selected_version}.`
+                  : 'Stay on v12 or explicitly choose modules to disable, then run the report again.',
+              ),
+              report.newest_all_verified_build
+                ? h(
+                    'p',
+                    {},
+                    `Newest build with all selected packages verified: ${report.newest_all_verified_build}.`,
+                  )
+                : report.recommended_build
+                  ? h('p', {}, 'No build has verification declared by every selected package.')
+                  : null,
+              report.locked_changes.length
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    `Locked packages need an explicit unlock in the clone before installation: ${report.locked_changes.join(', ')}.`,
+                  )
+                : null,
+              report.requires_gm_choice
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    'The report includes excluded modules or explicit GM choices. Review these before changing a clone.',
+                  )
+                : null,
+              report.activation_discrepancies?.length
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    `Module configuration and active state differ for: ${report.activation_discrepancies.join(', ')}. Check these modules in the v12 clone.`,
+                  )
+                : null,
+              h('h4', {}, 'Installed module decisions'),
+              h(
+                'ul',
+                {},
+                ...report.modules.map((module) =>
+                  h(
+                    'li',
+                    {},
+                    h('b', {}, module.id),
+                    ` · ${module.original_version} → ${module.selected_version || 'none'} · enabled ${module.original_enabled ? 'yes' : 'no'} → ${module.proposed_enabled === null ? 'undecided' : module.proposed_enabled ? 'yes' : 'no'} · ${module.directory_status} · ${module.disabled_reason || module.activation_reason || 'retain in clone'}`,
+                    module.directory_url
+                      ? h(
+                          'a',
+                          {
+                            href: module.directory_url,
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                          },
+                          ' Directory',
+                        )
+                      : null,
+                    module.selected_manifest
+                      ? h(
+                          'small',
+                          {},
+                          ` · ${compatibility(module.selected_compatibility)} · ${module.selected_manifest}`,
+                        )
+                      : null,
+                  ),
+                ),
+              ),
+              h('h4', {}, 'Required dependencies'),
+              h(
+                'ul',
+                {},
+                ...(report.dependencies.length
+                  ? report.dependencies.map((dependency) =>
+                      h(
+                        'li',
+                        {},
+                        `${dependency.id} ${dependency.version} · ${dependency.manifest}`,
+                      ),
+                    )
+                  : [h('li', {}, 'No additional module activations selected.')]),
+              ),
+              h(
+                'details',
+                {},
+                h('summary', {}, `All ${report.candidates.length} candidate builds and blockers`),
+                h(
+                  'ul',
+                  {},
+                  ...report.candidates.map((candidate) =>
+                    h(
+                      'li',
+                      {},
+                      `${candidate.build}: ${candidate.full_match ? (candidate.all_verified ? 'full match, verified' : 'full match, needs clone testing') : candidate.blockers.join(' ')}`,
+                    ),
+                  ),
+                ),
+              ),
+              h(
+                'p',
+                { class: 'small-note' },
+                `Inventory and report saved beside the verified backup: ${report.report_path}`,
+              ),
+              h(
+                'p',
+                { class: 'small-note' },
+                'This report does not disable modules or migrate the world. Test the restored v12 copy, then disable excluded modules in that clone before its first launch in a newer Foundry build.',
+              ),
+            );
+          } finally {
+            run.disabled = false;
+          }
+        }),
+    },
+    'Build compatibility report',
+  );
+  const prepareClone = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          prepareClone.disabled = true;
+          render(
+            cloneOutput,
+            'Verifying evidence and copying the v12 backup into a separate clone…',
+          );
+          try {
+            const plan = await post('/api/foundry/upgrade/prepare-clone', {
+              report_path: cloneForm.report,
+              restore_receipt_path: cloneForm.receipt,
+              destination: cloneForm.destination,
+              confirmed_v12_restore: cloneForm.inspected,
+              confirmed_report: cloneForm.reviewed,
+            });
+            render(
+              cloneOutput,
+              h('h4', {}, `v12 clone prepared for Foundry ${plan.target_build}`),
+              h('p', { class: 'backup-path' }, plan.clone_path),
+              h('p', {}, `Saved plan: ${plan.plan_path}`),
+              h(
+                'p',
+                {},
+                plan.disable_in_v12.length
+                  ? `In Foundry v12 Manage Modules, disable: ${plan.disable_in_v12.map((item) => `${item.id} (${item.reason})`).join('; ')}.`
+                  : 'The report has no enabled modules to disable.',
+              ),
+              h(
+                'p',
+                {},
+                'Launch only this clone with Foundry v12. Save and reload its module configuration, then confirm the excluded modules are off before opening the clone in a newer Foundry build. Migration is not yet available in Studio.',
+              ),
+            );
+          } finally {
+            prepareClone.disabled = false;
+          }
+        }),
+    },
+    'Prepare isolated v12 clone',
+  );
+  return h(
+    'section',
+    { class: 'card upgrade-card' },
+    h('div', { class: 'section-icon' }, icon('check')),
+    h('h2', {}, 'Foundry upgrade compatibility report'),
+    h(
+      'p',
+      { class: 'muted' },
+      'In the original v12 world, run the GM inventory macro. Use a verified offline backup of that same world. This step reads package listings and leaves Foundry unchanged.',
+    ),
+    h(
+      'a',
+      { class: 'btn', href: fileUrl('DM/forge/foundry-upgrade-inventory.js'), download: '' },
+      'Download GM inventory macro',
+    ),
+    h('label', {}, 'Import GM inventory JSON', input),
+    status,
+    formInput(form, 'backup', 'Verified backup folder', {
+      help: 'Paste the timestamped backup folder from the backup step above.',
+    }),
+    h(
+      'details',
+      {},
+      h('summary', {}, 'Explicit GM choices'),
+      formInput(form, 'disabled', 'Enabled module IDs to disable in the clone', {
+        help: 'Comma-separated IDs. Eligible modules are never dropped automatically.',
+      }),
+      formInput(form, 'approved', 'Required dependency IDs to enable in the clone', {
+        help: 'Comma-separated IDs. Only approve dependencies you intend to activate in the isolated clone.',
+      }),
+    ),
+    run,
+    output,
+    h('hr'),
+    h('h3', {}, 'Prepare an isolated v12 clone'),
+    h(
+      'p',
+      { class: 'muted' },
+      'After opening and inspecting the restore test copy in Foundry v12, use its receipt and a reviewed report to make a separate clone. This step does not launch Foundry or change module settings.',
+    ),
+    reportInput,
+    formInput(cloneForm, 'receipt', 'Restore test receipt', {
+      help: 'Shown after Create restore test copy. Keep the receipt beside the backup.',
+    }),
+    cloneDestinationInput,
+    formInput(cloneForm, 'inspected', 'I opened and inspected the restore copy in Foundry v12', {
+      type: 'checkbox',
+    }),
+    formInput(cloneForm, 'reviewed', 'I reviewed the report and excluded module decisions', {
+      type: 'checkbox',
+    }),
+    prepareClone,
+    cloneOutput,
+  );
 }
 
 function foundryWorldPicker(settings) {
@@ -2872,6 +3164,7 @@ async function studioSettings() {
         ),
       ),
       foundryBackupCard(!!result.world),
+      foundryUpgradeCard(!!result.world),
     ),
     h(
       'div',

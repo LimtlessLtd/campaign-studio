@@ -321,10 +321,22 @@ def rehearse(path, destination):
         staging.rename(target)
     except Exception as error:
         raise ValueError(f'{error} Incomplete restore test retained at {staging}') from error
+    receipt_path = package / f'restore-test-{uuid.uuid4().hex}.json'
+    receipt = {
+        'format': 'campaign-studio-foundry-restore-test',
+        'backup_path': str(package),
+        'backup_manifest_sha256': _digest(package / MANIFEST),
+        'restore_path': str(target),
+        'world': summary['world'],
+        'verified_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    with receipt_path.open('x', encoding='utf-8') as stream:
+        json.dump(receipt, stream, indent=2)
     return {
         'path': str(target),
         'world_path': str(target / _relative(summary['world']['manifest_path']).parent),
         'world': summary['world'],
         'files': summary['files'],
         'verified': True,
+        'receipt_path': str(receipt_path),
     }

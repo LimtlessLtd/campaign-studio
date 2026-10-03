@@ -30,7 +30,8 @@ flowchart LR
 | `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results        |
 | `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |
-| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and isolated restore test        |
+| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts        |
+| `DM/foundry_upgrade.py`               | v12 inventory, public compatibility report and isolated clone preparation          |
 | `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
