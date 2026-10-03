@@ -22,6 +22,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 import campaign_core
+import foundry_backup
 import http_routes
 import workflow
 import request_workflow
@@ -567,6 +568,38 @@ class StudioIntegration(unittest.TestCase):
             '/api/settings', {'images': {'endpoint': 'http://example.com/images'}}, expected=400
         )
         self.request('/api/upload-image', b'not a png', mime='image/png', expected=400)
+
+    def test_foundry_backup_routes_use_synthetic_user_data(self):
+        user_data = self.root / 'Foundry User Data'
+        world = user_data / 'Data' / 'worlds' / 'fixture-world'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text((self.world / 'world.json').read_text())
+        (user_data / 'Data' / 'assets').mkdir()
+        (user_data / 'Data' / 'assets' / 'fixture.png').write_bytes(self.png)
+        self.request('/api/settings', {'world_path': str(world)})
+        with patch.object(foundry_backup, 'running_foundry', return_value=[]):
+            plan = self.request('/api/foundry/backup/plan')
+            self.assertEqual(plan['world']['id'], 'fixture-world')
+            self.request(
+                '/api/foundry/backup/create',
+                {'destination': str(self.root / 'copies'), 'confirmed_closed': True},
+                expected=403,
+                writable=False,
+            )
+            backup = self.request(
+                '/api/foundry/backup/create',
+                {'destination': str(self.root / 'copies'), 'confirmed_closed': True},
+            )
+            self.assertTrue(backup['verified'])
+            self.assertTrue(
+                self.request('/api/foundry/backup/verify', {'path': backup['path']})['verified']
+            )
+            restored = self.request(
+                '/api/foundry/backup/rehearse',
+                {'path': backup['path'], 'destination': str(self.root / 'restore-test')},
+            )
+            self.assertTrue(restored['verified'])
+            self.assertEqual(Path(restored['world_path']).name, 'fixture-world')
 
     def test_local_image_provider_contract(self):
         captured = []

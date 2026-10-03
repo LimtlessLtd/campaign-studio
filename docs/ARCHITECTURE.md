@@ -28,6 +28,7 @@ flowchart LR
 | `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results        |
 | `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |
+| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and isolated restore test        |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply         |
@@ -114,3 +115,7 @@ and unmanaged walls/lights for modern managed imports; older untagged scenes may
 The scene schema targets v12. D&D 5e NPC/item mechanics remain descriptive notes; other systems get journal
 content. Live two-way world browsing/synchronization, mechanical stat block adapters and broad version
 compatibility are future work.
+
+The Foundry backup service reads the selected world manifest to locate its User Data folder. It copies that
+whole folder only while Foundry is closed, records and verifies every file checksum, and can materialize a
+restore in a separate new folder. The app does not migrate a Foundry database or overwrite a live world.

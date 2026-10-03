@@ -1191,6 +1191,26 @@ hr {
 .settings-grid .card {
   padding: 28px;
 }
+.settings-grid .backup-card {
+  grid-column: 1 / -1;
+}
+.backup-card > button,
+.backup-card > .row {
+  margin-top: 14px;
+}
+.backup-status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.backup-path {
+  overflow-wrap: anywhere;
+}
+.backup-result {
+  margin-top: 14px;
+  overflow-wrap: anywhere;
+}
 .settings-grid h2 {
   margin: 15px 0 24px;
 }

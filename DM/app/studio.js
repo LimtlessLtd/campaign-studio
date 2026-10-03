@@ -2163,6 +2163,165 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
   );
 }
 
+function foundryBackupCard(hasWorld) {
+  const form = { destination: '', path: '', restore: '', closed: false };
+  const scan = h('div', { class: 'provider-status backup-status', role: 'status' }, 'Scanning…');
+  const result = h('div', { class: 'backup-result', role: 'status' });
+  const destination = formInput(form, 'destination', 'Backup destination folder', {
+    placeholder: 'Choose a folder outside Foundry User Data',
+    help: 'The app creates a new, timestamped backup folder here. Keep it on a separate drive if possible.',
+  });
+  const backupPath = formInput(form, 'path', 'Backup folder to verify or restore', {
+    help: 'A successful backup fills this in automatically. You can paste an earlier backup folder.',
+  });
+  const restorePath = formInput(form, 'restore', 'New restore test folder', {
+    help: 'Must not exist yet. The live Foundry User Data folder is never overwritten.',
+  });
+  const showResult = (...content) => render(result, ...content);
+  const refresh = async () => {
+    render(scan, 'Scanning Foundry User Data…');
+    try {
+      const info = await api('/api/foundry/backup/plan');
+      if (!form.destination) {
+        form.destination = info.suggested_destination;
+        destination.querySelector('input').value = form.destination;
+      }
+      render(
+        scan,
+        h('b', {}, `${info.world.title} · Foundry ${info.world.foundry_version || 'unknown'}`),
+        h(
+          'span',
+          {},
+          `${info.files.toLocaleString()} files · ${(info.bytes / 1024 ** 3).toFixed(2)} GB`,
+        ),
+        h('span', { class: 'backup-path' }, info.user_data),
+        info.foundry_processes.length
+          ? h('strong', { class: 'error-text' }, 'Foundry is running. Close it before backup.')
+          : h('span', {}, 'No running Foundry process detected.'),
+      );
+    } catch (error) {
+      render(scan, h('span', { class: 'error-text' }, error.message));
+    }
+  };
+  const backupButton = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          backupButton.disabled = true;
+          showResult(
+            'Copying and verifying the complete Foundry User Data folder. Keep this page open…',
+          );
+          try {
+            const copy = await post('/api/foundry/backup/create', {
+              destination: form.destination,
+              confirmed_closed: form.closed,
+            });
+            form.path = copy.path;
+            form.restore = copy.path + '-restore-test';
+            backupPath.querySelector('input').value = form.path;
+            restorePath.querySelector('input').value = form.restore;
+            showResult(
+              h('b', {}, 'Backup verified: '),
+              h('span', { class: 'backup-path' }, copy.path),
+              h('p', {}, `${copy.files.toLocaleString()} files checked by SHA-256.`),
+            );
+            await refresh();
+          } catch (error) {
+            showResult(h('span', { class: 'error-text' }, error.message));
+            throw error;
+          } finally {
+            backupButton.disabled = false;
+          }
+        }),
+    },
+    'Create and verify full backup',
+  );
+  const verifyButton = h(
+    'button',
+    {
+      onclick: () =>
+        attempt(async () => {
+          showResult('Checking every file in the backup…');
+          try {
+            const check = await post('/api/foundry/backup/verify', { path: form.path });
+            showResult(
+              `Backup verified: ${check.files.toLocaleString()} files.`,
+              h('br'),
+              check.path,
+            );
+          } catch (error) {
+            showResult(h('span', { class: 'error-text' }, error.message));
+            throw error;
+          }
+        }),
+    },
+    'Verify backup again',
+  );
+  const rehearseButton = h(
+    'button',
+    {
+      onclick: () =>
+        attempt(async () => {
+          rehearseButton.disabled = true;
+          showResult('Creating and verifying an isolated restore copy…');
+          try {
+            const restored = await post('/api/foundry/backup/rehearse', {
+              path: form.path,
+              destination: form.restore,
+            });
+            showResult(
+              h('b', {}, 'Restore copy verified: '),
+              h('span', { class: 'backup-path' }, restored.path),
+              h(
+                'p',
+                {},
+                `Next, open this copy with Foundry ${restored.world.core_version || 'the original version'} using its separate User Data path. Confirm the world, maps and assets load before upgrading the live world.`,
+              ),
+            );
+          } catch (error) {
+            showResult(h('span', { class: 'error-text' }, error.message));
+            throw error;
+          } finally {
+            rehearseButton.disabled = false;
+          }
+        }),
+    },
+    'Create restore test copy',
+  );
+  const card = h(
+    'section',
+    { class: 'card backup-card' },
+    h('div', { class: 'section-icon' }, icon('clock')),
+    h('h2', {}, 'Foundry backup and restore test'),
+    h(
+      'p',
+      { class: 'muted' },
+      'Before upgrading a Foundry world, take a Snapshot in Foundry Setup. Then close Foundry and copy its complete User Data folder here. The full copy includes assets outside world packages.',
+    ),
+    scan,
+    h('button', { onclick: () => attempt(refresh) }, 'Refresh scan'),
+    destination,
+    formInput(form, 'closed', 'I have closed Foundry VTT', { type: 'checkbox' }),
+    backupButton,
+    h('hr'),
+    backupPath,
+    restorePath,
+    h('div', { class: 'row' }, verifyButton, rehearseButton),
+    result,
+    h(
+      'p',
+      { class: 'small-note' },
+      'Keep your current Foundry installer for rollback. Checksums compare copied files with the backup manifest; the restore is fully tested only after you open the isolated copy in the original Foundry version. This feature does not upgrade or change the live world.',
+    ),
+  );
+  if (hasWorld) refresh();
+  else render(scan, 'Save a local Foundry world in Settings to scan its User Data.');
+  return card;
+}
+
 async function studioSettings() {
   const result = await api('/api/settings');
   const f = clone(result.settings);
@@ -2295,6 +2454,7 @@ async function studioSettings() {
           'The source package excludes campaign data, maps, uploads, credentials and local settings.',
         ),
       ),
+      foundryBackupCard(!!result.world),
     ),
     h(
       'div',

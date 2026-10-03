@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added an offline Foundry User Data backup and isolated restore-test workflow in Settings. It checks for
+  running Foundry processes, detects source changes during copying, verifies every file with SHA-256 and
+  never overwrites live data. The actual Foundry version upgrade remains future work.
 - General Requests now produce validated codex/session prep proposals for GM review before application.
   Claude runs without filesystem or shell tools; existing request records remain readable.
 - Split the local server into HTTP routes, campaign operations, background job service and a small startup

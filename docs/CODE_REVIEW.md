@@ -34,16 +34,17 @@ route decomposition should follow tested business boundaries as features grow.
 
 ## Prioritized development work
 
-| Priority | Work                                                                | Acceptance criteria                                                                        |
-| -------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 1        | Strengthen multi-document commit recovery                           | Crash at each write boundary recovers without dangling links or duplicates                 |
-| 1        | Add a versioned campaign schema and migration tool                  | Realistic old fixtures migrate with backups; unknown future versions are rejected          |
-| 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus             |
-| 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                   |
-| 2        | Build supported Foundry version/system adapters                     | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport      |
-| 2        | Add read-only world document browsing before two-way sync           | Supported API/module integration, stable provenance and conflict policy; no raw DB editing |
-| 3        | Provider adapters, job cancellation, progress and resumable queue   | Fake-provider failure/cancel/retry tests; settings avoid secret storage                    |
-| 3        | Installer and performance budgets for very large maps               | Clean-machine install test and measured time/memory at documented map sizes                |
+| Priority | Work                                                                | Acceptance criteria                                                                         |
+| -------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1        | Strengthen multi-document commit recovery                           | Crash at each write boundary recovers without dangling links or duplicates                  |
+| 1        | Add a versioned campaign schema and migration tool                  | Realistic old fixtures migrate with backups; unknown future versions are rejected           |
+| 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus              |
+| 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                    |
+| 2        | Build supported Foundry version/system adapters                     | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport       |
+| 2        | Complete the local Foundry upgrade wizard                           | Verify restore in old Foundry, migrate an isolated clone in latest stable, validate cutover |
+| 2        | Add read-only world document browsing before two-way sync           | Supported API/module integration, stable provenance and conflict policy; no raw DB editing  |
+| 3        | Provider adapters, job cancellation, progress and resumable queue   | Fake-provider failure/cancel/retry tests; settings avoid secret storage                     |
+| 3        | Installer and performance budgets for very large maps               | Clean-machine install test and measured time/memory at documented map sizes                 |
 
 ## Remaining limitations
 
@@ -56,5 +57,7 @@ route decomposition should follow tested business boundaries as features grow.
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser syntax checks and manual UI checks are present; browser automation remains on the roadmap.
+- Foundry backup and isolated restore-copy verification are available for local User Data. Opening the
+  restored world in its original Foundry version, upgrading a clone, cutover and live rollback remain manual.
 
 These limitations are reflected in the README. Keep this review current as the listed work is completed.

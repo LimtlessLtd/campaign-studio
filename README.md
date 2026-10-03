@@ -72,6 +72,11 @@ mechanics are notes: they need GM review and are not automatically converted int
 Other game systems receive linked character/item information in the journal; sheet adapters are future work.
 The scene format targets Foundry v12. Live compatibility with each Foundry/system version needs verification.
 
+**Foundry backup and restore test** in Settings can create a verified offline copy of a local Foundry User Data folder
+and an isolated restore test copy. Close Foundry first and test opening the restored world in its original
+Foundry version. This is the backup foundation for a future upgrade wizard; it does not yet migrate a world.
+See [Foundry backup and restore test](docs/FOUNDRY_BACKUP.md).
+
 ## Your files
 
 Runtime content lives in `DM/data`, maps in `DM/maps`, artwork in `DM/uploads`. Back up these directories.

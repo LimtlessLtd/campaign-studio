@@ -11,6 +11,7 @@ from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 
 import config
+import foundry_backup
 import maps_io
 import packaging_source
 import request_workflow
@@ -130,6 +131,8 @@ class Handler(SimpleHTTPRequestHandler):
                         image_key_available=bool(os.environ.get(cfg['images']['key_env'])),
                     )
                 )
+            if path == '/api/foundry/backup/plan':
+                return self.send_json(foundry_backup.plan())
             if path == '/api/maps/pending':
                 built = {
                     m['slug'] for m in read_json(doc_path('maps/index'), {'items': []})['items']
@@ -315,6 +318,14 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError('The request must be a JSON object.')
             if path == '/api/package':
                 return self.send_json(packaging_source.build())
+            if path == '/api/foundry/backup/create':
+                return self.send_json(
+                    foundry_backup.create(p.get('destination'), p.get('confirmed_closed') is True)
+                )
+            if path == '/api/foundry/backup/verify':
+                return self.send_json(foundry_backup.verify(p.get('path')))
+            if path == '/api/foundry/backup/rehearse':
+                return self.send_json(foundry_backup.rehearse(p.get('path'), p.get('destination')))
             if path.startswith('/api/requests/'):
                 parts = path.split('/')
                 if len(parts) != 5 or not request_workflow.REQUEST_ID.fullmatch(parts[3]):
