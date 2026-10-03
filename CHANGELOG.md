@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a first-run Studio project and Foundry world picker, plus a read-only World Library for local media
+  and GM-exported snapshots of scenes, journals, actors and items. Existing installations keep their setup.
 - Added an offline Foundry User Data backup and isolated restore-test workflow in Settings. It checks for
   running Foundry processes, detects source changes during copying, verifies every file with SHA-256 and
   never overwrites live data. The actual Foundry version upgrade remains future work.

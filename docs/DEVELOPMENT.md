@@ -52,6 +52,8 @@ manifest. Private runtime directories may exist locally but are excluded from so
 
 Start with an empty campaign or run `python DM/tools/preview_fixture.py` for a disposable synthetic review
 fixture on the port printed by the script. Press Enter to close and remove the fixture.
+Use `python DM/tools/preview_fixture.py --first-run` to inspect onboarding; the fixture prints a synthetic
+Foundry library snapshot path for testing the import button.
 
 - Desktop and approximately 430px wide: navigation, forms, map canvas and inspector should remain usable.
 - Create/import a map, select a pin, change fields, navigate away/back and confirm persistence.

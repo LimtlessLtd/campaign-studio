@@ -12,6 +12,7 @@ from pathlib import Path
 
 import config
 import foundry_backup
+import foundry_library
 import maps_io
 import packaging_source
 import request_workflow
@@ -106,6 +107,7 @@ class Handler(SimpleHTTPRequestHandler):
                         public=public_content(),
                         claude=bool(shutil.which('claude')),
                         campaign=config.settings()['campaign_name'],
+                        onboarding_needed=not os.path.isfile(config.CONFIG_PATH),
                         generators={k: v['title'] for k, v in generate.GENERATORS.items()},
                         notes=Path(notes).read_text(encoding='utf-8', errors='replace')
                         if os.path.exists(notes)
@@ -133,6 +135,30 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             if path == '/api/foundry/backup/plan':
                 return self.send_json(foundry_backup.plan())
+            if path == '/api/foundry/worlds':
+                return self.send_json(foundry_library.discover(query.get('root', [''])[0] or None))
+            if path == '/api/foundry/library':
+                return self.send_json(
+                    foundry_library.library(
+                        read_json(doc_path('foundry-library')),
+                        kind=query.get('kind', ['scenes'])[0],
+                        query=query.get('q', [''])[0][:200],
+                        offset=int(query.get('offset', ['0'])[0]),
+                        limit=int(query.get('limit', ['60'])[0]),
+                    )
+                )
+            if path == '/api/foundry/asset':
+                file, mime = foundry_library.media_file(query.get('path', [''])[0])
+                self.send_response(200)
+                self.send_header('Content-Type', mime)
+                self.send_header('Content-Length', str(file.stat().st_size))
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
+                self.send_header('X-Content-Type-Options', 'nosniff')
+                self.end_headers()
+                with file.open('rb') as stream:
+                    shutil.copyfileobj(stream, self.wfile)
+                return
             if path == '/api/maps/pending':
                 built = {
                     m['slug'] for m in read_json(doc_path('maps/index'), {'items': []})['items']
@@ -313,11 +339,31 @@ class Handler(SimpleHTTPRequestHandler):
                 with open(full, 'xb') as f:
                     f.write(data)
                 return self.send_json({'path': 'DM/uploads/' + filename})
-            p = json.loads(self.body(2 * 1024 * 1024).decode('utf-8') or '{}')
+            body_limit = (
+                20 * 1024 * 1024 if path == '/api/foundry/library/import' else 2 * 1024 * 1024
+            )
+            p = json.loads(self.body(body_limit).decode('utf-8') or '{}')
             if not isinstance(p, dict):
                 raise ValueError('The request must be a JSON object.')
             if path == '/api/package':
                 return self.send_json(packaging_source.build())
+            if path == '/api/foundry/library/import':
+                world = foundry_library.selected_world()
+                if not world:
+                    raise ValueError(
+                        'Connect a Foundry world before importing its library snapshot.'
+                    )
+                snapshot = foundry_library.normalize_snapshot(p, world)
+                with LOCK:
+                    write_doc('foundry-library', snapshot)
+                return self.send_json(
+                    {
+                        'ok': True,
+                        'counts': {
+                            kind: len(snapshot['documents'][kind]) for kind in foundry_library.KINDS
+                        },
+                    }
+                )
             if path == '/api/foundry/backup/create':
                 return self.send_json(
                     foundry_backup.create(p.get('destination'), p.get('confirmed_closed') is True)

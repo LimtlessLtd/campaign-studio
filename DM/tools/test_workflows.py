@@ -14,6 +14,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -600,6 +601,55 @@ class StudioIntegration(unittest.TestCase):
             )
             self.assertTrue(restored['verified'])
             self.assertEqual(Path(restored['world_path']).name, 'fixture-world')
+
+    def test_first_run_world_picker_and_read_only_library(self):
+        user_data = self.root / 'Foundry User Data'
+        world = user_data / 'Data' / 'worlds' / 'fixture-world'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text((self.world / 'world.json').read_text())
+        (world / 'maps').mkdir()
+        (world / 'maps' / 'bridge.png').write_bytes(self.png)
+        Path(config.CONFIG_PATH).unlink()
+        self.assertTrue(self.request('/api/state')['onboarding_needed'])
+        found = self.request('/api/foundry/worlds?root=' + urllib.parse.quote(str(user_data)))
+        self.assertEqual(found['worlds'][0]['title'], 'Fixture')
+        self.request(
+            '/api/settings', {'campaign_name': 'Fixture campaign', 'world_path': str(world)}
+        )
+        self.assertFalse(self.request('/api/state')['onboarding_needed'])
+        media = self.request('/api/foundry/library?kind=assets')
+        self.assertEqual(media['items'][0]['path'], 'worlds/fixture-world/maps/bridge.png')
+        asset_url = (
+            self.url + '/api/foundry/asset?path=' + urllib.parse.quote(media['items'][0]['path'])
+        )
+        with urllib.request.urlopen(asset_url) as response:
+            self.assertEqual(response.read(), self.png)
+        snapshot = {
+            'format': 'campaign-studio-foundry-library',
+            'schema': 1,
+            'world': {'id': 'fixture-world', 'title': 'Fixture', 'system': 'dnd5e'},
+            'exportedAt': '2026-10-03T12:00:00Z',
+            'documents': {
+                'scenes': [{'id': 'scene1', 'name': 'Bridge'}],
+                'journals': [
+                    {
+                        'id': 'journal1',
+                        'name': 'Legend',
+                        'pages': [{'id': 'page1', 'name': 'Clue', 'text': 'Hidden door'}],
+                    }
+                ],
+                'actors': [{'id': 'actor1', 'name': 'Scout', 'type': 'npc'}],
+                'items': [],
+            },
+        }
+        wrong = copy.deepcopy(snapshot)
+        wrong['world']['id'] = 'another-world'
+        self.request('/api/foundry/library/import', wrong, expected=400)
+        self.request('/api/foundry/library/import', snapshot, expected=403, writable=False)
+        imported = self.request('/api/foundry/library/import', snapshot)
+        self.assertEqual(imported['counts']['journals'], 1)
+        journals = self.request('/api/foundry/library?kind=journals&q=legend')
+        self.assertEqual(journals['items'][0]['pages'][0]['text'], 'Hidden door')
 
     def test_local_image_provider_contract(self):
         captured = []

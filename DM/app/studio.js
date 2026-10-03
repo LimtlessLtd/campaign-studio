@@ -56,6 +56,7 @@ function initStudio() {
       {},
       [
         ['', 'home', 'Overview'],
+        ['library', 'book', 'World Library'],
         ['maps', 'map', 'Maps & locations'],
         ['prep', 'book', 'Session prep'],
         ['codex', 'people', 'Campaign codex'],
@@ -2322,6 +2323,425 @@ function foundryBackupCard(hasWorld) {
   return card;
 }
 
+function foundryWorldPicker(settings) {
+  const state = { root: '' };
+  const roots = h('div', { class: 'foundry-roots' });
+  const choices = h('div', { class: 'world-choices', 'aria-live': 'polite' });
+  const rootInput = formInput(state, 'root', 'Foundry User Data folder', {
+    placeholder: '…/FoundryVTT',
+    help: 'Choose the folder containing Data/worlds. Studio will list its worlds.',
+  });
+  const scan = async (path = state.root) => {
+    render(choices, h('p', { class: 'muted' }, 'Scanning local Foundry worlds…'));
+    try {
+      const result = await api(
+        '/api/foundry/worlds' + (path ? '?root=' + encodeURIComponent(path) : ''),
+      );
+      state.root = result.root;
+      rootInput.querySelector('input').value = result.root;
+      render(
+        roots,
+        ...result.roots.map((root) =>
+          h('button', { class: 'world-root', onclick: () => scan(root) }, root),
+        ),
+      );
+      render(
+        choices,
+        result.worlds.length
+          ? result.worlds.map((world) => {
+              const id = uid('world');
+              return h(
+                'label',
+                { class: 'world-choice', for: id },
+                h('input', {
+                  id,
+                  type: 'radio',
+                  name: 'foundry-world',
+                  checked: settings.world_path === world.path,
+                  onchange: () => {
+                    settings.world_path = world.path;
+                  },
+                }),
+                h(
+                  'span',
+                  {},
+                  h('b', {}, world.title),
+                  h(
+                    'small',
+                    {},
+                    `${world.system} · Foundry ${world.foundry_version || 'version unknown'}`,
+                  ),
+                  h('small', { class: 'world-path' }, world.path),
+                ),
+              );
+            })
+          : h('p', { class: 'muted' }, 'No Foundry worlds found in this User Data folder.'),
+      );
+    } catch (error) {
+      render(choices, h('p', { class: 'error-text' }, error.message));
+    }
+  };
+  const picker = h(
+    'div',
+    { class: 'foundry-world-picker' },
+    rootInput,
+    h('div', { class: 'row' }, h('button', { onclick: () => scan() }, 'Scan for worlds')),
+    roots,
+    choices,
+    h(
+      'details',
+      {},
+      h('summary', {}, 'Enter a world folder manually'),
+      formInput(settings, 'world_path', 'Folder containing world.json'),
+    ),
+  );
+  scan();
+  return picker;
+}
+
+async function studioWelcome() {
+  const result = await api('/api/settings');
+  const settings = clone(result.settings);
+  if (S.state.onboarding_needed && settings.campaign_name === 'Campaign Studio')
+    settings.campaign_name = '';
+  let mode = 'existing';
+  const instructions = h('div');
+  const modeButtons = h('div', { class: 'segmented' });
+  const drawMode = () => {
+    render(
+      modeButtons,
+      ...[
+        ['existing', 'Connect an existing world'],
+        ['new', 'Start a new Foundry world'],
+      ].map(([value, label]) =>
+        h(
+          'button',
+          {
+            class: mode === value ? 'on' : '',
+            onclick: () => {
+              mode = value;
+              drawMode();
+            },
+          },
+          label,
+        ),
+      ),
+    );
+    render(
+      instructions,
+      mode === 'new'
+        ? h(
+            'p',
+            { class: 'muted' },
+            'Create the Foundry world in Foundry Setup and choose its game system there. Return here, scan its User Data folder, then select the new world.',
+          )
+        : h(
+            'p',
+            { class: 'muted' },
+            'Select your existing Foundry world. This step only connects the Studio project; it does not change that world.',
+          ),
+    );
+  };
+  const finish = async (withoutWorld = false) => {
+    if (!settings.campaign_name.trim()) throw new Error('Name your Studio project.');
+    if (!withoutWorld && !settings.world_path) throw new Error('Select a Foundry world first.');
+    if (withoutWorld) settings.world_path = '';
+    await post('/api/settings', settings);
+    S.state.campaign = settings.campaign_name.trim();
+    S.state.onboarding_needed = false;
+    initStudio();
+    go(withoutWorld ? '#/' : '#/library');
+  };
+  drawMode();
+  render(
+    S.view,
+    pageHead(
+      'WELCOME TO CAMPAIGN STUDIO',
+      'Set up your campaign.',
+      'Create your Studio project and connect it to one Foundry world.',
+    ),
+    h(
+      'div',
+      { class: 'welcome-layout' },
+      h(
+        'section',
+        { class: 'card' },
+        h('h2', {}, '1. Name your Studio project'),
+        formInput(settings, 'campaign_name', 'Campaign name'),
+        h('p', { class: 'small-note' }, 'This Studio installation stores one campaign locally.'),
+        h('h2', {}, '2. Connect a Foundry world'),
+        modeButtons,
+        instructions,
+        foundryWorldPicker(settings),
+        h(
+          'div',
+          { class: 'welcome-actions' },
+          h(
+            'button',
+            { class: 'primary', onclick: () => attempt(() => finish()) },
+            'Create project and open library',
+          ),
+          h(
+            'button',
+            { onclick: () => attempt(() => finish(true)) },
+            'Continue without a Foundry world',
+          ),
+        ),
+      ),
+      h(
+        'aside',
+        { class: 'card' },
+        h('h3', {}, 'What happens next'),
+        h(
+          'p',
+          {},
+          'Browse media in the selected world and import a read-only document snapshot from Foundry.',
+        ),
+        h(
+          'p',
+          {},
+          'Your journals, NPCs, items and scenes remain in Foundry. Studio drafts and exports stay separate until you apply them as GM.',
+        ),
+      ),
+    ),
+  );
+}
+
+async function studioLibrary() {
+  let kind = S.libraryKind || 'scenes';
+  let query = '';
+  let offset = 0;
+  let requestNumber = 0;
+  const tabs = h('div', { class: 'library-tabs' });
+  const status = h('div', { class: 'library-status' });
+  const list = h('div', { class: 'library-list' });
+  const detail = h('div', { class: 'library-detail card' });
+  const pager = h('div', { class: 'library-pager' });
+  const upload = h('input', {
+    type: 'file',
+    accept: '.json,application/json',
+    hidden: true,
+    onchange: async (event) => {
+      await attempt(async () => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (file.size > 20 * 1024 * 1024) throw new Error('The snapshot must be under 20 MB.');
+        const snapshot = JSON.parse(await file.text());
+        const result = await post('/api/foundry/library/import', snapshot);
+        toast(
+          `Imported ${Object.values(result.counts).reduce((a, b) => a + b, 0)} document summaries.`,
+        );
+        await refresh();
+      });
+      upload.value = '';
+    },
+  });
+  const showDetail = (item) => {
+    const image =
+      kind === 'assets' && item.type.startsWith('image/')
+        ? h('img', {
+            class: 'library-preview',
+            src: '/api/foundry/asset?path=' + encodeURIComponent(item.path),
+            alt: item.name,
+          })
+        : null;
+    render(
+      detail,
+      h('div', { class: 'eyebrow' }, kind === 'assets' ? 'FOUNDRY MEDIA' : 'FOUNDRY SNAPSHOT'),
+      h('h2', {}, item.name),
+      item.folder ? h('p', { class: 'muted' }, 'Folder: ' + item.folder) : null,
+      item.type && kind !== 'assets' ? badge(item.type) : null,
+      image,
+      item.summary ? h('p', { class: 'library-text' }, item.summary) : null,
+      ...(item.pages || []).map((page) =>
+        h(
+          'section',
+          { class: 'library-page' },
+          h('h3', {}, page.name),
+          page.text ? h('p', { class: 'library-text' }, page.text) : null,
+          page.image ? h('small', { class: 'muted' }, 'Image: ' + page.image) : null,
+        ),
+      ),
+      item.image && kind !== 'assets'
+        ? h('small', { class: 'muted world-path' }, 'Image: ' + item.image)
+        : null,
+      h('small', { class: 'muted world-path' }, item.uuid || item.path || item.id),
+      h(
+        'p',
+        { class: 'small-note' },
+        kind === 'assets'
+          ? 'Read-only. Refresh this page to see media files added later.'
+          : 'Read-only. Refresh the snapshot in Foundry to see later changes.',
+      ),
+    );
+  };
+  const refresh = async () => {
+    const current = ++requestNumber;
+    render(list, h('p', { class: 'muted' }, 'Loading World Library…'));
+    const result = await api(
+      '/api/foundry/library?' +
+        new URLSearchParams({ kind, q: query, offset: String(offset), limit: '60' }),
+    );
+    if (current !== requestNumber) return;
+    if (!result.world) {
+      render(
+        status,
+        h('p', { class: 'muted' }, 'Connect a Foundry world in Settings to browse its library.'),
+      );
+      render(list);
+      render(detail);
+      render(pager);
+      return;
+    }
+    render(
+      status,
+      h('b', {}, result.world.title),
+      h(
+        'span',
+        {},
+        ` · ${result.world.system} · Foundry ${result.world.foundry_version || 'unknown'}`,
+      ),
+      h(
+        'small',
+        {},
+        result.snapshot
+          ? `Document snapshot: ${when(result.snapshot.exported_at)} · Foundry ${result.snapshot.core_version}`
+          : 'No document snapshot imported yet. Media files can still be browsed.',
+      ),
+    );
+    render(
+      tabs,
+      ...[
+        ['scenes', 'Scenes'],
+        ['journals', 'Journals'],
+        ['actors', 'Actors & NPCs'],
+        ['items', 'Items'],
+        ['assets', 'Media'],
+      ].map(([value, label]) =>
+        h(
+          'button',
+          {
+            class: kind === value ? 'on' : '',
+            onclick: () => {
+              kind = value;
+              S.libraryKind = kind;
+              offset = 0;
+              render(detail, h('p', { class: 'muted' }, 'Select an entry to view it.'));
+              attempt(refresh);
+            },
+          },
+          label,
+          value !== 'assets' ? ` (${result.counts[value]})` : '',
+        ),
+      ),
+    );
+    render(
+      list,
+      result.items.length
+        ? result.items.map((item) =>
+            h(
+              'button',
+              { class: 'library-entry', onclick: () => showDetail(item) },
+              h('b', {}, item.name),
+              h('small', {}, item.folder || item.path || item.type || ''),
+            ),
+          )
+        : h(
+            'p',
+            { class: 'muted' },
+            kind !== 'assets' && !result.snapshot
+              ? 'Import a Foundry document snapshot to browse this category.'
+              : 'No entries found.',
+          ),
+    );
+    render(
+      pager,
+      h('span', { class: 'muted' }, `${result.total} ${kind} found`),
+      h(
+        'button',
+        {
+          disabled: offset === 0,
+          onclick: () => {
+            offset = Math.max(0, offset - 60);
+            attempt(refresh);
+          },
+        },
+        'Previous',
+      ),
+      h(
+        'button',
+        {
+          disabled: offset + 60 >= result.total,
+          onclick: () => {
+            offset += 60;
+            attempt(refresh);
+          },
+        },
+        'Next',
+      ),
+      result.truncated ? h('small', {}, 'Media scan limited to 20,000 files.') : null,
+    );
+  };
+  render(
+    S.view,
+    pageHead(
+      'CONNECTED FOUNDRY WORLD',
+      'World Library',
+      'Browse Foundry documents and media before deciding what to build or change.',
+      h('a', { class: 'btn', href: '#/settings' }, 'World settings'),
+    ),
+    status,
+    h(
+      'section',
+      { class: 'card library-import' },
+      h(
+        'div',
+        {},
+        h('h3', {}, 'Read existing Foundry documents'),
+        h(
+          'p',
+          { class: 'muted' },
+          'In Foundry, run the export Script macro as GM. Then import the downloaded JSON snapshot here. Repeat whenever you want a fresh view.',
+        ),
+      ),
+      h(
+        'div',
+        { class: 'row' },
+        h(
+          'a',
+          {
+            class: 'btn',
+            href: fileUrl('DM/forge/foundry-library-export.js'),
+            download: 'campaign-studio-library-export.js',
+          },
+          'Download export macro',
+        ),
+        upload,
+        h('button', { onclick: () => upload.click() }, 'Import snapshot'),
+      ),
+    ),
+    tabs,
+    h(
+      'div',
+      { class: 'library-search' },
+      h('input', {
+        type: 'search',
+        placeholder: 'Search this category…',
+        'aria-label': 'Search World Library category',
+        oninput: (event) => {
+          query = event.target.value;
+          offset = 0;
+          clearTimeout(S.librarySearchTimer);
+          S.librarySearchTimer = setTimeout(() => attempt(refresh), 200);
+        },
+      }),
+    ),
+    h('div', { class: 'library-layout' }, h('div', {}, list, pager), detail),
+  );
+  render(detail, h('p', { class: 'muted' }, 'Select an entry to view it.'));
+  await refresh();
+}
+
 async function studioSettings() {
   const result = await api('/api/settings');
   const f = clone(result.settings);
@@ -2358,15 +2778,12 @@ async function studioSettings() {
         h('div', { class: 'section-icon' }, icon('globe')),
         h('h2', {}, 'Campaign & Foundry'),
         formInput(f, 'campaign_name', 'Campaign name'),
-        formInput(f, 'world_path', 'Foundry world folder', {
-          placeholder: '…/FoundryVTT/Data/worlds/my-world',
-          help: 'Select the local folder containing world.json. The app detects the world and exports into its Data folder.',
-        }),
+        foundryWorldPicker(f),
         saved,
         h(
           'p',
           { class: 'small-note' },
-          'Campaign changes are applied in Foundry using the import macro. The studio stores its own editable campaign files.',
+          'Changing the linked world does not move Studio content. Campaign changes are applied in Foundry using the import macro.',
         ),
       ),
       h(
@@ -2465,6 +2882,14 @@ async function studioSettings() {
           class: 'primary',
           onclick: () =>
             attempt(async () => {
+              if (
+                result.settings.world_path &&
+                f.world_path !== result.settings.world_path &&
+                !confirm(
+                  'Connect this Studio project to a different Foundry world? Existing Studio maps, NPCs and notes will remain in this project.',
+                )
+              )
+                return;
               await post('/api/settings', f);
               S.state = await api('/api/state');
               initStudio();

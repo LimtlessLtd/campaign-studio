@@ -113,6 +113,8 @@ body {
 }
 #side nav {
   gap: 5px;
+  flex-direction: column;
+  overflow: visible;
 }
 #side nav a {
   display: flex;
@@ -1365,6 +1367,167 @@ hr {
   background: #402a25;
   color: #ffd8ce;
 }
+.welcome-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+.welcome-layout > .card {
+  min-width: 0;
+  padding: 28px;
+}
+.welcome-layout h2:not(:first-child) {
+  margin-top: 28px;
+}
+.welcome-actions,
+.foundry-roots,
+.library-pager {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 18px;
+}
+.foundry-world-picker {
+  margin-top: 18px;
+}
+.foundry-world-picker > .row {
+  margin-top: 10px;
+}
+.foundry-world-picker details {
+  margin-top: 16px;
+  color: var(--muted);
+}
+.world-root {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.world-choices {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.world-choice {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  cursor: pointer;
+  min-width: 0;
+}
+.world-choice:has(input:checked) {
+  border-color: var(--ember);
+  background: #253127;
+}
+.world-choice input {
+  margin-top: 4px;
+}
+.world-choice span {
+  min-width: 0;
+}
+.world-choice b,
+.world-choice small,
+.library-status small {
+  display: block;
+}
+.world-choice small,
+.world-path {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.library-status {
+  padding: 12px 15px;
+  margin-bottom: 18px;
+  background: #1d2a20;
+  border: 1px solid #40533d;
+  border-radius: 7px;
+}
+.library-status small {
+  color: var(--muted);
+}
+.library-import {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.library-import p {
+  max-width: 670px;
+}
+.library-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+.library-tabs button {
+  white-space: nowrap;
+}
+.library-tabs button.on {
+  border-color: var(--ember);
+  color: var(--ember);
+}
+.library-search {
+  margin: 8px 0 16px;
+}
+.library-search input {
+  width: min(100%, 480px);
+}
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 340px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.library-list {
+  display: grid;
+  gap: 7px;
+}
+.library-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  overflow-wrap: anywhere;
+}
+.library-entry b,
+.library-entry small {
+  display: block;
+}
+.library-entry small {
+  color: var(--muted);
+}
+.library-detail {
+  min-width: 0;
+  max-height: 75vh;
+  overflow: auto;
+}
+.library-detail .world-path {
+  display: block;
+  margin-top: 14px;
+}
+.library-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.library-page {
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+  margin-top: 15px;
+}
+.library-preview {
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  display: block;
+  margin: 16px 0;
+}
 @media (min-width: 1550px) {
   .studio-map-layout {
     grid-template-columns: minmax(0, 1fr) 420px;
@@ -1405,6 +1568,13 @@ hr {
   }
 }
 @media (max-width: 1000px) {
+  .welcome-layout,
+  .library-layout {
+    grid-template-columns: 1fr;
+  }
+  .library-detail {
+    max-height: none;
+  }
   body {
     grid-template-columns: 190px minmax(0, 1fr);
   }
