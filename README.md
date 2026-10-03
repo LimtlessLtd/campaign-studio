@@ -28,8 +28,9 @@ On Windows, `start.bat` creates the virtual environment and installs dependencie
 On macOS/Linux, run `sh start.sh`. Subsequent starts use the existing environment. To upgrade dependencies,
 activate the environment and rerun the pip install command. Keep only one server running per campaign.
 
-Open http://127.0.0.1:8766. Set the campaign name and local Foundry world folder in **Settings & Foundry**.
-The selected folder must contain `world.json` under `Data/worlds/<world-id>`. The server binds to localhost.
+Open http://127.0.0.1:8766. On first run, name the Studio project and select an existing Foundry world, or
+create a world in Foundry Setup and then select it. The world picker detects common local User Data folders;
+you can also enter a custom path. The server binds to localhost.
 Set `DM_PORT` before launch to use a different port.
 
 ## Maps and iteration
@@ -62,6 +63,11 @@ Images are generated individually when you press **Generate image**. Different p
 
 ## Foundry
 
+**World Library** browses media in the connected Foundry User Data folder. To browse existing scenes,
+journals, actors and items, download its export Script macro, run it as GM in Foundry, and import the JSON
+snapshot. It is read-only and shows when the snapshot was made; later Foundry changes require another export.
+See [first run and World Library](docs/FOUNDRY_LIBRARY.md).
+
 **Prepare for Foundry → Update Foundry export** copies assets and scene JSON to the selected world's
 `Data/wotg-maps` folder. Download the Script macro and run it as GM in Foundry. The server does not write the
 world database. Scenes contain grid, generated walls/doors/lights and roof tiles where available. Journals
@@ -71,6 +77,20 @@ The macro also creates/updates D&D 5e NPC and loot item sheets by stable studio 
 mechanics are notes: they need GM review and are not automatically converted into attacks or activities.
 Other game systems receive linked character/item information in the journal; sheet adapters are future work.
 The scene format targets Foundry v12. Live compatibility with each Foundry/system version needs verification.
+
+**Foundry backup and restore test** in Settings can create a verified offline copy of a local Foundry User Data folder
+and an isolated restore test copy. Close Foundry first and test opening the restored world in its original
+Foundry version. This backup stage does not migrate a world.
+See [Foundry backup and restore test](docs/FOUNDRY_BACKUP.md).
+
+**Foundry upgrade compatibility report** in Settings accepts an inventory exported by a GM Script macro in
+the original v12 world and a verified backup of that world. It checks Foundry's stable release and package
+directory pages, release manifests, the game system, enabled modules and required dependencies. It shows the
+newest full match, any unverified packages, exclusions including Plutonium, and blockers. The inventory and
+report are saved beside the backup. After a verified restore test copy is opened and inspected in v12, Studio
+can make a separate v12 clone with a saved plan of modules to disable and package releases to install. The GM
+must disable excluded modules such as Plutonium in the clone before its first launch in newer Foundry. Studio
+does not yet install packages, run migration or cut over a live world.
 
 ## Your files
 
@@ -88,8 +108,8 @@ to `DM/exports`. This does not publish a repository.
 
 ## Status and development
 
-This initial alpha supports the map-driven preparation workflow. Selecting a Foundry world currently reads
-its manifest and prepares exports; it does not yet browse or synchronize all existing world documents.
+This initial alpha supports the map-driven preparation workflow and a read-only snapshot of selected world
+documents. It does not yet live-sync or edit existing Foundry documents from Studio.
 The [code review and roadmap](docs/CODE_REVIEW.md) describe the remaining work toward managing an entire
 campaign. Live AI availability depends on your provider; live Foundry compatibility needs version-specific
 verification. Existing inbox requests remain readable and can be drafted through the structured workflow.

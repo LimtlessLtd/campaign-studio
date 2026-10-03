@@ -1997,6 +1997,8 @@ async function route(soft) {
     await (
       {
         '': studioDashboard,
+        welcome: studioWelcome,
+        library: studioLibrary,
         prep: prepPage,
         threads: threadsPage,
         codex: codexPage,
@@ -2042,7 +2044,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       ]),
     ];
     initStudio();
-    route();
+    if (S.state.onboarding_needed) go('#/welcome', true);
+    else route();
   } catch (e) {
     render(root, h('h1', {}, 'Could not connect'), h('p', {}, e.message));
   }

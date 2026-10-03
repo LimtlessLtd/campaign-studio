@@ -14,6 +14,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,8 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 import campaign_core
+import foundry_backup
+import foundry_upgrade
 import http_routes
 import workflow
 import request_workflow
@@ -567,6 +570,136 @@ class StudioIntegration(unittest.TestCase):
             '/api/settings', {'images': {'endpoint': 'http://example.com/images'}}, expected=400
         )
         self.request('/api/upload-image', b'not a png', mime='image/png', expected=400)
+
+    def test_foundry_backup_routes_use_synthetic_user_data(self):
+        user_data = self.root / 'Foundry User Data'
+        world = user_data / 'Data' / 'worlds' / 'fixture-world'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text((self.world / 'world.json').read_text())
+        (user_data / 'Data' / 'assets').mkdir()
+        (user_data / 'Data' / 'assets' / 'fixture.png').write_bytes(self.png)
+        self.request('/api/settings', {'world_path': str(world)})
+        with patch.object(foundry_backup, 'running_foundry', return_value=[]):
+            plan = self.request('/api/foundry/backup/plan')
+            self.assertEqual(plan['world']['id'], 'fixture-world')
+            self.request(
+                '/api/foundry/backup/create',
+                {'destination': str(self.root / 'copies'), 'confirmed_closed': True},
+                expected=403,
+                writable=False,
+            )
+            backup = self.request(
+                '/api/foundry/backup/create',
+                {'destination': str(self.root / 'copies'), 'confirmed_closed': True},
+            )
+            self.assertTrue(backup['verified'])
+            self.assertTrue(
+                self.request('/api/foundry/backup/verify', {'path': backup['path']})['verified']
+            )
+            restored = self.request(
+                '/api/foundry/backup/rehearse',
+                {'path': backup['path'], 'destination': str(self.root / 'restore-test')},
+            )
+            self.assertTrue(restored['verified'])
+            self.assertEqual(Path(restored['world_path']).name, 'fixture-world')
+            self.assertTrue(Path(restored['receipt_path']).is_file())
+            inventory = {
+                'format': foundry_upgrade.INVENTORY_FORMAT,
+                'schema': 2,
+                'world': {
+                    'id': 'fixture-world',
+                    'title': 'Fixture',
+                    'system': 'dnd5e',
+                    'coreVersion': '12.331',
+                },
+                'system': {'id': 'dnd5e', 'version': '3.0.0'},
+                'enabledModuleIds': ['Plutonium'],
+                'modules': [{'id': 'Plutonium', 'version': '1.0.0', 'enabled': True}],
+            }
+            compatibility = {'minimum': '13', 'maximum': '13', 'verified': '13'}
+            selected = {
+                'id': 'dnd5e',
+                'version': '4.0.0',
+                'manifest': 'https://example.org/dnd5e/system.json',
+                'compatibility': compatibility,
+                'manifest_compatibility': compatibility,
+                'requires': [],
+                'systems': [],
+            }
+            catalog = {
+                'source': 'synthetic-integration',
+                'builds': ['13.351', '12.331'],
+                'packages': {
+                    'dnd5e': {'status': 'listed', 'releases': [selected]},
+                    'Plutonium': {'status': 'unlisted', 'releases': []},
+                },
+            }
+            with patch.object(foundry_upgrade, 'collect_catalog', return_value=catalog):
+                report = self.request(
+                    '/api/foundry/upgrade/report',
+                    {'inventory': inventory, 'backup_path': backup['path']},
+                )
+            self.assertEqual(report['recommended_build'], '13.351')
+            payload = {
+                'report_path': report['report_path'],
+                'restore_receipt_path': restored['receipt_path'],
+                'destination': str(self.root / 'upgrade-clone'),
+            }
+            self.request('/api/foundry/upgrade/prepare-clone', payload, expected=400)
+            payload.update(confirmed_v12_restore=True, confirmed_report=True)
+            prepared = self.request('/api/foundry/upgrade/prepare-clone', payload)
+            self.assertEqual(prepared['status'], 'awaiting_v12_module_review')
+            self.assertEqual(prepared['disable_in_v12'][0]['id'], 'Plutonium')
+            self.assertTrue(Path(prepared['plan_path']).is_file())
+
+    def test_first_run_world_picker_and_read_only_library(self):
+        user_data = self.root / 'Foundry User Data'
+        world = user_data / 'Data' / 'worlds' / 'fixture-world'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text((self.world / 'world.json').read_text())
+        (world / 'maps').mkdir()
+        (world / 'maps' / 'bridge.png').write_bytes(self.png)
+        Path(config.CONFIG_PATH).unlink()
+        self.assertTrue(self.request('/api/state')['onboarding_needed'])
+        found = self.request('/api/foundry/worlds?root=' + urllib.parse.quote(str(user_data)))
+        self.assertEqual(found['worlds'][0]['title'], 'Fixture')
+        self.request(
+            '/api/settings', {'campaign_name': 'Fixture campaign', 'world_path': str(world)}
+        )
+        self.assertFalse(self.request('/api/state')['onboarding_needed'])
+        media = self.request('/api/foundry/library?kind=assets')
+        self.assertEqual(media['items'][0]['path'], 'worlds/fixture-world/maps/bridge.png')
+        asset_url = (
+            self.url + '/api/foundry/asset?path=' + urllib.parse.quote(media['items'][0]['path'])
+        )
+        with urllib.request.urlopen(asset_url) as response:
+            self.assertEqual(response.read(), self.png)
+        snapshot = {
+            'format': 'campaign-studio-foundry-library',
+            'schema': 1,
+            'world': {'id': 'fixture-world', 'title': 'Fixture', 'system': 'dnd5e'},
+            'exportedAt': '2026-10-03T12:00:00Z',
+            'documents': {
+                'scenes': [{'id': 'scene1', 'name': 'Bridge'}],
+                'journals': [
+                    {
+                        'id': 'journal1',
+                        'name': 'Legend',
+                        'pages': [{'id': 'page1', 'name': 'Clue', 'text': 'Hidden door'}],
+                    }
+                ],
+                'actors': [{'id': 'actor1', 'name': 'Scout', 'type': 'npc'}],
+                'items': [],
+            },
+        }
+        wrong = copy.deepcopy(snapshot)
+        wrong['world']['id'] = 'another-world'
+        self.request('/api/foundry/library/import', wrong, expected=400)
+        self.request('/api/foundry/library/import', snapshot, expected=403, writable=False)
+        imported = self.request('/api/foundry/library/import', snapshot)
+        self.assertEqual(imported['counts']['journals'], 1)
+        journals = self.request('/api/foundry/library?kind=journals&q=legend')
+        self.assertEqual(journals['items'][0]['pages'][0]['text'], 'Hidden door')
 
     def test_local_image_provider_contract(self):
         captured = []

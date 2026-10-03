@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Added verified v12 clone preparation after a GM-confirmed restore test. The saved plan lists excluded
+  modules, package releases and the target Foundry build; migration and cutover remain future steps.
+- Fixed the v12 inventory macro to read `game.modules` as a Map and capture the world module configuration.
+  The report merges installed module manifests from the verified backup, retains modules with conflicting
+  activation evidence for GM review, and selects the newest eligible package release.
+- Added a read-only v12 Foundry upgrade inventory macro and compatibility report. It compares stable builds,
+  system and module releases, dependencies, directory exclusions and verification claims, retaining the
+  report with a verified backup. Clone migration and cutover are still manual.
+- Added a first-run Studio project and Foundry world picker, plus a read-only World Library for local media
+  and GM-exported snapshots of scenes, journals, actors and items. Existing installations keep their setup.
+- Added an offline Foundry User Data backup and isolated restore-test workflow in Settings. It checks for
+  running Foundry processes, detects source changes during copying, verifies every file with SHA-256 and
+  never overwrites live data. The actual Foundry version upgrade remains future work.
 - General Requests now produce validated codex/session prep proposals for GM review before application.
   Claude runs without filesystem or shell tools; existing request records remain readable.
 - Split the local server into HTTP routes, campaign operations, background job service and a small startup

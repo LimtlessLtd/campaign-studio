@@ -56,6 +56,7 @@ function initStudio() {
       {},
       [
         ['', 'home', 'Overview'],
+        ['library', 'book', 'World Library'],
         ['maps', 'map', 'Maps & locations'],
         ['prep', 'book', 'Session prep'],
         ['codex', 'people', 'Campaign codex'],
@@ -2163,6 +2164,876 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
   );
 }
 
+function foundryBackupCard(hasWorld) {
+  const form = { destination: '', path: '', restore: '', closed: false };
+  const scan = h('div', { class: 'provider-status backup-status', role: 'status' }, 'Scanning…');
+  const result = h('div', { class: 'backup-result', role: 'status' });
+  const destination = formInput(form, 'destination', 'Backup destination folder', {
+    placeholder: 'Choose a folder outside Foundry User Data',
+    help: 'The app creates a new, timestamped backup folder here. Keep it on a separate drive if possible.',
+  });
+  const backupPath = formInput(form, 'path', 'Backup folder to verify or restore', {
+    help: 'A successful backup fills this in automatically. You can paste an earlier backup folder.',
+  });
+  const restorePath = formInput(form, 'restore', 'New restore test folder', {
+    help: 'Must not exist yet. The live Foundry User Data folder is never overwritten.',
+  });
+  const showResult = (...content) => render(result, ...content);
+  const refresh = async () => {
+    render(scan, 'Scanning Foundry User Data…');
+    try {
+      const info = await api('/api/foundry/backup/plan');
+      if (!form.destination) {
+        form.destination = info.suggested_destination;
+        destination.querySelector('input').value = form.destination;
+      }
+      render(
+        scan,
+        h('b', {}, `${info.world.title} · Foundry ${info.world.foundry_version || 'unknown'}`),
+        h(
+          'span',
+          {},
+          `${info.files.toLocaleString()} files · ${(info.bytes / 1024 ** 3).toFixed(2)} GB`,
+        ),
+        h('span', { class: 'backup-path' }, info.user_data),
+        info.foundry_processes.length
+          ? h('strong', { class: 'error-text' }, 'Foundry is running. Close it before backup.')
+          : h('span', {}, 'No running Foundry process detected.'),
+      );
+    } catch (error) {
+      render(scan, h('span', { class: 'error-text' }, error.message));
+    }
+  };
+  const backupButton = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          backupButton.disabled = true;
+          showResult(
+            'Copying and verifying the complete Foundry User Data folder. Keep this page open…',
+          );
+          try {
+            const copy = await post('/api/foundry/backup/create', {
+              destination: form.destination,
+              confirmed_closed: form.closed,
+            });
+            form.path = copy.path;
+            form.restore = copy.path + '-restore-test';
+            backupPath.querySelector('input').value = form.path;
+            restorePath.querySelector('input').value = form.restore;
+            showResult(
+              h('b', {}, 'Backup verified: '),
+              h('span', { class: 'backup-path' }, copy.path),
+              h('p', {}, `${copy.files.toLocaleString()} files checked by SHA-256.`),
+            );
+            await refresh();
+          } catch (error) {
+            showResult(h('span', { class: 'error-text' }, error.message));
+            throw error;
+          } finally {
+            backupButton.disabled = false;
+          }
+        }),
+    },
+    'Create and verify full backup',
+  );
+  const verifyButton = h(
+    'button',
+    {
+      onclick: () =>
+        attempt(async () => {
+          showResult('Checking every file in the backup…');
+          try {
+            const check = await post('/api/foundry/backup/verify', { path: form.path });
+            showResult(
+              `Backup verified: ${check.files.toLocaleString()} files.`,
+              h('br'),
+              check.path,
+            );
+          } catch (error) {
+            showResult(h('span', { class: 'error-text' }, error.message));
+            throw error;
+          }
+        }),
+    },
+    'Verify backup again',
+  );
+  const rehearseButton = h(
+    'button',
+    {
+      onclick: () =>
+        attempt(async () => {
+          rehearseButton.disabled = true;
+          showResult('Creating and verifying an isolated restore copy…');
+          try {
+            const restored = await post('/api/foundry/backup/rehearse', {
+              path: form.path,
+              destination: form.restore,
+            });
+            showResult(
+              h('b', {}, 'Restore copy verified: '),
+              h('span', { class: 'backup-path' }, restored.path),
+              h('p', { class: 'backup-path' }, `Restore receipt: ${restored.receipt_path}`),
+              h(
+                'p',
+                {},
+                `Next, open this copy with Foundry ${restored.world.core_version || 'the original version'} using its separate User Data path. Confirm the world, maps and assets load before upgrading the live world.`,
+              ),
+            );
+          } catch (error) {
+            showResult(h('span', { class: 'error-text' }, error.message));
+            throw error;
+          } finally {
+            rehearseButton.disabled = false;
+          }
+        }),
+    },
+    'Create restore test copy',
+  );
+  const card = h(
+    'section',
+    { class: 'card backup-card' },
+    h('div', { class: 'section-icon' }, icon('clock')),
+    h('h2', {}, 'Foundry backup and restore test'),
+    h(
+      'p',
+      { class: 'muted' },
+      'Before upgrading a Foundry world, take a Snapshot in Foundry Setup. Then close Foundry and copy its complete User Data folder here. The full copy includes assets outside world packages.',
+    ),
+    scan,
+    h('button', { onclick: () => attempt(refresh) }, 'Refresh scan'),
+    destination,
+    formInput(form, 'closed', 'I have closed Foundry VTT', { type: 'checkbox' }),
+    backupButton,
+    h('hr'),
+    backupPath,
+    restorePath,
+    h('div', { class: 'row' }, verifyButton, rehearseButton),
+    result,
+    h(
+      'p',
+      { class: 'small-note' },
+      'Keep your current Foundry installer for rollback. Checksums compare copied files with the backup manifest; the restore is fully tested only after you open the isolated copy in the original Foundry version. This feature does not upgrade or change the live world.',
+    ),
+  );
+  if (hasWorld) refresh();
+  else render(scan, 'Save a local Foundry world in Settings to scan its User Data.');
+  return card;
+}
+
+function foundryUpgradeCard(hasWorld) {
+  const form = { backup: '', disabled: '', approved: '' };
+  const cloneForm = { report: '', receipt: '', destination: '', inspected: false, reviewed: false };
+  let inventory = null;
+  const status = h(
+    'div',
+    { class: 'provider-status', role: 'status' },
+    'Import a GM inventory first.',
+  );
+  const output = h('div', { class: 'upgrade-report', 'aria-live': 'polite' });
+  const cloneOutput = h('div', { class: 'upgrade-report', role: 'status' });
+  const reportInput = formInput(cloneForm, 'report', 'Saved compatibility report', {
+    help: 'The latest report fills this in automatically. You can paste an earlier report path.',
+  });
+  const cloneDestinationInput = formInput(cloneForm, 'destination', 'New upgrade clone folder', {
+    help: 'Must be a new path, separate from the live world, backup and restore test copy.',
+  });
+  const input = h('input', {
+    type: 'file',
+    accept: '.json,application/json',
+    onchange: (event) =>
+      attempt(async () => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) throw new Error('The inventory must be under 2 MB.');
+        inventory = JSON.parse(await file.text());
+        if (inventory.format !== 'campaign-studio-foundry-upgrade-inventory')
+          throw new Error('Choose the GM upgrade inventory export.');
+        render(
+          status,
+          `${inventory.world?.title || 'World'} · Foundry ${inventory.world?.coreVersion || '?'} · ${inventory.modules?.filter((m) => m.enabled).length || 0} enabled modules`,
+        );
+        render(output);
+      }),
+  });
+  const ids = (value) =>
+    value
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  const compatibility = (value) =>
+    value
+      ? `Foundry ${value.minimum || '?'}–${value.maximum || 'later'}, verified ${value.verified || 'unknown'}`
+      : 'No compatible release selected';
+  const run = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          if (!inventory) throw new Error('Import the GM inventory first.');
+          run.disabled = true;
+          render(output, h('p', {}, 'Verifying the backup and checking Foundry package releases…'));
+          try {
+            const report = await post('/api/foundry/upgrade/report', {
+              inventory,
+              backup_path: form.backup,
+              disabled_modules: ids(form.disabled),
+              approved_dependencies: ids(form.approved),
+            });
+            cloneForm.report = report.report_path;
+            reportInput.querySelector('input').value = cloneForm.report;
+            if (!cloneForm.destination) {
+              cloneForm.destination = report.backup_path + '-upgrade-clone';
+              cloneDestinationInput.querySelector('input').value = cloneForm.destination;
+            }
+            render(
+              output,
+              h(
+                'h3',
+                {},
+                report.recommended_build ? `Foundry ${report.recommended_build}` : 'No full match',
+              ),
+              h(
+                'p',
+                {},
+                report.recommended_build
+                  ? `${report.needs_clone_testing ? 'Needs clone testing. ' : ''}System ${report.system.id}: ${report.system.original_version} → ${report.system.selected_version}.`
+                  : 'Stay on v12 or explicitly choose modules to disable, then run the report again.',
+              ),
+              report.newest_all_verified_build
+                ? h(
+                    'p',
+                    {},
+                    `Newest build with all selected packages verified: ${report.newest_all_verified_build}.`,
+                  )
+                : report.recommended_build
+                  ? h('p', {}, 'No build has verification declared by every selected package.')
+                  : null,
+              report.locked_changes.length
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    `Locked packages need an explicit unlock in the clone before installation: ${report.locked_changes.join(', ')}.`,
+                  )
+                : null,
+              report.requires_gm_choice
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    'The report includes excluded modules or explicit GM choices. Review these before changing a clone.',
+                  )
+                : null,
+              report.activation_discrepancies?.length
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    `Module configuration and active state differ for: ${report.activation_discrepancies.join(', ')}. Check these modules in the v12 clone.`,
+                  )
+                : null,
+              h('h4', {}, 'Installed module decisions'),
+              h(
+                'ul',
+                {},
+                ...report.modules.map((module) =>
+                  h(
+                    'li',
+                    {},
+                    h('b', {}, module.id),
+                    ` · ${module.original_version} → ${module.selected_version || 'none'} · enabled ${module.original_enabled ? 'yes' : 'no'} → ${module.proposed_enabled === null ? 'undecided' : module.proposed_enabled ? 'yes' : 'no'} · ${module.directory_status} · ${module.disabled_reason || module.activation_reason || 'retain in clone'}`,
+                    module.directory_url
+                      ? h(
+                          'a',
+                          {
+                            href: module.directory_url,
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                          },
+                          ' Directory',
+                        )
+                      : null,
+                    module.selected_manifest
+                      ? h(
+                          'small',
+                          {},
+                          ` · ${compatibility(module.selected_compatibility)} · ${module.selected_manifest}`,
+                        )
+                      : null,
+                  ),
+                ),
+              ),
+              h('h4', {}, 'Required dependencies'),
+              h(
+                'ul',
+                {},
+                ...(report.dependencies.length
+                  ? report.dependencies.map((dependency) =>
+                      h(
+                        'li',
+                        {},
+                        `${dependency.id} ${dependency.version} · ${dependency.manifest}`,
+                      ),
+                    )
+                  : [h('li', {}, 'No additional module activations selected.')]),
+              ),
+              h(
+                'details',
+                {},
+                h('summary', {}, `All ${report.candidates.length} candidate builds and blockers`),
+                h(
+                  'ul',
+                  {},
+                  ...report.candidates.map((candidate) =>
+                    h(
+                      'li',
+                      {},
+                      `${candidate.build}: ${candidate.full_match ? (candidate.all_verified ? 'full match, verified' : 'full match, needs clone testing') : candidate.blockers.join(' ')}`,
+                    ),
+                  ),
+                ),
+              ),
+              h(
+                'p',
+                { class: 'small-note' },
+                `Inventory and report saved beside the verified backup: ${report.report_path}`,
+              ),
+              h(
+                'p',
+                { class: 'small-note' },
+                'This report does not disable modules or migrate the world. Test the restored v12 copy, then disable excluded modules in that clone before its first launch in a newer Foundry build.',
+              ),
+            );
+          } finally {
+            run.disabled = false;
+          }
+        }),
+    },
+    'Build compatibility report',
+  );
+  const prepareClone = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          prepareClone.disabled = true;
+          render(
+            cloneOutput,
+            'Verifying evidence and copying the v12 backup into a separate clone…',
+          );
+          try {
+            const plan = await post('/api/foundry/upgrade/prepare-clone', {
+              report_path: cloneForm.report,
+              restore_receipt_path: cloneForm.receipt,
+              destination: cloneForm.destination,
+              confirmed_v12_restore: cloneForm.inspected,
+              confirmed_report: cloneForm.reviewed,
+            });
+            render(
+              cloneOutput,
+              h('h4', {}, `v12 clone prepared for Foundry ${plan.target_build}`),
+              h('p', { class: 'backup-path' }, plan.clone_path),
+              h('p', {}, `Saved plan: ${plan.plan_path}`),
+              h(
+                'p',
+                {},
+                plan.disable_in_v12.length
+                  ? `In Foundry v12 Manage Modules, disable: ${plan.disable_in_v12.map((item) => `${item.id} (${item.reason})`).join('; ')}.`
+                  : 'The report has no enabled modules to disable.',
+              ),
+              h(
+                'p',
+                {},
+                'Launch only this clone with Foundry v12. Save and reload its module configuration, then confirm the excluded modules are off before opening the clone in a newer Foundry build. Migration is not yet available in Studio.',
+              ),
+            );
+          } finally {
+            prepareClone.disabled = false;
+          }
+        }),
+    },
+    'Prepare isolated v12 clone',
+  );
+  return h(
+    'section',
+    { class: 'card upgrade-card' },
+    h('div', { class: 'section-icon' }, icon('check')),
+    h('h2', {}, 'Foundry upgrade compatibility report'),
+    h(
+      'p',
+      { class: 'muted' },
+      'In the original v12 world, run the GM inventory macro. Use a verified offline backup of that same world. This step reads package listings and leaves Foundry unchanged.',
+    ),
+    h(
+      'a',
+      { class: 'btn', href: fileUrl('DM/forge/foundry-upgrade-inventory.js'), download: '' },
+      'Download GM inventory macro',
+    ),
+    h('label', {}, 'Import GM inventory JSON', input),
+    status,
+    formInput(form, 'backup', 'Verified backup folder', {
+      help: 'Paste the timestamped backup folder from the backup step above.',
+    }),
+    h(
+      'details',
+      {},
+      h('summary', {}, 'Explicit GM choices'),
+      formInput(form, 'disabled', 'Enabled module IDs to disable in the clone', {
+        help: 'Comma-separated IDs. Eligible modules are never dropped automatically.',
+      }),
+      formInput(form, 'approved', 'Required dependency IDs to enable in the clone', {
+        help: 'Comma-separated IDs. Only approve dependencies you intend to activate in the isolated clone.',
+      }),
+    ),
+    run,
+    output,
+    h('hr'),
+    h('h3', {}, 'Prepare an isolated v12 clone'),
+    h(
+      'p',
+      { class: 'muted' },
+      'After opening and inspecting the restore test copy in Foundry v12, use its receipt and a reviewed report to make a separate clone. This step does not launch Foundry or change module settings.',
+    ),
+    reportInput,
+    formInput(cloneForm, 'receipt', 'Restore test receipt', {
+      help: 'Shown after Create restore test copy. Keep the receipt beside the backup.',
+    }),
+    cloneDestinationInput,
+    formInput(cloneForm, 'inspected', 'I opened and inspected the restore copy in Foundry v12', {
+      type: 'checkbox',
+    }),
+    formInput(cloneForm, 'reviewed', 'I reviewed the report and excluded module decisions', {
+      type: 'checkbox',
+    }),
+    prepareClone,
+    cloneOutput,
+  );
+}
+
+function foundryWorldPicker(settings) {
+  const state = { root: '' };
+  const roots = h('div', { class: 'foundry-roots' });
+  const choices = h('div', { class: 'world-choices', 'aria-live': 'polite' });
+  const rootInput = formInput(state, 'root', 'Foundry User Data folder', {
+    placeholder: '…/FoundryVTT',
+    help: 'Choose the folder containing Data/worlds. Studio will list its worlds.',
+  });
+  const scan = async (path = state.root) => {
+    render(choices, h('p', { class: 'muted' }, 'Scanning local Foundry worlds…'));
+    try {
+      const result = await api(
+        '/api/foundry/worlds' + (path ? '?root=' + encodeURIComponent(path) : ''),
+      );
+      state.root = result.root;
+      rootInput.querySelector('input').value = result.root;
+      render(
+        roots,
+        ...result.roots.map((root) =>
+          h('button', { class: 'world-root', onclick: () => scan(root) }, root),
+        ),
+      );
+      render(
+        choices,
+        result.worlds.length
+          ? result.worlds.map((world) => {
+              const id = uid('world');
+              return h(
+                'label',
+                { class: 'world-choice', for: id },
+                h('input', {
+                  id,
+                  type: 'radio',
+                  name: 'foundry-world',
+                  checked: settings.world_path === world.path,
+                  onchange: () => {
+                    settings.world_path = world.path;
+                  },
+                }),
+                h(
+                  'span',
+                  {},
+                  h('b', {}, world.title),
+                  h(
+                    'small',
+                    {},
+                    `${world.system} · Foundry ${world.foundry_version || 'version unknown'}`,
+                  ),
+                  h('small', { class: 'world-path' }, world.path),
+                ),
+              );
+            })
+          : h('p', { class: 'muted' }, 'No Foundry worlds found in this User Data folder.'),
+      );
+    } catch (error) {
+      render(choices, h('p', { class: 'error-text' }, error.message));
+    }
+  };
+  const picker = h(
+    'div',
+    { class: 'foundry-world-picker' },
+    rootInput,
+    h('div', { class: 'row' }, h('button', { onclick: () => scan() }, 'Scan for worlds')),
+    roots,
+    choices,
+    h(
+      'details',
+      {},
+      h('summary', {}, 'Enter a world folder manually'),
+      formInput(settings, 'world_path', 'Folder containing world.json'),
+    ),
+  );
+  scan();
+  return picker;
+}
+
+async function studioWelcome() {
+  const result = await api('/api/settings');
+  const settings = clone(result.settings);
+  if (S.state.onboarding_needed && settings.campaign_name === 'Campaign Studio')
+    settings.campaign_name = '';
+  let mode = 'existing';
+  const instructions = h('div');
+  const modeButtons = h('div', { class: 'segmented' });
+  const drawMode = () => {
+    render(
+      modeButtons,
+      ...[
+        ['existing', 'Connect an existing world'],
+        ['new', 'Start a new Foundry world'],
+      ].map(([value, label]) =>
+        h(
+          'button',
+          {
+            class: mode === value ? 'on' : '',
+            onclick: () => {
+              mode = value;
+              drawMode();
+            },
+          },
+          label,
+        ),
+      ),
+    );
+    render(
+      instructions,
+      mode === 'new'
+        ? h(
+            'p',
+            { class: 'muted' },
+            'Create the Foundry world in Foundry Setup and choose its game system there. Return here, scan its User Data folder, then select the new world.',
+          )
+        : h(
+            'p',
+            { class: 'muted' },
+            'Select your existing Foundry world. This step only connects the Studio project; it does not change that world.',
+          ),
+    );
+  };
+  const finish = async (withoutWorld = false) => {
+    if (!settings.campaign_name.trim()) throw new Error('Name your Studio project.');
+    if (!withoutWorld && !settings.world_path) throw new Error('Select a Foundry world first.');
+    if (withoutWorld) settings.world_path = '';
+    await post('/api/settings', settings);
+    S.state.campaign = settings.campaign_name.trim();
+    S.state.onboarding_needed = false;
+    initStudio();
+    go(withoutWorld ? '#/' : '#/library');
+  };
+  drawMode();
+  render(
+    S.view,
+    pageHead(
+      'WELCOME TO CAMPAIGN STUDIO',
+      'Set up your campaign.',
+      'Create your Studio project and connect it to one Foundry world.',
+    ),
+    h(
+      'div',
+      { class: 'welcome-layout' },
+      h(
+        'section',
+        { class: 'card' },
+        h('h2', {}, '1. Name your Studio project'),
+        formInput(settings, 'campaign_name', 'Campaign name'),
+        h('p', { class: 'small-note' }, 'This Studio installation stores one campaign locally.'),
+        h('h2', {}, '2. Connect a Foundry world'),
+        modeButtons,
+        instructions,
+        foundryWorldPicker(settings),
+        h(
+          'div',
+          { class: 'welcome-actions' },
+          h(
+            'button',
+            { class: 'primary', onclick: () => attempt(() => finish()) },
+            'Create project and open library',
+          ),
+          h(
+            'button',
+            { onclick: () => attempt(() => finish(true)) },
+            'Continue without a Foundry world',
+          ),
+        ),
+      ),
+      h(
+        'aside',
+        { class: 'card' },
+        h('h3', {}, 'What happens next'),
+        h(
+          'p',
+          {},
+          'Browse media in the selected world and import a read-only document snapshot from Foundry.',
+        ),
+        h(
+          'p',
+          {},
+          'Your journals, NPCs, items and scenes remain in Foundry. Studio drafts and exports stay separate until you apply them as GM.',
+        ),
+      ),
+    ),
+  );
+}
+
+async function studioLibrary() {
+  let kind = S.libraryKind || 'scenes';
+  let query = '';
+  let offset = 0;
+  let requestNumber = 0;
+  const tabs = h('div', { class: 'library-tabs' });
+  const status = h('div', { class: 'library-status' });
+  const list = h('div', { class: 'library-list' });
+  const detail = h('div', { class: 'library-detail card' });
+  const pager = h('div', { class: 'library-pager' });
+  const upload = h('input', {
+    type: 'file',
+    accept: '.json,application/json',
+    hidden: true,
+    onchange: async (event) => {
+      await attempt(async () => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (file.size > 20 * 1024 * 1024) throw new Error('The snapshot must be under 20 MB.');
+        const snapshot = JSON.parse(await file.text());
+        const result = await post('/api/foundry/library/import', snapshot);
+        toast(
+          `Imported ${Object.values(result.counts).reduce((a, b) => a + b, 0)} document summaries.`,
+        );
+        await refresh();
+      });
+      upload.value = '';
+    },
+  });
+  const showDetail = (item) => {
+    const image =
+      kind === 'assets' && item.type.startsWith('image/')
+        ? h('img', {
+            class: 'library-preview',
+            src: '/api/foundry/asset?path=' + encodeURIComponent(item.path),
+            alt: item.name,
+          })
+        : null;
+    render(
+      detail,
+      h('div', { class: 'eyebrow' }, kind === 'assets' ? 'FOUNDRY MEDIA' : 'FOUNDRY SNAPSHOT'),
+      h('h2', {}, item.name),
+      item.folder ? h('p', { class: 'muted' }, 'Folder: ' + item.folder) : null,
+      item.type && kind !== 'assets' ? badge(item.type) : null,
+      image,
+      item.summary ? h('p', { class: 'library-text' }, item.summary) : null,
+      ...(item.pages || []).map((page) =>
+        h(
+          'section',
+          { class: 'library-page' },
+          h('h3', {}, page.name),
+          page.text ? h('p', { class: 'library-text' }, page.text) : null,
+          page.image ? h('small', { class: 'muted' }, 'Image: ' + page.image) : null,
+        ),
+      ),
+      item.image && kind !== 'assets'
+        ? h('small', { class: 'muted world-path' }, 'Image: ' + item.image)
+        : null,
+      h('small', { class: 'muted world-path' }, item.uuid || item.path || item.id),
+      h(
+        'p',
+        { class: 'small-note' },
+        kind === 'assets'
+          ? 'Read-only. Refresh this page to see media files added later.'
+          : 'Read-only. Refresh the snapshot in Foundry to see later changes.',
+      ),
+    );
+  };
+  const refresh = async () => {
+    const current = ++requestNumber;
+    render(list, h('p', { class: 'muted' }, 'Loading World Library…'));
+    const result = await api(
+      '/api/foundry/library?' +
+        new URLSearchParams({ kind, q: query, offset: String(offset), limit: '60' }),
+    );
+    if (current !== requestNumber) return;
+    if (!result.world) {
+      render(
+        status,
+        h('p', { class: 'muted' }, 'Connect a Foundry world in Settings to browse its library.'),
+      );
+      render(list);
+      render(detail);
+      render(pager);
+      return;
+    }
+    render(
+      status,
+      h('b', {}, result.world.title),
+      h(
+        'span',
+        {},
+        ` · ${result.world.system} · Foundry ${result.world.foundry_version || 'unknown'}`,
+      ),
+      h(
+        'small',
+        {},
+        result.snapshot
+          ? `Document snapshot: ${when(result.snapshot.exported_at)} · Foundry ${result.snapshot.core_version}`
+          : 'No document snapshot imported yet. Media files can still be browsed.',
+      ),
+    );
+    render(
+      tabs,
+      ...[
+        ['scenes', 'Scenes'],
+        ['journals', 'Journals'],
+        ['actors', 'Actors & NPCs'],
+        ['items', 'Items'],
+        ['assets', 'Media'],
+      ].map(([value, label]) =>
+        h(
+          'button',
+          {
+            class: kind === value ? 'on' : '',
+            onclick: () => {
+              kind = value;
+              S.libraryKind = kind;
+              offset = 0;
+              render(detail, h('p', { class: 'muted' }, 'Select an entry to view it.'));
+              attempt(refresh);
+            },
+          },
+          label,
+          value !== 'assets' ? ` (${result.counts[value]})` : '',
+        ),
+      ),
+    );
+    render(
+      list,
+      result.items.length
+        ? result.items.map((item) =>
+            h(
+              'button',
+              { class: 'library-entry', onclick: () => showDetail(item) },
+              h('b', {}, item.name),
+              h('small', {}, item.folder || item.path || item.type || ''),
+            ),
+          )
+        : h(
+            'p',
+            { class: 'muted' },
+            kind !== 'assets' && !result.snapshot
+              ? 'Import a Foundry document snapshot to browse this category.'
+              : 'No entries found.',
+          ),
+    );
+    render(
+      pager,
+      h('span', { class: 'muted' }, `${result.total} ${kind} found`),
+      h(
+        'button',
+        {
+          disabled: offset === 0,
+          onclick: () => {
+            offset = Math.max(0, offset - 60);
+            attempt(refresh);
+          },
+        },
+        'Previous',
+      ),
+      h(
+        'button',
+        {
+          disabled: offset + 60 >= result.total,
+          onclick: () => {
+            offset += 60;
+            attempt(refresh);
+          },
+        },
+        'Next',
+      ),
+      result.truncated ? h('small', {}, 'Media scan limited to 20,000 files.') : null,
+    );
+  };
+  render(
+    S.view,
+    pageHead(
+      'CONNECTED FOUNDRY WORLD',
+      'World Library',
+      'Browse Foundry documents and media before deciding what to build or change.',
+      h('a', { class: 'btn', href: '#/settings' }, 'World settings'),
+    ),
+    status,
+    h(
+      'section',
+      { class: 'card library-import' },
+      h(
+        'div',
+        {},
+        h('h3', {}, 'Read existing Foundry documents'),
+        h(
+          'p',
+          { class: 'muted' },
+          'In Foundry, run the export Script macro as GM. Then import the downloaded JSON snapshot here. Repeat whenever you want a fresh view.',
+        ),
+      ),
+      h(
+        'div',
+        { class: 'row' },
+        h(
+          'a',
+          {
+            class: 'btn',
+            href: fileUrl('DM/forge/foundry-library-export.js'),
+            download: 'campaign-studio-library-export.js',
+          },
+          'Download export macro',
+        ),
+        upload,
+        h('button', { onclick: () => upload.click() }, 'Import snapshot'),
+      ),
+    ),
+    tabs,
+    h(
+      'div',
+      { class: 'library-search' },
+      h('input', {
+        type: 'search',
+        placeholder: 'Search this category…',
+        'aria-label': 'Search World Library category',
+        oninput: (event) => {
+          query = event.target.value;
+          offset = 0;
+          clearTimeout(S.librarySearchTimer);
+          S.librarySearchTimer = setTimeout(() => attempt(refresh), 200);
+        },
+      }),
+    ),
+    h('div', { class: 'library-layout' }, h('div', {}, list, pager), detail),
+  );
+  render(detail, h('p', { class: 'muted' }, 'Select an entry to view it.'));
+  await refresh();
+}
+
 async function studioSettings() {
   const result = await api('/api/settings');
   const f = clone(result.settings);
@@ -2199,15 +3070,12 @@ async function studioSettings() {
         h('div', { class: 'section-icon' }, icon('globe')),
         h('h2', {}, 'Campaign & Foundry'),
         formInput(f, 'campaign_name', 'Campaign name'),
-        formInput(f, 'world_path', 'Foundry world folder', {
-          placeholder: '…/FoundryVTT/Data/worlds/my-world',
-          help: 'Select the local folder containing world.json. The app detects the world and exports into its Data folder.',
-        }),
+        foundryWorldPicker(f),
         saved,
         h(
           'p',
           { class: 'small-note' },
-          'Campaign changes are applied in Foundry using the import macro. The studio stores its own editable campaign files.',
+          'Changing the linked world does not move Studio content. Campaign changes are applied in Foundry using the import macro.',
         ),
       ),
       h(
@@ -2295,6 +3163,8 @@ async function studioSettings() {
           'The source package excludes campaign data, maps, uploads, credentials and local settings.',
         ),
       ),
+      foundryBackupCard(!!result.world),
+      foundryUpgradeCard(!!result.world),
     ),
     h(
       'div',
@@ -2305,6 +3175,14 @@ async function studioSettings() {
           class: 'primary',
           onclick: () =>
             attempt(async () => {
+              if (
+                result.settings.world_path &&
+                f.world_path !== result.settings.world_path &&
+                !confirm(
+                  'Connect this Studio project to a different Foundry world? Existing Studio maps, NPCs and notes will remain in this project.',
+                )
+              )
+                return;
               await post('/api/settings', f);
               S.state = await api('/api/state');
               initStudio();

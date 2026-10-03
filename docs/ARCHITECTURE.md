@@ -17,6 +17,8 @@ flowchart LR
   Forge --> Maps[Local maps and keys]
   HTTP --> Export[maps_io: Foundry export]
   Export --> Macro[GM runs import macro in Foundry]
+  HTTP --> Library[foundry_library: world/media discovery]
+  FoundrySnapshot[GM exports read-only document snapshot] --> Library
 ```
 
 ## Modules
@@ -28,6 +30,9 @@ flowchart LR
 | `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results        |
 | `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |
+| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts        |
+| `DM/foundry_upgrade.py`               | v12 inventory, public compatibility report and isolated clone preparation          |
+| `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply         |
@@ -38,7 +43,7 @@ flowchart LR
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                              |
 | `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                     |
 | `DM/app/app.js`                       | Shared DOM/API/autosave/merge helpers, routing, codex/threads/prep/inbox views     |
-| `DM/app/studio.js`                    | Studio navigation, map workspace/wizard, proposals, settings and image queue       |
+| `DM/app/studio.js`                    | Studio navigation, first run, World Library, maps, settings and image queue        |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
 
 The `DM` directory name and `wotg-maps`/`wotgForge` export identifiers are compatibility names. They do not
@@ -106,11 +111,18 @@ exported prompt packs permit other assistants. Old `/api/claude` calls use the s
 
 ## Foundry boundary
 
-Only `world.json` is read for world identity/system information. Assets and JSON are copied to
+The world picker reads `world.json` for identity and system information. The World Library reads selected
+local media under `Data` and a GM-exported snapshot of scenes, journals, actors and items. Snapshot import
+validates the chosen world and stores only bounded summaries under Studio's private `DM/data`. It is not live
+Foundry synchronization. Assets and JSON are copied to
 `Data/wotg-maps`; the user runs the macro as GM. No world database is written by Python. Imported documents
 carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
 and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
 
 The scene schema targets v12. D&D 5e NPC/item mechanics remain descriptive notes; other systems get journal
-content. Live two-way world browsing/synchronization, mechanical stat block adapters and broad version
+content. Live two-way world synchronization, mechanical stat block adapters and broad version
 compatibility are future work.
+
+The Foundry backup service reads the selected world manifest to locate its User Data folder. It copies that
+whole folder only while Foundry is closed, records and verifies every file checksum, and can materialize a
+restore in a separate new folder. The app does not migrate a Foundry database or overwrite a live world.
