@@ -31,6 +31,7 @@
   "DM/forge/forge.py",
   "DM/forge/foundry-import-macro.js",
   "DM/forge/foundry-library-export.js",
+  "DM/forge/foundry-upgrade-audit.js",
   "DM/forge/foundry-upgrade-inventory.js",
   "DM/forge/gen_city.py",
   "DM/forge/generate.py",

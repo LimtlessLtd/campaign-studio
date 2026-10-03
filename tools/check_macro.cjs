@@ -5,6 +5,7 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 for (const file of [
   'DM/forge/foundry-import-macro.js',
   'DM/forge/foundry-library-export.js',
+  'DM/forge/foundry-upgrade-audit.js',
   'DM/forge/foundry-upgrade-inventory.js',
 ]) {
   new AsyncFunction(fs.readFileSync(file, 'utf8'));
@@ -58,7 +59,48 @@ async function testUpgradeInventory() {
   );
 }
 testUpgradeInventory()
-  .then(() => console.log('Foundry macro syntax and v12 inventory fixture passed.'))
+  .then(async () => {
+    const script = new AsyncFunction(
+      'game',
+      'ui',
+      'document',
+      'URL',
+      'Blob',
+      'setTimeout',
+      fs.readFileSync('DM/forge/foundry-upgrade-audit.js', 'utf8'),
+    );
+    let downloaded;
+    const pack = (id, active) => ({
+      id,
+      title: id,
+      version: '2.0.0',
+      active,
+      toObject: () => ({ compatibility: {}, relationships: {} }),
+    });
+    for (const version of ['13.351', '14.368']) {
+      downloaded = undefined;
+      await script(
+        {
+          user: { isGM: true },
+          version,
+          world: { id: 'fixture-world', title: 'Fixture' },
+          system: pack('dnd5e', true),
+          modules: new Map([['alpha', pack('alpha', true)]]),
+          settings: { get: () => ({ alpha: true, Plutonium: false }) },
+        },
+        { notifications: { info() {}, warn() {}, error() {} } },
+        { createElement: () => ({ click() {}, remove() {} }), body: { append() {} } },
+        { createObjectURL: (blob) => ((downloaded = blob), 'blob:fixture'), revokeObjectURL() {} },
+        Blob,
+        () => {},
+      );
+      const exported = JSON.parse(await downloaded.text());
+      assert.equal(exported.phase, 'migrated-clone');
+      assert.equal(exported.world.coreVersion, version);
+      assert.deepEqual(exported.enabledModuleIds, ['alpha']);
+    }
+    console.log('Foundry macro syntax and v12/v13/v14 inventory fixtures passed.');
+  })
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
