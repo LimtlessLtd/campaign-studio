@@ -112,6 +112,30 @@ class UpgradeTests(unittest.TestCase):
         self.assertFalse(decisions['beta']['proposed_enabled'])
         self.assertEqual(decisions['alpha']['selected_version'], '1.0.0')
 
+    def test_runtime_active_module_is_retained_when_saved_configuration_disagrees(self):
+        data = inventory()
+        data['enabledModuleIds'].remove('gamma')
+        with tempfile.TemporaryDirectory(prefix='upgrade-mismatch-fixture-') as folder:
+            completed = upgrade._complete_inventory(data, folder)
+        self.assertEqual(completed['activation_discrepancies'], ['gamma'])
+        gamma = next(item for item in completed['modules'] if item['id'] == 'gamma')
+        self.assertTrue(gamma['enabled'])
+        result = upgrade.analyze(completed, catalog())
+        decision = next(item for item in result['modules'] if item['id'] == 'gamma')
+        self.assertTrue(decision['original_enabled'])
+        self.assertTrue(decision['proposed_enabled'])
+
+    def test_selects_newest_package_version_when_directory_rows_are_unsorted(self):
+        data = inventory()
+        data['modules'] = []
+        releases = catalog()
+        releases['packages']['dnd5e']['releases'].append(
+            release('dnd5e', '5.1.0', '14', '14', '14')
+        )
+        result = upgrade.analyze(data, releases)
+        self.assertEqual(result['recommended_build'], '14.368')
+        self.assertEqual(result['system']['selected_version'], '5.1.0')
+
     def test_approved_dependency_enables_newer_unverified_candidate(self):
         result = upgrade.analyze(inventory(), catalog(), approved_dependencies=['beta'])
         self.assertEqual(result['recommended_build'], '13.351')

@@ -61,6 +61,8 @@ Foundry's public stable release list, official package directory release rows an
 It saves the original inventory and generated JSON report beside that backup, outside its `User Data` copy.
 These pages and manifests require network access; unavailable or unreadable package data remains unknown and
 cannot count as a full match. The report is metadata evidence, not an installer or runtime test.
+If the saved module configuration and v12's active state disagree, the report flags the IDs and conservatively
+counts either enabled indication as enabled until the GM resolves the mismatch in the clone.
 
 The report lists every enabled module decision, all candidate stable builds and their blockers. To compare a
 newer build after a conflict, the GM can explicitly enter comma-separated module IDs to disable or dependency

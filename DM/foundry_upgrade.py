@@ -281,8 +281,10 @@ def _complete_inventory(inventory, backup_path):
         missing_from_game
         | {item['id'] for item in modules if item.get('enabled') != (item['id'] in enabled)}
     )
+    active_in_game = {item['id'] for item in modules if item.get('enabled') is True}
+    conservatively_enabled = set(enabled) | active_in_game
     for item in modules:
-        item['enabled'] = item['id'] in enabled
+        item['enabled'] = item['id'] in conservatively_enabled
     return result
 
 
@@ -363,11 +365,15 @@ def collect_catalog(inventory):
 
 
 def _release_compatible(release, build):
-    return (
-        not release.get('error')
-        and _compatible(release['compatibility'], build)
-        and _compatible(release.get('manifest_compatibility') or {}, build)
-    )
+    try:
+        _version_key(release['version'])
+        return (
+            not release.get('error')
+            and _compatible(release['compatibility'], build)
+            and _compatible(release.get('manifest_compatibility') or {}, build)
+        )
+    except ValueError:
+        return False
 
 
 def _system_allowed(release, system_id, system_version):
@@ -431,6 +437,7 @@ def _solve(build, roots, catalog, system_id, approved_dependencies):
             if _release_compatible(release, build_key)
             and all(_version_covers(release['version'], c) for c in constraints.get(package_id, []))
         ]
+        choices.sort(key=lambda release: _version_key(release['version']), reverse=True)
         if not choices:
             problems.add(f'{package_id}: no eligible release for Foundry {build}.')
         for release in choices:

@@ -5,7 +5,8 @@
 - Added verified v12 clone preparation after a GM-confirmed restore test. The saved plan lists excluded
   modules, package releases and the target Foundry build; migration and cutover remain future steps.
 - Fixed the v12 inventory macro to read `game.modules` as a Map and capture the world module configuration.
-  The report merges installed module manifests from the verified backup and flags activation discrepancies.
+  The report merges installed module manifests from the verified backup, retains modules with conflicting
+  activation evidence for GM review, and selects the newest eligible package release.
 - Added a read-only v12 Foundry upgrade inventory macro and compatibility report. It compares stable builds,
   system and module releases, dependencies, directory exclusions and verification claims, retaining the
   report with a verified backup. Clone migration and cutover are still manual.
