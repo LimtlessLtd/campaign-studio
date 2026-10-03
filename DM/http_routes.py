@@ -400,6 +400,15 @@ class Handler(SimpleHTTPRequestHandler):
                         p.get('confirmed_clone') is True,
                     )
                 )
+            if path == '/api/foundry/upgrade/audit-migration':
+                return self.send_json(
+                    foundry_upgrade.audit_migration(
+                        p.get('review_path'),
+                        p.get('inventory'),
+                        p.get('confirmed_clone') is True,
+                        p.get('manual_checks'),
+                    )
+                )
             if path.startswith('/api/requests/'):
                 parts = path.split('/')
                 if len(parts) != 5 or not request_workflow.REQUEST_ID.fullmatch(parts[3]):

@@ -671,6 +671,40 @@ class StudioIntegration(unittest.TestCase):
             review = self.request('/api/foundry/upgrade/review-clone', review_payload)
             self.assertEqual(review['status'], 'v12_modules_reviewed')
             self.assertFalse(review['migration_ready'])
+            clone_world_path = Path(prepared['clone_path']) / 'Data/worlds/fixture-world/world.json'
+            clone_world = json.loads(clone_world_path.read_text())
+            clone_world.update(coreVersion='13.351', systemVersion='4.0.0')
+            clone_world_path.write_text(json.dumps(clone_world))
+            (Path(prepared['clone_path']) / 'Data/systems/dnd5e/system.json').write_text(
+                json.dumps({'id': 'dnd5e', 'version': '4.0.0'})
+            )
+            migrated_inventory = json.loads(json.dumps(clone_inventory))
+            migrated_inventory['phase'] = 'migrated-clone'
+            migrated_inventory['world']['coreVersion'] = '13.351'
+            migrated_inventory['system']['version'] = '4.0.0'
+            self.request(
+                '/api/foundry/upgrade/audit-migration',
+                {
+                    'review_path': review['review_path'],
+                    'inventory': migrated_inventory,
+                    'confirmed_clone': True,
+                },
+                expected=403,
+                writable=False,
+            )
+            audit = self.request(
+                '/api/foundry/upgrade/audit-migration',
+                {
+                    'review_path': review['review_path'],
+                    'inventory': migrated_inventory,
+                    'confirmed_clone': True,
+                    'manual_checks': dict.fromkeys(
+                        ('launch', 'scenes', 'journals', 'actors_items', 'modules'), True
+                    ),
+                },
+            )
+            self.assertEqual(audit['status'], 'reviewed')
+            self.assertFalse(audit['cutover_ready'])
 
     def test_first_run_world_picker_and_read_only_library(self):
         user_data = self.root / 'Foundry User Data'

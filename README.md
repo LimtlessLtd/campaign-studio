@@ -91,7 +91,9 @@ report are saved beside the backup. After a verified restore test copy is opened
 can make a separate v12 clone with a saved plan of modules to disable and package releases to install. The GM
 must disable excluded modules such as Plutonium in the clone before its first launch in newer Foundry. Studio
 can then compare a fresh v12 clone inventory with that plan and save a review beside the backup. Studio does
-not yet install packages, run migration or cut over a live world.
+not install packages, run migration or cut over a live world. After the GM manually migrates an isolated clone,
+a second read-only macro and audit compare its build, package versions and activation with the plan and
+record the GM's scene, journal, actor/item and module checks.
 
 ## Your files
 

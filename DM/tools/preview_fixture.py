@@ -39,6 +39,10 @@ try:
         Path(__file__).resolve().parents[1] / 'forge' / 'foundry-upgrade-inventory.js',
         fixture.dm / 'forge' / 'foundry-upgrade-inventory.js',
     )
+    shutil.copy2(
+        Path(__file__).resolve().parents[1] / 'forge' / 'foundry-upgrade-audit.js',
+        fixture.dm / 'forge' / 'foundry-upgrade-audit.js',
+    )
     if '--first-run' in sys.argv:
         (fixture.dm / 'data' / 'settings.json').unlink()
         url = fixture.url + '/'

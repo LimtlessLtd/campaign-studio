@@ -368,6 +368,52 @@ class UpgradeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'do not match'):
                     upgrade.review_clone(plan['plan_path'], clone_inventory, True)
                 plan_file.write_text(original_plan, encoding='utf-8')
+                migrated_world_path = (
+                    Path(plan['clone_path']) / 'Data/worlds/fixture-world/world.json'
+                )
+                migrated_world = json.loads(migrated_world_path.read_text(encoding='utf-8'))
+                migrated_world.update(coreVersion='13.351', systemVersion='4.0.0')
+                migrated_world_path.write_text(json.dumps(migrated_world), encoding='utf-8')
+                (Path(plan['clone_path']) / 'Data/systems/dnd5e/system.json').write_text(
+                    json.dumps({'id': 'dnd5e', 'version': '4.0.0'}), encoding='utf-8'
+                )
+                for package_id in ('alpha', 'gamma', 'beta'):
+                    (
+                        Path(plan['clone_path']) / 'Data/modules' / package_id / 'module.json'
+                    ).write_text(
+                        json.dumps({'id': package_id, 'version': '2.0.0'}), encoding='utf-8'
+                    )
+                migrated_inventory = inventory()
+                migrated_inventory['phase'] = 'migrated-clone'
+                migrated_inventory['world']['coreVersion'] = '13.351'
+                migrated_inventory['system']['version'] = '4.0.0'
+                migrated_inventory['enabledModuleIds'] = ['alpha', 'gamma', 'beta']
+                for module in migrated_inventory['modules']:
+                    module['enabled'] = module['id'] in migrated_inventory['enabledModuleIds']
+                    if module['enabled']:
+                        module['version'] = '2.0.0'
+                with self.assertRaisesRegex(ValueError, 'passing v12 review'):
+                    upgrade.audit_migration(blocked['review_path'], migrated_inventory, True)
+                pending = upgrade.audit_migration(reviewed['review_path'], migrated_inventory, True)
+                self.assertEqual(pending['status'], 'blocked')
+                self.assertTrue(
+                    any('GM has not confirmed' in issue for issue in pending['blockers'])
+                )
+                checks = dict.fromkeys(
+                    ('launch', 'scenes', 'journals', 'actors_items', 'modules'), True
+                )
+                audited = upgrade.audit_migration(
+                    reviewed['review_path'], migrated_inventory, True, checks
+                )
+                self.assertEqual(audited['status'], 'reviewed')
+                self.assertFalse(audited['cutover_ready'])
+                self.assertTrue(Path(audited['audit_path']).is_file())
+                migrated_inventory['enabledModuleIds'].append('Plutonium')
+                migrated_inventory['modules'][3]['enabled'] = True
+                unsafe = upgrade.audit_migration(
+                    reviewed['review_path'], migrated_inventory, True, checks
+                )
+                self.assertTrue(any('Plutonium' in issue for issue in unsafe['blockers']))
                 (
                     Path(backup['path'])
                     / 'User Data'

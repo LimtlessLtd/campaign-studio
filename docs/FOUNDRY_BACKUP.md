@@ -134,8 +134,9 @@ modules to disable. The clone remains at v12. No module or database changes are 
 Next, launch **only the new clone** with Foundry v12 using its separate User Data path. In Manage Modules,
 disable the plan's excluded modules, including Plutonium, and save and reload. Check that they are off and
 that required eligible modules remain on. Keep the backup and v12 installer intact. Installing selected
-releases, starting a newer Foundry build, testing its migration, validating the result and live cutover remain
-future wizard steps. Do not open the clone in a newer build before its v12 module review is complete.
+releases, starting a newer Foundry build and running its migration remain manual. Studio can audit the clone
+after those steps, but live cutover is not implemented. Do not open the clone in a newer build before its v12
+module review is complete.
 
 ## Review the v12 clone's module state
 
@@ -149,3 +150,22 @@ This review does not change packages or the world. The macro does not prove whic
 its export, so the GM must confirm the clone source. A passing review establishes only that the v12 module
 state and installed versions match the plan. It does not mark migration ready: package installation, the
 newer Foundry launch, runtime checks and cutover are still separate steps.
+
+## Audit the migrated clone
+
+The passing v12 review shows the exact system and module release manifests selected by the compatibility
+report. Use Foundry's package management in the isolated installation to install those releases, including
+approved dependencies, and keep excluded modules disabled. Foundry itself must launch and migrate **only the
+clone** in the selected newer build; Studio does not install releases, launch Foundry or edit database files.
+
+After migration, run the **migrated-clone audit macro** as GM in the clone on Foundry v13 or v14. Import its
+JSON in Studio with the passing v12 review. Inspect the migrated world and confirm launch, key scenes and
+assets, journals, actors/items and retained module behavior. The audit compares the running build, world
+manifest, installed system/module versions, and both configured and active module states with the saved
+plan. It records blockers and keeps the audit beside the backup. An unknown or extra active module,
+including Plutonium, blocks the audit.
+
+An audit marked **reviewed** records metadata agreement and the GM's checks; it does not certify every
+document or module feature and does not perform live cutover. Keep the verified v12 backup, restore test
+receipt and v12 installation for rollback. Foundry's [v14 Game API](https://foundryvtt.com/api/v14/classes/foundry.Game.html)
+documents the module collection and running version used by the GM macro.

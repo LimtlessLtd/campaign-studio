@@ -2328,8 +2328,18 @@ function foundryUpgradeCard(hasWorld) {
   const form = { backup: '', disabled: '', approved: '' };
   const cloneForm = { report: '', receipt: '', destination: '', inspected: false, reviewed: false };
   const reviewForm = { plan: '', confirmed: false };
+  const auditForm = {
+    review: '',
+    confirmed: false,
+    launch: false,
+    scenes: false,
+    journals: false,
+    actorsItems: false,
+    modules: false,
+  };
   let inventory = null;
   let cloneInventory = null;
+  let migratedInventory = null;
   const status = h(
     'div',
     { class: 'provider-status', role: 'status' },
@@ -2338,6 +2348,7 @@ function foundryUpgradeCard(hasWorld) {
   const output = h('div', { class: 'upgrade-report', 'aria-live': 'polite' });
   const cloneOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reviewOutput = h('div', { class: 'upgrade-report', role: 'status' });
+  const auditOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reportInput = formInput(cloneForm, 'report', 'Saved compatibility report', {
     help: 'The latest report fills this in automatically. You can paste an earlier report path.',
   });
@@ -2346,6 +2357,9 @@ function foundryUpgradeCard(hasWorld) {
   });
   const reviewPlanInput = formInput(reviewForm, 'plan', 'Saved clone plan', {
     help: 'The latest clone plan fills this in automatically. You can paste an earlier plan path.',
+  });
+  const auditReviewInput = formInput(auditForm, 'review', 'Passing v12 clone review', {
+    help: 'A passing review fills this in automatically. You can paste an earlier review path.',
   });
   const input = h('input', {
     type: 'file',
@@ -2602,6 +2616,10 @@ function foundryUpgradeCard(hasWorld) {
               inventory: cloneInventory,
               confirmed_clone: reviewForm.confirmed,
             });
+            if (review.status === 'v12_modules_reviewed') {
+              auditForm.review = review.review_path;
+              auditReviewInput.querySelector('input').value = review.review_path;
+            }
             render(
               reviewOutput,
               h(
@@ -2615,6 +2633,27 @@ function foundryUpgradeCard(hasWorld) {
               h('p', {}, `Saved configuration: ${review.configured_enabled.join(', ') || 'none'}.`),
               h('p', {}, `Active in Foundry: ${review.runtime_active.join(', ') || 'none'}.`),
               ...review.blockers.map((blocker) => h('p', { class: 'error-text' }, blocker)),
+              review.locked_changes.length
+                ? h(
+                    'p',
+                    { class: 'error-text' },
+                    `Unlock these packages in the isolated installation before changing releases: ${review.locked_changes.join(', ')}.`,
+                  )
+                : null,
+              review.status === 'v12_modules_reviewed'
+                ? h(
+                    'details',
+                    {},
+                    h('summary', {}, 'Selected releases to install for the target build'),
+                    h(
+                      'ul',
+                      {},
+                      ...review.selected_releases.map((item) =>
+                        h('li', {}, `${item.type} ${item.id} ${item.version} · ${item.manifest}`),
+                      ),
+                    ),
+                  )
+                : null,
               h('p', { class: 'backup-path' }, `Saved review: ${review.review_path}`),
               h(
                 'p',
@@ -2630,6 +2669,79 @@ function foundryUpgradeCard(hasWorld) {
         }),
     },
     'Review v12 clone modules',
+  );
+  const migratedInventoryInput = h('input', {
+    type: 'file',
+    accept: '.json,application/json',
+    onchange: (event) =>
+      attempt(async () => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        migratedInventory = null;
+        if (file.size > 2 * 1024 * 1024) throw new Error('The inventory must be under 2 MB.');
+        migratedInventory = JSON.parse(await file.text());
+        if (migratedInventory.phase !== 'migrated-clone')
+          throw new Error('Choose the migrated-clone GM audit export.');
+        render(
+          auditOutput,
+          `Imported ${migratedInventory.world?.title || 'world'} · Foundry ${migratedInventory.world?.coreVersion || '?'} · ${migratedInventory.enabledModuleIds?.length || 0} configured modules`,
+        );
+      }),
+  });
+  const auditMigration = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          if (!migratedInventory)
+            throw new Error('Import an inventory from the migrated clone first.');
+          auditMigration.disabled = true;
+          render(auditOutput, 'Comparing the migrated clone with the selected package plan…');
+          try {
+            const audit = await post('/api/foundry/upgrade/audit-migration', {
+              review_path: auditForm.review,
+              inventory: migratedInventory,
+              confirmed_clone: auditForm.confirmed,
+              manual_checks: {
+                launch: auditForm.launch,
+                scenes: auditForm.scenes,
+                journals: auditForm.journals,
+                actors_items: auditForm.actorsItems,
+                modules: auditForm.modules,
+              },
+            });
+            render(
+              auditOutput,
+              h(
+                'h4',
+                {},
+                audit.status === 'reviewed'
+                  ? 'Migrated clone review recorded'
+                  : 'Migrated clone review blocked',
+              ),
+              h('p', {}, `Foundry ${audit.reported_build} · target ${audit.target_build}.`),
+              h(
+                'p',
+                {},
+                `System ${audit.selected_system.id} ${audit.installed_system_version || 'missing'} · selected ${audit.selected_system.version}.`,
+              ),
+              h('p', {}, `Enabled modules: ${audit.configured_enabled.join(', ') || 'none'}.`),
+              ...audit.blockers.map((blocker) => h('p', { class: 'error-text' }, blocker)),
+              h('p', { class: 'backup-path' }, `Saved audit: ${audit.audit_path}`),
+              h(
+                'p',
+                { class: 'small-note' },
+                'Package metadata and GM checks cannot certify module behavior. Keep the v12 backup and installer for rollback. Studio does not cut over the live world.',
+              ),
+            );
+          } finally {
+            auditMigration.disabled = false;
+          }
+        }),
+    },
+    'Audit migrated clone',
   );
   return h(
     'section',
@@ -2698,6 +2810,41 @@ function foundryUpgradeCard(hasWorld) {
     }),
     reviewClone,
     reviewOutput,
+    h('hr'),
+    h('h3', {}, 'Audit migrated clone'),
+    h(
+      'p',
+      { class: 'muted' },
+      'After manually installing the selected releases and migrating only the isolated clone, run the migrated-clone GM macro in Foundry v13 or v14. Inspect the world before recording these checks.',
+    ),
+    h(
+      'a',
+      { class: 'btn', href: fileUrl('DM/forge/foundry-upgrade-audit.js'), download: '' },
+      'Download migrated-clone audit macro',
+    ),
+    auditReviewInput,
+    h('label', {}, 'Import migrated-clone inventory JSON', migratedInventoryInput),
+    formInput(
+      auditForm,
+      'confirmed',
+      'I exported this inventory from the isolated migrated clone',
+      {
+        type: 'checkbox',
+      },
+    ),
+    formInput(auditForm, 'launch', 'The migrated clone launches and opens this world', {
+      type: 'checkbox',
+    }),
+    formInput(auditForm, 'scenes', 'I inspected key scenes and map assets', {
+      type: 'checkbox',
+    }),
+    formInput(auditForm, 'journals', 'I inspected key journals', { type: 'checkbox' }),
+    formInput(auditForm, 'actorsItems', 'I inspected key actors and items', {
+      type: 'checkbox',
+    }),
+    formInput(auditForm, 'modules', 'I tested retained module behavior', { type: 'checkbox' }),
+    auditMigration,
+    auditOutput,
   );
 }
 
