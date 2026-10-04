@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed autosave merges losing work: when a request added goals, checklist items or loot to a session prep
+  while it was open and edited, saving kept only one side. Lists without IDs now merge both sides, fields
+  cleared on the server stay cleared, and edits typed while a save is in flight are no longer overwritten.
+- A late job failure no longer marks an image or draft as failed after it has finished or moved on, and the
+  Foundry `wotg-maps` index and scene files are written atomically by one shared writer.
+- Internal: review-driven cleanup of module boundaries (shared file helpers in `storage`, no private
+  cross-module calls, workflow orchestration in `campaign_core`). See the design review in
+  `docs/CODE_REVIEW.md`.
 - Changes that span several documents (content and request application, layout application, revision
   restore and generated-image links) now use a write-ahead journal. An interrupted change is completed when
   the server restarts or before the next change; if a document was edited meanwhile, nothing is overwritten

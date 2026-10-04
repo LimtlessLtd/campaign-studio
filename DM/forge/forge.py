@@ -545,6 +545,23 @@ def scene_files(meta, cells, segments, lights, image_src):
     return v12, da
 
 
+def write_foundry_index(target):
+    """List exported scenes for the import macro's picker; an unreadable scene keeps its slug."""
+    path = os.path.join(target, 'index.json')
+    with storage.file_lock(path):  # the server's export and forge processes both rebuild it
+        listing = sorted(
+            f[:-5] for f in os.listdir(target) if f.endswith('.json') and f != 'index.json'
+        )
+        names = {}
+        for slug in listing:
+            try:
+                scene = json.loads(Path(target, slug + '.json').read_text(encoding='utf-8'))
+                names[slug] = scene['name']
+            except (OSError, ValueError, KeyError, TypeError):
+                names[slug] = slug
+        storage.atomic_json(path, [dict(slug=slug, name=names[slug]) for slug in listing])
+
+
 def update_index(entry):
     path = os.path.join(DM, 'data', 'maps', 'index.json')
 
@@ -593,8 +610,8 @@ def forge(plan_path, foundry_copy=True, jobs=None):
         v12['flags']['world']['wotgForge']['key'] = key_for_foundry(
             slug, json.loads(Path(key).read_text(encoding='utf-8')), foundry_copy
         )
-    Path(out('.foundry.json')).write_text(json.dumps(v12, indent=1), encoding='utf-8')
-    Path(out('.da.json')).write_text(json.dumps(da, indent=1), encoding='utf-8')
+    storage.atomic_json(out('.foundry.json'), v12)
+    storage.atomic_json(out('.da.json'), da)
     copied = False
     if foundry_copy and os.path.isdir(FOUNDRY_DATA):
         target = os.path.join(FOUNDRY_DATA, FOUNDRY_DIR)
@@ -612,18 +629,7 @@ def forge(plan_path, foundry_copy=True, jobs=None):
             shutil.rmtree(roof_dir)
         if roofs:
             shutil.copytree(out('.roofs'), roof_dir)
-        listing = sorted(
-            f[:-5] for f in os.listdir(target) if f.endswith('.json') and f != 'index.json'
-        )
-        names = {}
-        for s in listing:
-            try:
-                names[s] = json.loads(Path(target, s + '.json').read_text(encoding='utf-8'))['name']
-            except (OSError, ValueError, KeyError):
-                names[s] = s
-        storage.atomic_json(
-            os.path.join(target, 'index.json'), [dict(slug=s, name=names[s]) for s in listing]
-        )
+        write_foundry_index(target)
         copied = True
     rel = lambda p: os.path.relpath(p, os.path.dirname(DM)).replace('\\', '/')
     counts = dict(

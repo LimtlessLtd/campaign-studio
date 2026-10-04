@@ -4,7 +4,7 @@
   "scripts": {
     "format": "prettier --write DM/app DM/forge/foundry-import-macro.js DM/forge/foundry-library-export.js DM/forge/foundry-upgrade-audit.js DM/forge/foundry-upgrade-inventory.js .github docs *.md *.json",
     "format:check": "prettier --check DM/app DM/forge/foundry-import-macro.js DM/forge/foundry-library-export.js DM/forge/foundry-upgrade-audit.js DM/forge/foundry-upgrade-inventory.js .github docs *.md *.json",
-    "check:js": "node --check DM/app/app.js && node --check DM/app/studio.js && node tools/check_macro.cjs"
+    "check:js": "node --check DM/app/merge.js && node --check DM/app/app.js && node --check DM/app/studio.js && node tools/check_macro.cjs && node tools/check_merge.cjs"
   },
   "devDependencies": {
     "prettier": "3.9.9"

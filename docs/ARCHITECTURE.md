@@ -45,6 +45,7 @@ flowchart LR
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                              |
 | `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                     |
 | `DM/app/app.js`                       | Shared DOM/API/autosave/merge helpers, routing, codex/threads/prep/inbox views     |
+| `DM/app/merge.js`                     | Document copy/compare helpers and the three-way autosave merge, tested in Node     |
 | `DM/app/studio.js`                    | Studio navigation, first run, World Library, maps, settings and image queue        |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
 

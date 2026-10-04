@@ -34,10 +34,68 @@ The HTTP transport, campaign operations, job lifecycle and startup now have sepa
 route bodies and shared global frontend state are the main remaining structure pressure points. Further
 route decomposition should follow tested business boundaries as features grow.
 
+## Design and pattern review (2026-10-04)
+
+An independent review of all application code up to `43efb18`: backend, forge, frontend, Foundry macros and
+tests. It checked correctness, encapsulation, single responsibility, duplication and dependency direction.
+
+**Patterns worth keeping.** Atomic replacement with cooperating file locks; optimistic `X-Rev` concurrency
+with a three-way merge; stable, prefixed IDs that make applies idempotent; strict validation and size limits
+on model output; an AI runner without tools; localhost Host checks plus a custom-header CSRF guard; bounded,
+SSRF-checked package fetches; consistent HTML escaping in the browser and Foundry macros; an explicit source
+manifest; and integration tests with fake providers. `JobService` shows good dependency injection: the
+campaign supplies its callbacks. `gen_city` models its domain with `Grid` and `City` classes.
+
+The codebase is mostly procedural modules over plain dictionaries. That is reasonable Python and is not a
+defect by itself. The problems below are the ones object-oriented principles exist to prevent.
+
+### Fixed in this review
+
+| Finding                                                                                    | Resolution                                                                          |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Autosave merge replaced an unkeyed list wholesale: AI-added goals/checklist/loot lost      | Three-way list merge, in place; `tools/check_merge.cjs` and a browser check         |
+| Autosave merge restored fields the server had removed (for example a cleared error)        | Untouched local keys missing on the server are removed                              |
+| Edits typed while a save was in flight became the saved base and could be overwritten      | The base is the exact body sent; the document stays pending if it changed meanwhile |
+| `foundry_upgrade` called 50 private `foundry_backup` helpers                               | Shared file primitives in `storage`; the backup helpers it needs are public         |
+| Two Foundry `wotg-maps/index.json` writers; export's was non-atomic and failed on bad JSON | One locked, atomic `forge.write_foundry_index`; scene JSON written atomically       |
+| Failed and interrupted jobs had near-duplicate handlers that overwrote finished records    | One `settle_failed_job` that only fails records still owned by that job             |
+| Content apply and revision restore orchestration lived in HTTP routes                      | `campaign_core.apply_content` and `restore_revision`, beside `apply_layout`         |
+
+### Design findings
+
+1. **Global paths instead of a campaign object (dependency inversion, encapsulation).** Twelve modules
+   derive campaign paths from `__file__`. The integration test patches 18 module globals across seven
+   modules to relocate one campaign. Introduce a `Campaign` object (root, data, maps, uploads, backups,
+   history, jobs, settings) created once at startup and passed to services. This also enables more than one
+   campaign and simpler tests.
+2. **Document shapes are implicit (DRY).** A codex entry is written out field by field in four places
+   (two Python apply paths and two JavaScript editors), and `schema.py` now repeats it. Define each stored
+   shape once, with factories such as `new_codex_entry(...)`, and use them in apply paths, migrations and a
+   JSON endpoint the UI can read.
+3. **God functions (single responsibility).** `http_routes.do_POST` is a 410-line `if` chain and
+   `do_GET` is 176 lines. `render2d.prop` is 424 lines, and `foundry_upgrade` has 220- and 190-line
+   workflows inside a 1,300-line module. `studio.js` has `mapStudio` at 1,064 lines and
+   `foundryUpgradeCard` at 524. Use a route table (path pattern → handler), a prop-painter registry,
+   separate `foundry_catalog`, `package_solver` and `upgrade_workflow` modules, and page controllers for
+   the map studio.
+4. **Errors are untyped.** Nearly every failure is a `ValueError`, mapped to 403 in `do_GET` and 400 in
+   `do_POST`, so "not found", "conflict" and "invalid input" are indistinguishable. Add a small exception
+   hierarchy (`NotFound`, `Conflict`, `Invalid`) mapped to status codes in one place.
+5. **The generic document API bypasses domain rules.** `PUT /api/doc/<name>` can write `settings`,
+   `workflows/*` or `jobs/*` without the validation of their dedicated routes. That is acceptable for a
+   single-user local app, but restrict writable document prefixes.
+6. **The SSRF guard is time-of-check.** `_validate_url` resolves DNS, then `urllib` resolves again when it
+   connects, so DNS rebinding could reach a private address. Pin the validated address for the connection.
+7. Minor: `_media_path` repeats the manifest path rules, and `forge.forge` rereads `key.json` three times.
+
 ## Prioritized development work
 
 | Priority | Work                                                                | Acceptance criteria                                                                                                                       |
 | -------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | Introduce a `Campaign` context object and pass it to services       | No module computes campaign paths from `__file__`; the test fixture builds one `Campaign` instead of patching globals                     |
+| 1        | Define stored document shapes once                                  | Codex, thread, prep and key factories used by apply paths, migrations and the UI; a test fails when a shape diverges                      |
+| 2        | Route table and typed HTTP errors                                   | No handler over ~60 lines; 400/404/409 come from exception types; the existing HTTP tests are unchanged                                   |
+| 2        | Split `foundry_upgrade` into catalogue, solver and workflow modules | Same public functions and fixtures pass; no module imports another's private names                                                        |
 | 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus                                                            |
 | 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                                                                  |
 | 2        | Build supported Foundry version/system adapters                     | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport                                                     |

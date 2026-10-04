@@ -19,6 +19,7 @@
   "DM/CLAUDE.md",
   "DM/app/app.js",
   "DM/app/index.html",
+  "DM/app/merge.js",
   "DM/app/studio.css",
   "DM/app/studio.js",
   "DM/app/style.css",
@@ -77,5 +78,6 @@
   "tests/test_release.py",
   "tests/test_schema.py",
   "tools/check_macro.cjs",
+  "tools/check_merge.cjs",
   "tools/check_source.py"
 ]
