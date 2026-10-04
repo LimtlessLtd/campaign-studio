@@ -435,6 +435,18 @@ class StudioIntegration(unittest.TestCase):
         art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
         self.assertEqual([a['status'] for a in art], ['ready', 'failed'])
 
+    def test_finished_job_keeps_its_result_when_recovery_must_wait(self):
+        slug, _ = self.import_map()
+        job = {'id': 'forge-1', 'kind': 'forge', 'slug': slug, 'populate': True, 'status': 'done'}
+        with (
+            patch.object(campaign_core, 'recover_commits', side_effect=TimeoutError('Lock wait')),
+            patch.object(sys, 'stderr', io.StringIO()),
+        ):
+            campaign_core.finish_job(job, 0, '')
+        self.assertEqual(job['status'], 'done')
+        drafts = [json.loads(p.read_text()) for p in (self.dm / 'data/workflows').glob('*.json')]
+        self.assertEqual([(w['map'], w['status']) for w in drafts], [(slug, 'ready')])
+
     def test_generated_image_links_its_codex_entry_and_location(self):
         slug, _ = self.import_map()
         campaign_core.write_doc('codex', {'entries': [{'id': 'npc-one', 'image': ''}]})

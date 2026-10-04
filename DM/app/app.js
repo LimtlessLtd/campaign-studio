@@ -348,10 +348,18 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
     render(
       box,
       ...arr.map((item, i) => {
+        // Look the item up when it is used: an autosave merge may have moved it since this was drawn.
+        let value = item;
+        const at = () => (arr[i] === value ? i : arr.indexOf(value));
         const text = checklist ? item.text : item;
         const set = (v) => {
           if (checklist) item.text = v;
-          else arr[i] = v;
+          else {
+            const j = at();
+            if (j < 0) arr.push(v);
+            else arr[j] = v;
+            value = v;
+          }
           save(docName);
         };
         return h(
@@ -374,7 +382,8 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
               class: 'danger',
               title: 'Remove',
               onclick: () => {
-                arr.splice(i, 1);
+                const j = at();
+                if (j >= 0) arr.splice(j, 1);
                 save(docName);
                 draw();
               },
@@ -407,7 +416,7 @@ function rowsEditor(docName, arr, cols, make) {
   const draw = () =>
     render(
       box,
-      ...arr.map((row, i) =>
+      ...arr.map((row) =>
         h(
           'div',
           { class: 'rowedit' },
@@ -429,7 +438,8 @@ function rowsEditor(docName, arr, cols, make) {
               class: 'danger',
               title: 'Remove',
               onclick: () => {
-                arr.splice(i, 1);
+                const j = arr.indexOf(row);
+                if (j >= 0) arr.splice(j, 1);
                 save(docName);
                 draw();
               },
@@ -496,7 +506,7 @@ function picker(docName, arr, choices, { placeholder = 'Add…', cls = '' } = {}
       h(
         'div',
         { class: 'row', style: 'margin-bottom:6px' },
-        arr.map((id, i) =>
+        arr.map((id) =>
           h(
             'span',
             { class: 'chip ' + cls },
@@ -506,7 +516,8 @@ function picker(docName, arr, choices, { placeholder = 'Add…', cls = '' } = {}
               {
                 title: 'Remove',
                 onclick: () => {
-                  arr.splice(i, 1);
+                  const j = arr.indexOf(id);
+                  if (j >= 0) arr.splice(j, 1);
                   save(docName);
                   draw();
                 },

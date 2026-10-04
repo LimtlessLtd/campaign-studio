@@ -39,7 +39,9 @@ class Journal:
     def __init__(self, folder, path_of, write, finish=lambda actions: []):
         self.folder = folder  # callable, so tests and relocated campaigns resolve it late
         self.path_of = path_of  # target name -> file path
-        self.write = write  # (target name, value) -> None; each target is replaced atomically
+        # (target name, value) -> None. Each target is replaced atomically and flushed to disk, so a
+        # power cut after the entry is deleted cannot lose or truncate it.
+        self.write = write
         # Runs an entry's recorded follow-up actions (such as queueing a render) once every target
         # is written, before the entry is cleared. It must be idempotent and must not raise.
         self.finish = finish
@@ -102,7 +104,7 @@ class Journal:
                 ) from error
             return summary['results']
         results = self.finish(entry['after'])
-        os.remove(path)
+        storage.remove(path)
         return results
 
     def state(self, target):
@@ -122,8 +124,7 @@ class Journal:
     def set_aside(path, value):
         """Record a conflict for GM review, then stop replaying the pending entry."""
         storage.atomic_json(path[: -len(PENDING)] + CONFLICT, value, durable=True)
-        if os.path.exists(path):
-            os.remove(path)
+        storage.remove(path)
 
     def replay(self, path):
         try:
@@ -150,7 +151,7 @@ class Journal:
             if state == 'pending':
                 self.write(target['name'], target['value'])
         summary['results'] = self.finish(entry.get('after', []))
-        os.remove(path)
+        storage.remove(path)
         return 'completed', summary
 
     def recover(self):

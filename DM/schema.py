@@ -137,22 +137,33 @@ def backup(data, maps, backups, label):
     root = os.path.dirname(os.path.abspath(data))
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + os.urandom(3).hex()
     target = os.path.join(backups, label + '-' + stamp)
-    files = []
-    for path in campaign_files(data, maps):
-        rel = os.path.relpath(path, root).replace(os.sep, '/')
-        record = storage.copy_and_hash(path, os.path.join(target, storage.manifest_path(rel)))
-        files.append({'path': rel, 'sha256': record['sha256'], 'size': record['bytes']})
-    for entry in files:
-        copy = os.path.join(target, storage.manifest_path(entry['path']))
-        if storage.sha256_file(copy) != entry['sha256']:
-            raise OSError('Backup verification failed for ' + entry['path'])
-    manifest = {
-        'format': FORMAT + '-backup',
-        'created': datetime.datetime.now().isoformat(timespec='seconds'),
-        'version': version(data, maps),
-        'files': files,
-    }
-    storage.atomic_json(os.path.join(target, 'backup.json'), manifest, durable=True)
+    try:
+        files = []
+        for path in campaign_files(data, maps):
+            rel = os.path.relpath(path, root).replace(os.sep, '/')
+            try:
+                copy = os.path.join(target, storage.manifest_path(rel))
+                record = storage.copy_and_hash(path, copy)
+            except ValueError as error:
+                raise SchemaError(
+                    f'Could not back up {rel} before migrating ({error}). Replace a linked file '
+                    'with an ordinary copy, or rename a file whose name contains ":" or "\\".'
+                ) from error
+            files.append({'path': rel, 'sha256': record['sha256'], 'size': record['bytes']})
+        for entry in files:
+            copy = os.path.join(target, storage.manifest_path(entry['path']))
+            if storage.sha256_file(copy) != entry['sha256']:
+                raise OSError('Backup verification failed for ' + entry['path'])
+        manifest = {
+            'format': FORMAT + '-backup',
+            'created': datetime.datetime.now().isoformat(timespec='seconds'),
+            'version': version(data, maps),
+            'files': files,
+        }
+        storage.atomic_json(os.path.join(target, 'backup.json'), manifest, durable=True)
+    except BaseException:
+        shutil.rmtree(target, ignore_errors=True)  # an incomplete backup must not look restorable
+        raise
     return target
 
 

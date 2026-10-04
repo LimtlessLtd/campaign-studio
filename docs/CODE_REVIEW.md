@@ -108,7 +108,8 @@ defect by itself. The problems below are the ones object-oriented principles exi
 
 - Multi-document changes are journaled and completed after interruption. If a document is edited outside
   the app before recovery, the change is set aside for GM review rather than merged. Map import/export is not
-  journaled, and only the journal is flushed to disk, so a power cut can still lose a just-saved change.
+  journaled. Journaled changes are flushed to disk; ordinary single-document saves are not, so a power cut
+  can still lose a just-saved edit.
   Backups remain necessary.
 - The in-memory queue fails unfinished jobs on restart; automatic resume/cancel is not implemented.
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.

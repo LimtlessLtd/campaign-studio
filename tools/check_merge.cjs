@@ -95,6 +95,33 @@ for (const local of [['A', 'B'], ['A']]) {
   assert.ok(goals.includes('C'));
 }
 
+// Items change in place too: an editor typing into a checklist or loot row keeps a live reference.
+for (const edited of [false, true]) {
+  const page = { checklist: [{ text: 'Map', done: false }] };
+  const row = page.checklist[0];
+  if (edited) page.checklist.push({ text: 'Rope', done: false });
+  mergeInto({ checklist: [{ text: 'Map', done: false }] }, page, {
+    checklist: [
+      { text: 'Map', done: false },
+      { text: 'Patrol', done: false },
+    ],
+  });
+  assert.equal(page.checklist[0], row);
+  assert.deepEqual(
+    page.checklist.map((x) => x.text),
+    edited ? ['Map', 'Rope', 'Patrol'] : ['Map', 'Patrol'],
+  );
+}
+
+// Repeated values count: one removed on the server and one added here leaves one.
+assert.deepEqual(
+  merge({ loot: ['Potion', 'Rope'] }, { loot: ['Potion', 'Rope', 'Potion'] }, { loot: ['Rope'] }),
+  { loot: ['Potion', 'Rope'] },
+);
+assert.deepEqual(merge({ goals: ['A'] }, { goals: ['A', 'A'] }, { goals: ['A', 'B'] }), {
+  goals: ['A', 'A', 'B'],
+});
+
 // New records: required fields first, then fresh copies of the defaults, then extra links.
 const thread = { required: ['id', 'title'], defaults: { status: 'open', pcs: [] } };
 const made = newRecord(thread, 'thread', { map: 'harbour', title: 'T', id: 't1' });

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixes from reviewing the journal, migration and autosave work:
+  - Typing in a checklist item or loot row while an AI request added items to the same list could be
+    lost after showing "Saved". List merges now keep the items being edited and count repeated values, so
+    a second "Potion" added while another was removed elsewhere is kept. Editing or removing a goal or a
+    linked character no longer affects a different entry after a merge moved it.
+  - A finished render, image or AI draft is kept when an interrupted change cannot be completed at that
+    moment, instead of being marked failed.
+  - `python DM/migrate.py --apply` now leaves an interrupted change for the server, which can run the render
+    it queues. A file the pre-migration backup cannot copy (such as a symbolic link) stops startup with a
+    clear message instead of an error trace, and no partial backup is left.
+  - A new campaign records its data schema with its first document, so an older build refuses it.
+  - Documents written by a journaled change are flushed to disk before its record is deleted, and deleting
+    that record rides out brief Windows file locks instead of repeating its render later.
 - Each stored record (codex entry, thread, art brief, session prep, scene, handout, checklist item, loot,
   map key, location, journal entry and event) is now defined once in `DM/shapes.py`. AI content and request
   application, layout application, map import and the browser all build records from it, so records no

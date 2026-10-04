@@ -69,7 +69,9 @@ and generated-image links) go through `campaign_core.commit_docs`. Before the fi
 `data/.commits` durably records every target's new value and a digest of the bytes it replaces. Put the
 record that marks the change finished (workflow or request status) last. If the server stops part way,
 startup replays the entry: targets still holding their old bytes are completed and targets already written
-are left alone. Every write request and job result also replays pending entries first, so no change starts
+are left alone. Each target is flushed to disk before the entry is deleted, so a power cut cannot leave a
+journaled document truncated without a record to recover it from. Only the server replays entries:
+`python DM/migrate.py --apply` refuses while one is pending, because replaying can queue a render. Every write request and job result also replays pending entries first, so no change starts
 from a half-applied state. Follow-up steps recorded with a change (queueing the render after a layout apply
 or restore, marking the map catalogue populated) run once its documents are written, and again on replay;
 they are idempotent and best effort. If a target was changed some other way, nothing is overwritten; the
@@ -81,7 +83,8 @@ Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
 ## Data schema and migrations
 
 `data/.schema.json` records the campaign's data schema (`schema.CURRENT`). Existing data without it is
-schema 0 (0.1.x); an empty campaign is stamped on the first start that finds documents. On startup the
+schema 0 (0.1.x). A new campaign records the current schema just before its first document is written, so
+an older build refuses it; data copied into a campaign before its first write is still migrated. On startup the
 server refuses data from a newer schema, completes interrupted changes, then migrates older data. When a
 migration changes documents, every document it may rewrite is first copied to `DM/backups` and each copy is
 verified by SHA-256. Migrations fill or reshape stored documents only. They are idempotent, migrated

@@ -26,9 +26,9 @@ def read(path, fallback=None):
         return json.load(f)
 
 
-def write(path, value):
+def write(path, value, durable=False):
     with storage.file_lock(path):
-        storage.atomic_json(path, value)
+        storage.atomic_json(path, value, durable)
 
 
 def create(slug, brief, kind='content', instruction=''):

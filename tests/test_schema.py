@@ -276,6 +276,21 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(json.loads((empty / 'data/threads.json').read_text())['threads'], [])
         self.assertEqual(schema.version(data, maps), schema.CURRENT)
 
+    def test_a_new_campaign_records_its_schema_with_its_first_document(self):
+        new = Path(self.temp.name) / 'new'
+        paths = {'DATA': str(new / 'data'), 'MAPS': str(new / 'maps')}
+        with patch.multiple(campaign_core, HISTORY=str(new / 'data/.history'), **paths):
+            campaign_core.write_doc('settings', {'campaign_name': 'Fixture'})
+            # An older build then refuses it instead of treating it as unversioned 0.1.x data.
+            self.assertEqual(schema.version(paths['DATA'], paths['MAPS']), schema.CURRENT)
+            campaign_core.write_doc('codex', {'entries': []})
+        marker = json.loads((new / 'data' / schema.MARKER).read_text(encoding='utf-8'))
+        self.assertEqual(len(marker['history']), 1)
+        # Unversioned documents already present are left for the next start to migrate.
+        with patch.multiple(campaign_core, DATA=self.data, MAPS=self.maps, HISTORY=str(new / 'h')):
+            campaign_core.write_doc('threads', {'threads': []})
+        self.assertEqual(schema.version(self.data, self.maps), 0)
+
     def test_unchanged_documents_are_stamped_without_a_backup(self):
         bare = Path(self.temp.name) / 'bare'
         (bare / 'data').mkdir(parents=True)
@@ -329,6 +344,17 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(self.read('data/codex.json')['entries'][1]['tags'], [])
         self.assertEqual(self.read('maps/harbour/key.json')['areas'][0]['rooms'], [])
 
+    def test_a_document_that_cannot_be_backed_up_blocks_migration_cleanly(self):
+        linked = self.dm / 'data/prep/linked.json'
+        try:
+            linked.symlink_to(self.dm / 'data/prep/s2.json')
+        except OSError:
+            self.skipTest('This platform does not allow symbolic links here.')
+        with self.assertRaisesRegex(schema.SchemaError, 'Could not back up data/prep/linked.json'):
+            self.migrate()
+        self.assertEqual(schema.version(self.data, self.maps), 0)
+        self.assertFalse(any(Path(self.backups).glob('*')))
+
     def test_malformed_document_blocks_migration_and_names_it(self):
         (self.dm / 'data/codex.json').write_text('[]', encoding='utf-8')
         with self.assertRaisesRegex(schema.SchemaError, 'codex.json'):
@@ -353,6 +379,33 @@ class SchemaTests(unittest.TestCase):
         with patch.object(migrate, 'server_running', return_value=True):
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(migrate.main(['--apply']), 1)
+
+    def test_command_line_leaves_an_interrupted_change_to_the_server(self):
+        # Completing it would queue a render in a process with no job workers, and lose it.
+        pending = Path(self.data) / '.commits' / '20261004-120000-000000-abcdef.pending.json'
+        pending.parent.mkdir()
+        entry = {
+            'id': '20261004-120000-000000-abcdef',
+            'label': 'Apply layout',
+            'created': '2026-10-04T12:00:00',
+            'targets': [{'name': 'codex', 'text': False, 'before': None, 'value': {'entries': []}}],
+            'after': [{'type': 'forge', 'slug': 'harbour', 'label': 'Render', 'populate': True}],
+        }
+        pending.write_text(json.dumps(entry), encoding='utf-8')
+        before = self.snapshot()
+        paths = {'DATA': self.data, 'MAPS': self.maps, 'BACKUPS': self.backups}
+        with (
+            patch.multiple(campaign_core, **paths),
+            patch.object(migrate, 'server_running', return_value=False),
+            patch.object(campaign_core, 'queue_forge') as queue_forge,
+        ):
+            error = io.StringIO()
+            with contextlib.redirect_stderr(error):
+                self.assertEqual(migrate.main(['--apply']), 1)
+        self.assertIn('Start Campaign Studio', error.getvalue())
+        queue_forge.assert_not_called()
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(schema.version(self.data, self.maps), 0)
 
 
 if __name__ == '__main__':
