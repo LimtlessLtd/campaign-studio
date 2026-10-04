@@ -34,6 +34,8 @@ flowchart LR
 | `DM/foundry_upgrade.py`               | v12 inventory, compatibility report, clone preparation and migration audits        |
 | `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
+| `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
+| `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply         |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                |
@@ -60,9 +62,29 @@ document). Server route mutations use a reentrant lock. Shared map catalogue rea
 `storage.file_lock`, which also coordinates forge subprocesses on Windows and POSIX. JSON replacement uses
 unique temporary files. External editors must cooperate with this lock to avoid lost updates.
 
-Content application spans several JSON documents. Stable workflow-derived IDs and retry checks prevent
-duplicate content after interruption; this is not a transactional database commit. A crash can expose a
-partial application until retried. Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
+Changes that span documents (content and request application, layout application, revision restore
+and generated-image links) go through `campaign_core.commit_docs`. Before the first write, the journal in
+`data/.commits` durably records every target's new value and a digest of the bytes it replaces. Put the
+record that marks the change finished (workflow or request status) last. If the server stops part way,
+startup replays the entry: targets still holding their old bytes are completed and targets already written
+are left alone. Every write request and job result also replays pending entries first, so no change starts
+from a half-applied state. If a target was changed some other way, nothing is overwritten; the entry is set
+aside and shown on the dashboard for GM review. Stable workflow-derived IDs and retry checks remain a second
+guard against duplicates. Map import/export are not journaled: they create files that later steps tolerate.
+Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
+
+## Data schema and migrations
+
+`data/.schema.json` records the campaign's data schema (`schema.CURRENT`). Existing data without it is
+schema 0 (0.1.x). On startup the server refuses data from a newer schema, completes interrupted changes,
+then migrates older data after copying every document a migration may rewrite to `DM/backups` and verifying
+each copy by SHA-256. Migrations fill or reshape stored documents only; they are idempotent, and the version
+is recorded only after all documents are written, so an interrupted migration runs again from a new backup.
+`python DM/migrate.py` reports pending changes, `--apply` migrates and `--restore DM/backups/<name>` returns
+documents to a backup's version. Changing a stored shape needs a new numbered migration and a fixture test.
+
+Schema 1 gives codex entries, threads, session prep, scenes, map keys and areas the complete fields the app
+creates, filling only missing or null values. Existing values, unknown fields and other documents are kept.
 
 ## Workflows and jobs
 
@@ -85,7 +107,8 @@ Editing request text or session after drafting invalidates the proposal.
 One worker runs per lane (forge, Claude, art). Lanes may run concurrently. `JobService` persists queue and
 process transitions; application callbacks settle image, workflow and inbox documents. State postprocessing
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
-worker available. On restart, saved unfinished jobs are marked failed; the queue does not automatically resume.
+worker available. On restart, the server checks the data schema, completes interrupted changes and migrates
+before saved unfinished jobs are marked failed; the queue does not automatically resume.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 
@@ -99,6 +122,8 @@ is rendering that map.
 - `/api/maps/<slug>/checkpoint|restore|export` manages iteration and Foundry preparation.
 - `/api/upload-image`, `/api/art/generate` handle uploaded/generated artwork.
 - `/api/package` builds the public source allowlist; it never packages runtime content.
+- `GET /api/state` lists interrupted changes awaiting review; POST `/api/commits/<id>/dismiss` hides one
+  and keeps its saved values on disk.
 
 Writes require `X-DM-Site: 1`. Only localhost Host values are accepted. File routes enforce canonical path
 containment. The legacy file roots support older installations; normal image selection uses studio uploads.

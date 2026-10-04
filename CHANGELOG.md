@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Changes that span several documents (content and request application, layout application, revision
+  restore and generated-image links) now use a write-ahead journal. An interrupted change is completed when
+  the server restarts or before the next change; if a document was edited meanwhile, nothing is overwritten
+  and the dashboard asks the GM to review it. Map plan edits and restores are now atomic.
+- Added a versioned data schema. On first start, existing 0.1.x data (schema 0) is copied to `DM/backups`,
+  verified by SHA-256 and migrated to schema 1, which fills missing list/text fields in codex entries,
+  threads, session prep, scenes, map keys and areas. Data from a newer version is refused.
+  `python DM/migrate.py` reports, applies or restores migrations.
+
+  **Migration note:** keep `DM/backups` with your runtime folders. To return to 0.1.x, stop the server,
+  run `python DM/migrate.py --restore DM/backups/<schema-0-to-1 folder>` and start the older version.
+
 - Added a read-only migrated-clone audit for Foundry v13/v14. A GM macro exports the isolated clone's build,
   package versions and activation; Studio compares them with the saved plan and records manual world checks.
 - Added a GM-attested v12 clone module review after excluded modules are disabled. It checks both saved and

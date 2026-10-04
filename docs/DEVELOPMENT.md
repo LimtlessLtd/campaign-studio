@@ -18,7 +18,8 @@ image endpoint. They do not invoke paid AI services or import documents into a l
 
 1. Describe the user outcome and acceptance criteria. Read the affected module and its callers.
 2. Identify stored fields, stable IDs, concurrency and export implications before choosing an approach.
-3. Implement within module boundaries. Preserve old saved documents or provide an explicit migration.
+3. Implement within module boundaries. Preserve old saved documents, or bump `schema.CURRENT` with an
+   idempotent migration and a legacy fixture test. Write multi-document changes with `commit_docs`.
 4. Add a focused regression test for changed business behavior. For UI work, exercise the actual flow.
 5. Format, run the checks below, inspect the diff and update docs/changelog/manifest.
 6. Open a PR with the change, evidence and remaining limitations. Review and resolve findings before merge.
@@ -92,5 +93,6 @@ Python dependency updates preserve existing compatible ranges using
 Raising a minimum version must preserve the supported Python versions and pass the matrix checks.
 
 To update an existing private installation, stop its server, back up its runtime directories, and copy new
-source files without overwriting `DM/data`, `DM/maps` or `DM/uploads`. Read migration notes before restarting.
+source files without overwriting `DM/data`, `DM/maps`, `DM/uploads` or `DM/backups`. Read migration notes
+before restarting; `python DM/migrate.py` reports what the first start will migrate.
 Keep any private campaign instructions local. Do not move the private installation into the public repo.

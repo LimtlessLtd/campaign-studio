@@ -85,13 +85,24 @@ def atomic_replace(source, target, timeout=2):
             time.sleep(0.02)
 
 
-def atomic_json(path, value):
-    """Replace a complete JSON document. Hold file_lock for read/modify/write."""
+def atomic_json(path, value, durable=False):
+    """Replace a complete JSON document. Hold file_lock for read/modify/write.
+
+    durable flushes the new bytes to disk before replacement, for records that recovery relies on.
+    """
+    atomic_text(path, json.dumps(value, ensure_ascii=False, indent=1), durable)
+
+
+def atomic_text(path, text, durable=False):
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + '.tmp-' + os.urandom(8).hex())
     try:
-        temporary.write_text(json.dumps(value, ensure_ascii=False, indent=1), encoding='utf-8')
+        with open(temporary, 'w', encoding='utf-8', newline='\n') as file:
+            file.write(text)
+            if durable:
+                file.flush()
+                os.fsync(file.fileno())
         atomic_replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)

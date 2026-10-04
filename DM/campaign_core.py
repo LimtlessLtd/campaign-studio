@@ -7,6 +7,7 @@ import re
 import shutil
 import sys
 import threading
+import commits
 import config
 import request_workflow
 import workflow
@@ -22,6 +23,7 @@ MAPS = os.path.join(HERE, 'maps')
 FORGE = os.path.join(HERE, 'forge')
 HISTORY = os.path.join(DATA, '.history')
 JOBS = os.path.join(DATA, 'jobs')
+BACKUPS = os.path.join(HERE, 'backups')  # verified copies made before a schema migration
 PORT = int(os.environ.get('DM_PORT', 8766))
 
 # campaign folders the site may show files from (read-only)
@@ -108,6 +110,63 @@ def write_doc(name, value):
         return rev_of(path)
 
 
+def target_path(name):
+    """Journal target names are document names, plus plan/<slug> for a map's text plan."""
+    if name.startswith('plan/'):
+        if not SLUG.fullmatch(name[5:]):
+            raise ValueError('bad map name')
+        return os.path.join(MAPS, name[5:], 'plan.txt')
+    return doc_path(name)
+
+
+def write_target(name, value):
+    path = target_path(name)
+    if name.startswith('plan/'):
+        with storage.file_lock(path):
+            storage.atomic_text(path, value)
+    elif name.startswith('workflows/'):
+        workflow.write(path, value)  # workflow records keep no document history
+    else:
+        write_doc(name, value)
+
+
+JOURNAL = commits.Journal(lambda: os.path.join(DATA, '.commits'), target_path, write_target)
+
+
+def commit_docs(label, changes):
+    """Write several documents so an interruption is completed rather than left half applied."""
+    return JOURNAL.commit(label, changes)
+
+
+def recover_commits():
+    """Finish interrupted changes. Call before any read/modify/write of campaign documents."""
+    with LOCK:
+        report = JOURNAL.recover()
+        for entry in report['completed']:
+            for target in entry['targets']:
+                if target['name'].startswith('mapkey/'):
+                    mark_stocked(target['name'][7:])
+        return report
+
+
+def mark_stocked(slug):
+    """Mirror a populated key in the shared map catalogue, which forge processes also update."""
+    if not read_json(doc_path('mapkey/' + slug), {}).get('stocked'):
+        return
+
+    def mark(index):
+        for entry in index['items']:
+            if entry['slug'] == slug:
+                entry['stocked'] = True
+
+    storage.update_json(
+        doc_path('maps/index'),
+        {'items': []},
+        mark,
+        lambda value: write_doc('maps/index', value),
+    )
+
+
 def list_docs(prefix):
     folder = os.path.join(DATA, prefix)
     if not os.path.isdir(folder):
@@ -149,6 +208,7 @@ def public_content():
 
 # ---------- background jobs ----------
 def fail_job(job, error):
+    recover_commits()
     if job.get('workflow'):
         value = workflow.get(job['workflow'])
         value.update(status='failed', error=str(error))
@@ -184,6 +244,7 @@ def recover_interrupted_job(job):
 
 
 def finish_job(job, code, tail):
+    recover_commits()
     if job['kind'] == 'request-draft':
         finish_request(job, code, tail)
     if job.get('art'):
@@ -191,6 +252,7 @@ def finish_job(job, code, tail):
             art = read_json(doc_path('art'), {'items': []})
             target = next((i for i in art['items'] if i['id'] == job['art']), None)
             if target:
+                changes = []
                 try:
                     if code:
                         raise ValueError(tail[-1000:] or 'The image provider failed.')
@@ -209,7 +271,7 @@ def finish_job(job, code, tail):
                         )
                         if area is not None:
                             area.setdefault('images', []).append(image_path)
-                            write_doc(doc, keydoc)
+                            changes.append((doc, keydoc))
                     if target.get('codex'):
                         codex = read_json(doc_path('codex'), {'entries': []})
                         entry = next(
@@ -217,11 +279,12 @@ def finish_job(job, code, tail):
                         )
                         if entry:
                             entry['image'] = image_path
-                            write_doc('codex', codex)
+                            changes.append(('codex', codex))
                 except (ValueError, KeyError, TypeError, OSError) as e:
+                    changes = []
                     target.update(status='failed', error=str(e))
                     job.update(status='failed', note=str(e))
-                write_doc('art', art)
+                commit_docs('Link generated image ' + job['art'], changes + [('art', art)])
     if job.get('workflow') and job['kind'] == 'ai-workflow':
         value = workflow.get(job['workflow'])
         try:
@@ -521,13 +584,12 @@ def apply_layout(wid):
                     )
                 )
         plan_path = os.path.join(folder, 'plan.txt')
-        with open(plan_path + '.tmp', 'w', encoding='utf-8', newline='\n') as f:
-            f.write(draft['plan'])
-        storage.atomic_replace(plan_path + '.tmp', plan_path)
         key['session'] = value['brief'].get('session', key.get('session', ''))
-        write_doc('mapkey/' + slug, key)
         value.update(status='applied', draft=draft)
-        workflow.save(value)
+        commit_docs(
+            'Apply layout ' + wid,
+            [('plan/' + slug, draft['plan']), ('mapkey/' + slug, key), ('workflows/' + wid, value)],
+        )
         cmd = [sys.executable, '-u', os.path.join(FORGE, 'forge.py'), plan_path]
         return new_job(
             'forge', 'forge', 'Render ' + slug, cmd, slug=slug, populate=value['kind'] == 'layout'

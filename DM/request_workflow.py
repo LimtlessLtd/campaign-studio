@@ -183,7 +183,8 @@ def stage(item, draft, read_doc):
     return item
 
 
-def apply(item, read_doc, save_doc):
+def apply(item, read_doc, commit, inbox):
+    """Apply a reviewed draft and the request's done status (inside inbox) in one commit."""
     if item.get('applied'):
         raise ValueError(
             'This request was already applied. Start a new request for further changes.'
@@ -229,6 +230,7 @@ def apply(item, read_doc, save_doc):
         else:
             rows.append(row)
 
+    changes = []
     if draft['entries']:
         codex = read_doc('codex') or {'entries': []}
         for row in draft['entries']:
@@ -249,7 +251,7 @@ def apply(item, read_doc, save_doc):
                     'request': item['id'],
                 },
             )
-        save_doc('codex', codex)
+        changes.append(('codex', codex))
     if draft['threads']:
         threads = read_doc('threads') or {'threads': []}
         for row in draft['threads']:
@@ -268,7 +270,7 @@ def apply(item, read_doc, save_doc):
                     'request': item['id'],
                 },
             )
-        save_doc('threads', threads)
+        changes.append(('threads', threads))
     art_rows = [row for row in draft['entries'] if row['image_prompt'].strip()]
     if art_rows:
         art = read_doc('art') or {'items': []}
@@ -286,7 +288,7 @@ def apply(item, read_doc, save_doc):
                     'request': item['id'],
                 },
             )
-        save_doc('art', art)
+        changes.append(('art', art))
     if session:
         prep = read_doc('prep/' + session)
         if prep is None:
@@ -331,7 +333,8 @@ def apply(item, read_doc, save_doc):
             if draft['notes'].strip():
                 prep['notes'] = '\n\n'.join(x for x in (prep.get('notes', ''), draft['notes']) if x)
             prep.setdefault('applied_requests', []).append(item['id'])
-            save_doc('prep/' + session, prep)
+            changes.append(('prep/' + session, prep))
     item.update(status='done', result=draft['summary'], applied=time.time())
     item.pop('error', None)
+    commit('Apply request ' + item['id'], changes + [('inbox', inbox)])
     return item

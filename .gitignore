@@ -3,6 +3,7 @@
 /DM/maps/
 /DM/uploads/
 /DM/exports/
+/DM/backups/
 /dist/
 __pycache__/
 *.py[cod]

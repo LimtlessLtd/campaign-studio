@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / 'DM'))
 sys.path.insert(0, str(ROOT / 'tools'))
 import packaging_source
 import check_source
+import schema
 
 
 class ReleaseTests(unittest.TestCase):
@@ -89,6 +90,22 @@ class ReleaseTests(unittest.TestCase):
             finally:
                 proc.terminate()
                 proc.wait(timeout=10)
+            schema_file = extracted / 'DM/data' / schema.MARKER
+            self.assertEqual(json.loads(schema_file.read_text())['version'], schema.CURRENT)
+            # Data saved by a newer Campaign Studio is never opened, migrated or rewritten.
+            schema_file.write_text(
+                json.dumps({'format': schema.FORMAT, 'version': schema.CURRENT + 1})
+            )
+            refused = subprocess.run(
+                [sys.executable, 'DM/server.py'],
+                cwd=extracted,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn('supports up to schema', refused.stderr)
 
     def test_private_path_in_manifest_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

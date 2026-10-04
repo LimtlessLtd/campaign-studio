@@ -17,6 +17,8 @@ Foundry compatibility certification. Tests use synthetic campaigns and fake prov
 | Agent guidance described content generation but lacked development/review/release gates | AGENTS, development/architecture docs, PR templates, regression tests and CI               |
 | HTTP routes and job lifecycle shared one large server module                            | Separate route, campaign core, job service and startup modules with queue/recovery tests   |
 | General requests let a model edit runtime files directly                                | Bounded entity/prep proposals, GM review and application with no model file tools          |
+| A crash between document writes could leave content, links or plans half applied        | Write-ahead journal completes interrupted changes at startup and before the next write     |
+| Stored data had no version, so builds could not migrate old data or refuse newer data   | Schema marker, verified pre-migration backups, idempotent migrations, restore tool         |
 
 The release gate also caught intermittent Windows file replacement failures. Source now retries temporary
 sharing/access errors while holding the document lock; permanent errors still fail after a bounded wait.
@@ -36,8 +38,6 @@ route decomposition should follow tested business boundaries as features grow.
 
 | Priority | Work                                                                | Acceptance criteria                                                                                                                       |
 | -------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | Strengthen multi-document commit recovery                           | Crash at each write boundary recovers without dangling links or duplicates                                                                |
-| 1        | Add a versioned campaign schema and migration tool                  | Realistic old fixtures migrate with backups; unknown future versions are rejected                                                         |
 | 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus                                                            |
 | 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                                                                  |
 | 2        | Build supported Foundry version/system adapters                     | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport                                                     |
@@ -48,10 +48,12 @@ route decomposition should follow tested business boundaries as features grow.
 
 ## Remaining limitations
 
-- Multi-file content application is retryable, not an atomic transaction. Backups remain necessary.
+- Multi-document changes are journaled and completed after interruption. If a document is edited outside
+  the app before recovery, the change is set aside for GM review rather than merged. Map import/export is not
+  journaled, and only the journal is flushed to disk, so a power cut can still lose a just-saved change.
+  Backups remain necessary.
 - The in-memory queue fails unfinished jobs on restart; automatic resume/cancel is not implemented.
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.
-- General request application is retryable after interrupted writes, but it is not a transaction across documents.
 - The World Library reads selected media and a GM-exported snapshot of top-level world documents. It does
   not include compendium contents, edit existing documents or provide live two-way synchronization.
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12.

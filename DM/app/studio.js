@@ -232,6 +232,56 @@ function modal(title, description, body, onSubmit, button = 'Save') {
   dialog.addEventListener('cancel', () => dialog.remove());
   return dialog;
 }
+function interruptedChanges() {
+  return (S.state.interrupted_changes || []).map((change) =>
+    h(
+      'div',
+      { class: 'connection-banner attention', role: 'alert' },
+      icon('clock'),
+      h(
+        'div',
+        {},
+        h('b', {}, 'An interrupted change needs review'),
+        h(
+          'p',
+          {},
+          `${change.label} stopped part way on ${when(change.created)}. Some documents changed before it could be completed, so nothing was overwritten.`,
+        ),
+        h(
+          'p',
+          {},
+          change.targets
+            .map(
+              (target) =>
+                target.name +
+                ': ' +
+                { written: 'completed', pending: 'not applied', changed: 'changed elsewhere' }[
+                  target.state
+                ],
+            )
+            .join(' · '),
+        ),
+        h(
+          'p',
+          {},
+          `Check these documents and reapply the proposal if needed. Its values stay in DM/data/.commits/${change.id}.`,
+        ),
+      ),
+      h(
+        'button',
+        {
+          onclick: () =>
+            attempt(async () => {
+              const result = await post(`/api/commits/${change.id}/dismiss`);
+              S.state.interrupted_changes = result.interrupted_changes;
+              route(true);
+            }),
+        },
+        'Dismiss',
+      ),
+    ),
+  );
+}
 async function studioDashboard() {
   const maps = (await doc('maps/index', { items: [] })).items;
   const codex = (await doc('codex', { entries: [] })).entries;
@@ -246,6 +296,7 @@ async function studioDashboard() {
       'Shape the places, people and stories your players will discover.',
       h('a', { class: 'btn primary', href: '#/maps/new' }, icon('plus'), 'Create a map'),
     ),
+    interruptedChanges(),
     h(
       'div',
       { class: 'overview-stats' },

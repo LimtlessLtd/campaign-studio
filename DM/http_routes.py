@@ -26,12 +26,14 @@ from campaign_core import (
     FORGE,
     HERE,
     IMAGE_SIGNATURES,
+    JOURNAL,
     LOCK,
     MAPS,
     SLUG,
     UPLOADS,
     apply_layout,
     campaign_path,
+    commit_docs,
     doc_path,
     generate_cmd,
     job_file,
@@ -40,10 +42,12 @@ from campaign_core import (
     list_jobs,
     log_tail,
     map_busy,
+    mark_stocked,
     new_job,
     normal_brief,
     public_content,
     read_json,
+    recover_commits,
     request_item,
     request_pack,
     request_read,
@@ -114,6 +118,7 @@ class Handler(SimpleHTTPRequestHandler):
                         if os.path.exists(notes)
                         else '',
                         prep=list_docs('prep'),
+                        interrupted_changes=JOURNAL.conflicts(),
                     )
                 )
             if path == '/api/settings':
@@ -272,7 +277,15 @@ class Handler(SimpleHTTPRequestHandler):
         if self.headers.get('X-DM-Site') != '1':
             self.fail(403, 'missing X-DM-Site header')
             return False
-        return self.local_host()
+        if not self.local_host():
+            return False
+        try:
+            # Every change starts from complete documents, never from a half-applied one.
+            recover_commits()
+        except OSError as error:
+            self.fail(503, 'An interrupted change could not be completed yet: ' + str(error))
+            return False
+        return True
 
     def do_PUT(self):
         if not self.writable():
@@ -307,10 +320,9 @@ class Handler(SimpleHTTPRequestHandler):
 
                 forge.parse_plan(text)
                 revisions.checkpoint(slug, 'Before plan edit')
-                with open(
-                    os.path.join(MAPS, slug, 'plan.txt'), 'w', encoding='utf-8', newline='\n'
-                ) as f:
-                    f.write(text)
+                plan = os.path.join(MAPS, slug, 'plan.txt')
+                with LOCK, storage.file_lock(plan):
+                    storage.atomic_text(plan, text)
                 return self.send_json({'ok': True})
         except (ValueError, KeyError) as e:
             return self.fail(400, str(e))
@@ -348,6 +360,10 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError('The request must be a JSON object.')
             if path == '/api/package':
                 return self.send_json(packaging_source.build())
+            if path.startswith('/api/commits/') and path.endswith('/dismiss'):
+                with LOCK:
+                    JOURNAL.dismiss(path.split('/')[3])
+                return self.send_json({'ok': True, 'interrupted_changes': JOURNAL.conflicts()})
             if path == '/api/foundry/library/import':
                 world = foundry_library.selected_world()
                 if not world:
@@ -429,9 +445,9 @@ class Handler(SimpleHTTPRequestHandler):
                         )
                     if action == 'stage':
                         request_workflow.stage(item, p['draft'], request_read)
+                        write_doc('inbox', box)
                     else:
-                        request_workflow.apply(item, request_read, write_doc)
-                    write_doc('inbox', box)
+                        request_workflow.apply(item, request_read, commit_docs, box)
                     return self.send_json(item)
             if path == '/api/maps/import':
                 with LOCK:
@@ -624,7 +640,8 @@ class Handler(SimpleHTTPRequestHandler):
                             409,
                             'Wait for the current map job to finish before restoring a revision.',
                         )
-                    revisions.restore(slug, p.get('revision', ''), write_doc)
+                    with LOCK:
+                        revisions.restore(slug, p.get('revision', ''), commit_docs)
                     cmd = [
                         sys.executable,
                         '-u',
@@ -696,19 +713,8 @@ class Handler(SimpleHTTPRequestHandler):
                                 raise ValueError('There is no draft awaiting review.')
                             workflow.check_base(value)
                             revisions.checkpoint(slug, 'Before applying AI content')
-                            result = workflow.apply_content(value, write_doc)
-
-                            def mark_stocked(index):
-                                for entry in index['items']:
-                                    if entry['slug'] == slug:
-                                        entry['stocked'] = True
-
-                            storage.update_json(
-                                doc_path('maps/index'),
-                                {'items': []},
-                                mark_stocked,
-                                lambda value: write_doc('maps/index', value),
-                            )
+                            result = workflow.apply_content(value, commit_docs)
+                            mark_stocked(slug)
                         return self.send_json(result)
                     return self.send_json(apply_layout(value['id']))
             if path == '/api/generate':
