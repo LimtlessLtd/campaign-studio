@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Development process: coding agents no longer wait for a human review. Each agent reviews the PRs merged
+  since the last `Reviewed-PR:` trailer, fixes what they broke, then merges its own PR once CI is green.
+  Releases, CI permissions and publishing campaign data still need the owner. See `docs/DEVELOPMENT.md`.
 - Fixed autosave merges losing work: when a request added goals, checklist items or loot to a session prep
   while it was open and edited, saving kept only one side. Lists without IDs now merge both sides, fields
   cleared on the server stay cleared, and edits typed while a save is in flight are no longer overwritten.

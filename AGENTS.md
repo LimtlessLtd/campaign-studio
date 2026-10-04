@@ -13,6 +13,8 @@ user. Follow the same development workflow whether you are a human contributor o
 
 ## Before changing code
 
+0. Run the review relay first (`docs/DEVELOPMENT.md` → Review relay): review every agent PR merged since
+   the last `Reviewed-PR:` trailer on `main`, and fix what it broke before starting your own task.
 1. Inspect `git status` and relevant instructions. Preserve other contributors' work.
 2. Trace the requested interaction from route to API, persistence and Foundry export. State assumptions.
 3. Keep the change focused. For substantial changes, record a short plan and acceptance criteria in the
@@ -56,6 +58,9 @@ Record what was checked and any unverified live Foundry/provider behavior. Revie
 loss, escaping, generated/custom document ownership and private material. Update relevant docs and the
 changelog. Do not mark a feature complete when required checks have failed.
 
-Prepare a focused PR with the template when a PR is requested or appropriate for an existing repository.
-Do not merge, deploy or create releases unless the user has authorized that action. If authorized, finish
-the local checks and review before publishing. Report the change, evidence and practical limitations.
+Prepare a focused PR with the template. The repository owner has authorized coding agents to merge their
+own PRs without waiting for a human: the next agent reviews each merged PR (the review relay). Merge your
+PR when every merge condition in `docs/DEVELOPMENT.md` holds; never bypass failing checks, branch
+protection or conflicts. Only merge your own PRs: never another agent's open PR or an outside contributor's.
+Still ask the owner before creating releases or tags, changing CI permissions, secrets or the release
+workflow, or publishing campaign data. Report the change, evidence and practical limitations.
