@@ -1,10 +1,11 @@
 """Check, migrate or restore a campaign's data schema.
 
 python DM/migrate.py                            report the version and documents a migration changes
-python DM/migrate.py --apply                    back up, finish interrupted changes, then migrate
+python DM/migrate.py --apply                    back up and migrate
 python DM/migrate.py --restore DM/backups/NAME  return documents to a pre-migration backup
 
-The server migrates automatically when it starts. Stop it before using --apply or --restore.
+The server migrates automatically when it starts. Stop it before using --apply or --restore. An
+interrupted change is completed only by the server, because completing it can queue a render.
 """
 
 import argparse
@@ -41,12 +42,13 @@ def main(argv=None):
                 'Run the Campaign Studio version that matches this schema.'
             )
             return 0
-        if args.apply:
-            schema.check(data, maps)
-            for entry in campaign_core.recover_commits()['completed']:
-                print('Completed interrupted change: ' + entry['label'])
-        elif campaign_core.JOURNAL.entries():
-            print('An interrupted change will be completed before migrating.')
+        if campaign_core.JOURNAL.entries():
+            # Completing it can queue a render, which only a running server carries out.
+            message = 'An interrupted change is waiting. Start Campaign Studio: it completes the change, then migrates.'
+            if args.apply:
+                print(message, file=sys.stderr)
+                return 1
+            print(message)
         result = schema.migrate(data, maps, campaign_core.BACKUPS, dry_run=not args.apply)
     except (schema.SchemaError, OSError) as error:
         print('Error: ' + str(error), file=sys.stderr)

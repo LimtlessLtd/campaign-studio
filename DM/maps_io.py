@@ -8,6 +8,7 @@ import shutil
 import sys
 from PIL import Image
 import config
+import shapes
 import storage
 
 
@@ -60,7 +61,7 @@ def import_image(p, save_doc):
     ext = os.path.splitext(source)[1].lower()
     local = os.path.join(folder, slug + ext)
     shutil.copy2(source, local)
-    key = dict(map=name, areas=[], events=[], notes='', stocked=False, session='', images=[])
+    key = shapes.MAP_KEY.new(map=name)
     scene = dict(
         name=name,
         width=width,

@@ -13,6 +13,8 @@ import config
 import request_workflow
 import workflow
 import revisions
+import schema
+import shapes
 import storage
 from job_service import JobService
 
@@ -91,7 +93,17 @@ def read_json(path, default=None):
         return default
 
 
-def write_doc(name, value):
+def stamp_new_campaign():
+    """Record this build's schema just before a new campaign's first document is written.
+
+    Startup leaves an empty campaign unstamped, so data copied in before first use is still migrated.
+    """
+    if not os.path.isfile(schema.marker_path(DATA)) and schema.version(DATA, MAPS) is None:
+        schema.write_marker(DATA, schema.CURRENT, 'New campaign')
+
+
+def write_doc(name, value, durable=False):
+    stamp_new_campaign()
     path = doc_path(name)
     with storage.file_lock(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -104,10 +116,7 @@ def write_doc(name, value):
             )
             for old in sorted(os.listdir(keep))[:-KEEP_VERSIONS]:
                 os.remove(os.path.join(keep, old))
-        tmp = path + '.tmp-' + os.urandom(6).hex()
-        with open(tmp, 'w', encoding='utf-8', newline='\n') as f:
-            json.dump(value, f, ensure_ascii=False, indent=1)
-        storage.atomic_replace(tmp, path)
+        storage.atomic_json(path, value, durable)
         return rev_of(path)
 
 
@@ -121,14 +130,15 @@ def target_path(name):
 
 
 def write_target(name, value):
+    """Write one journaled document, flushed to disk before the journal entry is deleted."""
     path = target_path(name)
     if name.startswith('plan/'):
         with storage.file_lock(path):
-            storage.atomic_text(path, value)
+            storage.atomic_text(path, value, durable=True)
     elif name.startswith('workflows/'):
-        workflow.write(path, value)  # workflow records keep no document history
+        workflow.write(path, value, durable=True)  # workflow records keep no document history
     else:
-        write_doc(name, value)
+        write_doc(name, value, durable=True)
 
 
 def forge_follow_up(slug, label, populate=False):
@@ -268,7 +278,12 @@ def recover_interrupted_job(job):
 
 
 def finish_job(job, code, tail):
-    recover_commits()
+    try:
+        recover_commits()
+    except OSError as pending:
+        # Keep the finished result (often a paid draft). The pending change completes later; if this
+        # result touches one of its documents, that change is set aside for GM review, not overwritten.
+        sys.stderr.write(f'An interrupted change is still pending: {pending}\n')
     if job['kind'] == 'request-draft':
         finish_request(job, code, tail)
     if job.get('art'):
@@ -601,34 +616,15 @@ def apply_layout(wid):
         if os.path.exists(os.path.join(folder, 'plan.txt')):
             revisions.checkpoint(slug, 'Before AI revision')
         os.makedirs(folder, exist_ok=True)
-        key = read_json(
-            doc_path('mapkey/' + slug),
-            {
-                'map': value['brief']['name'],
-                'areas': [],
-                'events': [],
-                'notes': '',
-                'stocked': False,
-            },
-        )
+        key = read_json(doc_path('mapkey/' + slug))
+        if key is None:
+            key = shapes.MAP_KEY.new(map=value['brief']['name'])
         existing = {a['n']: a for a in key['areas']}
         for area in draft['areas']:
             if area['n'] in existing:
                 existing[area['n']].update(area)
             else:
-                key['areas'].append(
-                    dict(
-                        area,
-                        text='',
-                        creatures='',
-                        loot=[],
-                        events=[],
-                        journal=[],
-                        npcs=[],
-                        items=[],
-                        images=[],
-                    )
-                )
+                key['areas'].append(shapes.AREA.new(**area))
         key['session'] = value['brief'].get('session', key.get('session', ''))
         value.update(status='applied', draft=draft)
         # The render is recorded with the change, so recovery after a crash still queues it.

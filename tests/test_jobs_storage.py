@@ -1,6 +1,7 @@
 """Regression tests for worker survival and catalogue updates across processes."""
 
 import json
+import os
 import queue
 import subprocess
 import sys
@@ -148,6 +149,27 @@ for number in range(20):
         ):
             storage.atomic_replace('source', 'target')
             self.assertEqual(replace.call_count, 2)
+
+    def test_remove_retries_a_temporary_windows_sharing_failure(self):
+        sharing_error = PermissionError('Synthetic sharing violation')
+        sharing_error.winerror = 32
+        with (
+            patch.object(storage.os, 'name', 'nt'),
+            patch.object(storage.os, 'remove', side_effect=[sharing_error, None]) as remove,
+        ):
+            storage.remove('entry.pending.json')
+            self.assertEqual(remove.call_count, 2)
+        storage.remove(str(Path(tempfile.gettempdir()) / ('missing-' + os.urandom(6).hex())))
+
+    def test_durable_write_flushes_the_file_and_its_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'doc.json'
+            with patch.object(storage.os, 'fsync', wraps=os.fsync) as fsync:
+                storage.atomic_json(str(path), {'entries': []})
+                self.assertEqual(fsync.call_count, 0)
+                storage.atomic_json(str(path), {'entries': []}, durable=True)
+                self.assertEqual(fsync.call_count, 1 if os.name == 'nt' else 2)
+            self.assertEqual(json.loads(path.read_text(encoding='utf-8')), {'entries': []})
 
     def test_atomic_replace_does_not_hide_a_permanent_permission_failure(self):
         permission_error = PermissionError('Synthetic permanent denial')

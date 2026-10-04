@@ -3,7 +3,16 @@
 
 const $ = (s, el = document) => el.querySelector(s);
 const root = $('#main'); // each route renders into a fresh view (S.view), swapped in only if still the latest
-const S = { state: null, docs: {}, base: {}, revs: {}, pending: {}, jobs: [], route: 0 };
+const S = {
+  state: null,
+  shapes: {},
+  docs: {},
+  base: {},
+  revs: {},
+  pending: {},
+  jobs: [],
+  route: 0,
+};
 let PCS = [];
 const THREAD_STATES = ['open', 'planned', 'foreshadowed', 'resolved'];
 const TYPES = {
@@ -125,17 +134,17 @@ async function queueArt({
     async () => {
       if (!f.prompt.trim()) throw new Error('Describe the image first.');
       const art = await doc('art', { items: [] });
-      art.items.unshift({
-        id: uid('art'),
-        title: f.title,
-        prompt: f.prompt.trim(),
-        map,
-        area,
-        codex,
-        image: '',
-        status: 'queued',
-        created: Date.now(),
-      });
+      art.items.unshift(
+        blank('art_item', {
+          id: uid('art'),
+          prompt: f.prompt.trim(),
+          title: f.title,
+          codex,
+          created: Date.now(),
+          map,
+          area,
+        }),
+      );
       save('art');
       await flush('art');
       go('#/art');
@@ -185,6 +194,8 @@ async function doc(name, fallback) {
   if (!(name in S.docs)) await load(name, fallback);
   return S.docs[name];
 }
+/* A new stored record (codex entry, thread, scene…) with every field the server's shapes define. */
+const blank = (kind, fields) => newRecord(S.shapes[kind], kind, fields);
 
 const timers = {};
 function save(name) {
@@ -337,10 +348,18 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
     render(
       box,
       ...arr.map((item, i) => {
+        // Look the item up when it is used: an autosave merge may have moved it since this was drawn.
+        let value = item;
+        const at = () => (arr[i] === value ? i : arr.indexOf(value));
         const text = checklist ? item.text : item;
         const set = (v) => {
           if (checklist) item.text = v;
-          else arr[i] = v;
+          else {
+            const j = at();
+            if (j < 0) arr.push(v);
+            else arr[j] = v;
+            value = v;
+          }
           save(docName);
         };
         return h(
@@ -363,7 +382,8 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
               class: 'danger',
               title: 'Remove',
               onclick: () => {
-                arr.splice(i, 1);
+                const j = at();
+                if (j >= 0) arr.splice(j, 1);
                 save(docName);
                 draw();
               },
@@ -377,9 +397,8 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
         placeholder,
         onkeydown: (e) => {
           if (e.key !== 'Enter' || !e.target.value.trim()) return;
-          arr.push(
-            checklist ? { text: e.target.value.trim(), done: false } : e.target.value.trim(),
-          );
+          const text = e.target.value.trim();
+          arr.push(checklist ? blank('checklist_item', { text }) : text);
           save(docName);
           draw();
           box.lastChild.focus();
@@ -392,12 +411,12 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
 }
 
 /* editable list of small objects (loot rows, events) */
-function rowsEditor(docName, arr, cols, blank) {
+function rowsEditor(docName, arr, cols, make) {
   const box = h('div');
   const draw = () =>
     render(
       box,
-      ...arr.map((row, i) =>
+      ...arr.map((row) =>
         h(
           'div',
           { class: 'rowedit' },
@@ -419,7 +438,8 @@ function rowsEditor(docName, arr, cols, blank) {
               class: 'danger',
               title: 'Remove',
               onclick: () => {
-                arr.splice(i, 1);
+                const j = arr.indexOf(row);
+                if (j >= 0) arr.splice(j, 1);
                 save(docName);
                 draw();
               },
@@ -433,9 +453,7 @@ function rowsEditor(docName, arr, cols, blank) {
         {
           class: 'small',
           onclick: () => {
-            const row = clone(blank);
-            if (row.id) row.id = uid('row');
-            arr.push(row);
+            arr.push(make());
             save(docName);
             draw();
           },
@@ -488,7 +506,7 @@ function picker(docName, arr, choices, { placeholder = 'Add…', cls = '' } = {}
       h(
         'div',
         { class: 'row', style: 'margin-bottom:6px' },
-        arr.map((id, i) =>
+        arr.map((id) =>
           h(
             'span',
             { class: 'chip ' + cls },
@@ -498,7 +516,8 @@ function picker(docName, arr, choices, { placeholder = 'Add…', cls = '' } = {}
               {
                 title: 'Remove',
                 onclick: () => {
-                  arr.splice(i, 1);
+                  const j = arr.indexOf(id);
+                  if (j >= 0) arr.splice(j, 1);
                   save(docName);
                   draw();
                 },
@@ -998,16 +1017,7 @@ async function prepPage(name) {
       'button',
       {
         onclick: () => {
-          p.scenes.push({
-            id: uid('scene'),
-            title: '',
-            where: '',
-            map: '',
-            npcs: [],
-            encounter: '',
-            notes: '',
-            done: false,
-          });
+          p.scenes.push(blank('scene', { id: uid('scene') }));
           save(docName);
           drawScenes();
         },
@@ -1050,12 +1060,7 @@ async function prepPage(name) {
       'button',
       {
         onclick: () => {
-          p.handouts.push({
-            id: uid('handout'),
-            title: '',
-            player_text: '',
-            secrets: '',
-          });
+          p.handouts.push(blank('handout', { id: uid('handout') }));
           save(docName);
           route(true);
         },
@@ -1071,7 +1076,7 @@ async function prepPage(name) {
         ['where', 'Where / who has it', 2],
         ['value', 'Value', 1],
       ],
-      { item: '', where: '', value: '' },
+      () => blank('loot'),
     ),
     h(
       'div',
@@ -1195,19 +1200,11 @@ async function newPrep() {
   const n = Math.max(lastSession().n, last ? last.n : 0) + 1;
   const name = 's' + n;
   if (!names.includes(name)) {
-    S.docs['prep/' + name] = {
+    S.docs['prep/' + name] = blank('prep', {
       n,
       title: 'Session ' + n,
-      date: '',
-      status: 'planning',
-      recap: '',
-      goals: [],
-      threads: [],
-      scenes: [],
-      checklist: (last ? last.checklist : []).map((c) => ({ text: c.text, done: false })),
-      notes: '',
-      loot: [],
-    };
+      checklist: (last ? last.checklist : []).map((c) => blank('checklist_item', { text: c.text })),
+    });
     S.base['prep/' + name] = {};
     S.revs['prep/' + name] = '0';
     save('prep/' + name);
@@ -1315,14 +1312,7 @@ async function threadsPage() {
         {
           class: 'primary',
           onclick: () => {
-            t.threads.unshift({
-              id: uid('thread'),
-              title: 'New thread',
-              pcs: [],
-              status: 'open',
-              detail: '',
-              source: '',
-            });
+            t.threads.unshift(blank('thread', { id: uid('thread'), title: 'New thread' }));
             save(docName);
             filter = 'all';
             draw();
@@ -1431,21 +1421,13 @@ async function codexPage(id) {
           onclick: () => {
             const name = prompt('Name of the new entry?');
             if (!name) return;
-            const e = {
+            const e = blank('codex_entry', {
               id:
                 slug(name) +
                 (c.entries.some((x) => x.id === slug(name)) ? '-' + Date.now().toString(36) : ''),
               type: type === 'all' ? 'npc' : type,
               name,
-              group: '',
-              status: '',
-              public: '',
-              secrets: '',
-              notes: '',
-              image: '',
-              files: [],
-              tags: [],
-            };
+            });
             c.entries.push(e);
             save(docName);
             go('#/codex/' + e.id);
@@ -1994,6 +1976,7 @@ window.addEventListener('hashchange', () => route());
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     S.state = await api('/api/state');
+    S.shapes = await api('/api/shapes');
     S.jobs = await api('/api/jobs').catch(() => []);
     const c = await doc('codex', { entries: [] });
     PCS = [

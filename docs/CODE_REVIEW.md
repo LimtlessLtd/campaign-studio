@@ -68,10 +68,11 @@ defect by itself. The problems below are the ones object-oriented principles exi
    modules to relocate one campaign. Introduce a `Campaign` object (root, data, maps, uploads, backups,
    history, jobs, settings) created once at startup and passed to services. This also enables more than one
    campaign and simpler tests.
-2. **Document shapes are implicit (DRY).** A codex entry is written out field by field in four places
-   (two Python apply paths and two JavaScript editors), and `schema.py` now repeats it. Define each stored
-   shape once, with factories such as `new_codex_entry(...)`, and use them in apply paths, migrations and a
-   JSON endpoint the UI can read.
+2. **Document shapes were implicit (DRY). Resolved.** A codex entry was written out field by field in four
+   places, and the copies had drifted: layout areas lacked `rooms` and `threads`, new preps lacked
+   `handouts`, map events lacked `title`. `DM/shapes.py` now defines each stored record once; apply paths,
+   migrations and the browser (through `GET /api/shapes`) build records from it, and tests fail when a
+   writer or a stored shape diverges.
 3. **God functions (single responsibility).** `http_routes.do_POST` is a 410-line `if` chain and
    `do_GET` is 176 lines. `render2d.prop` is 424 lines, and `foundry_upgrade` has 220- and 190-line
    workflows inside a 1,300-line module. `studio.js` has `mapStudio` at 1,064 lines and
@@ -93,7 +94,6 @@ defect by itself. The problems below are the ones object-oriented principles exi
 | Priority | Work                                                                | Acceptance criteria                                                                                                                       |
 | -------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | 1        | Introduce a `Campaign` context object and pass it to services       | No module computes campaign paths from `__file__`; the test fixture builds one `Campaign` instead of patching globals                     |
-| 1        | Define stored document shapes once                                  | Codex, thread, prep and key factories used by apply paths, migrations and the UI; a test fails when a shape diverges                      |
 | 2        | Route table and typed HTTP errors                                   | No handler over ~60 lines; 400/404/409 come from exception types; the existing HTTP tests are unchanged                                   |
 | 2        | Split `foundry_upgrade` into catalogue, solver and workflow modules | Same public functions and fixtures pass; no module imports another's private names                                                        |
 | 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus                                                            |
@@ -108,7 +108,8 @@ defect by itself. The problems below are the ones object-oriented principles exi
 
 - Multi-document changes are journaled and completed after interruption. If a document is edited outside
   the app before recovery, the change is set aside for GM review rather than merged. Map import/export is not
-  journaled, and only the journal is flushed to disk, so a power cut can still lose a just-saved change.
+  journaled. Journaled changes are flushed to disk; ordinary single-document saves are not, so a power cut
+  can still lose a just-saved edit.
   Backups remain necessary.
 - The in-memory queue fails unfinished jobs on restart; automatic resume/cancel is not implemented.
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.

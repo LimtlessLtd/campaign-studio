@@ -1,10 +1,23 @@
-/* Document helpers shared by the app: copies, comparison and the three-way autosave merge.
-   Free of DOM access so tools/check_merge.cjs can test the merge in Node. */
+/* Document helpers shared by the app: copies, comparison, new records and the three-way autosave merge.
+   Free of DOM access so tools/check_merge.cjs can test them in Node. */
 'use strict';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+
+/* A new record of a stored shape ({required, defaults}, defined once in DM/shapes.py): required fields
+   first, then the defaults, then extra links such as map or area. */
+function newRecord(shape, kind, fields = {}) {
+  if (!shape) throw new Error('Unknown record shape: ' + kind);
+  const missing = shape.required.filter((k) => !(k in fields));
+  if (missing.length) throw new Error(`A new ${kind} needs ${missing.join(', ')}.`);
+  const record = {};
+  for (const k of shape.required) record[k] = fields[k];
+  for (const [k, v] of Object.entries(shape.defaults))
+    record[k] = k in fields ? fields[k] : clone(v);
+  return Object.assign(record, fields);
+}
 
 /* Fold the server's version into ours, in place (pages hold references into these objects): anything we
    haven't changed since we loaded it takes the server's value; lists of objects with ids merge item by item. */
@@ -27,15 +40,35 @@ function mergeInto(base, local, server) {
       }
       return local;
     }
-    // A list without ids (goals, checklist, loot) keeps our edits, adds what the server added and drops
-    // what the server removed that we had not touched. It changes in place: open editors hold it.
+    // A list without ids (goals, checklist, loot) merges as a multiset: each value appears as often as
+    // here + on the server - in the base, so both sides' additions and removals survive. The list and
+    // its item objects change in place, because open editors hold them.
     if (same(base, server)) return local;
-    const has = (list, x) => Array.isArray(list) && list.some((y) => same(x, y));
-    const merged = same(base, local)
-      ? server
-      : local.filter((x) => !(has(base, x) && !has(server, x)));
-    if (merged !== server)
-      for (const x of server) if (!has(base, x) && !has(merged, x)) merged.push(x);
+    let merged;
+    if (same(base, local)) {
+      // Untouched here: take the server's list, reusing our equal item objects.
+      const unused = local.slice();
+      merged = server.map((x) => {
+        const i = unused.findIndex((y) => same(x, y));
+        return i < 0 ? x : unused.splice(i, 1)[0];
+      });
+    } else {
+      const tally = (list) => {
+        const counts = new Map();
+        for (const x of Array.isArray(list) ? list : [])
+          counts.set(JSON.stringify(x), (counts.get(JSON.stringify(x)) || 0) + 1);
+        return counts;
+      };
+      const [b, l, s] = [base, local, server].map(tally);
+      const kept = new Map();
+      merged = [...local, ...server].filter((x) => {
+        const k = JSON.stringify(x);
+        const n = kept.get(k) || 0;
+        if (n >= (l.get(k) || 0) + (s.get(k) || 0) - (b.get(k) || 0)) return false;
+        kept.set(k, n + 1);
+        return true;
+      });
+    }
     local.splice(0, local.length, ...merged);
     return local;
   }

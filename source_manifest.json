@@ -49,6 +49,7 @@
   "DM/schema.py",
   "DM/request_workflow.py",
   "DM/server.py",
+  "DM/shapes.py",
   "DM/storage.py",
   "DM/tools/image_worker.py",
   "DM/tools/preview_fixture.py",
@@ -77,6 +78,7 @@
   "tests/test_jobs_storage.py",
   "tests/test_release.py",
   "tests/test_schema.py",
+  "tests/test_shapes.py",
   "tools/check_macro.cjs",
   "tools/check_merge.cjs",
   "tools/check_source.py"

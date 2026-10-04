@@ -68,17 +68,16 @@ def file_lock(path, timeout=30):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def atomic_replace(source, target, timeout=2):
+def retry_sharing(action, timeout=2):
     """Retry temporary Windows sharing/access failures without dropping the lock.
 
-    Readers and filesystem scanners can briefly prevent replacement on Windows.
+    Readers, antivirus and filesystem scanners can briefly hold a file on Windows.
     Permanent permission failures still propagate after a bounded wait.
     """
     deadline = time.monotonic() + timeout
     while True:
         try:
-            os.replace(source, target)
-            return
+            return action()
         except PermissionError as error:
             if (
                 os.name != 'nt'
@@ -89,10 +88,38 @@ def atomic_replace(source, target, timeout=2):
             time.sleep(0.02)
 
 
+def atomic_replace(source, target, timeout=2):
+    retry_sharing(lambda: os.replace(source, target), timeout)
+
+
+def remove(path, timeout=2):
+    """Delete a file if it exists, riding out the same temporary Windows failures."""
+
+    def unlink():
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+    retry_sharing(unlink, timeout)
+
+
+def sync_directory(path):
+    """Make a rename in this directory durable. Windows has no directory handle to flush."""
+    if os.name == 'nt':
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def atomic_json(path, value, durable=False):
     """Replace a complete JSON document. Hold file_lock for read/modify/write.
 
-    durable flushes the new bytes to disk before replacement, for records that recovery relies on.
+    durable flushes the new bytes, then the replacement, to disk: for records that recovery relies
+    on, and for documents written before such a record is deleted.
     """
     atomic_text(path, json.dumps(value, ensure_ascii=False, indent=1), durable)
 
@@ -108,6 +135,8 @@ def atomic_text(path, text, durable=False):
                 file.flush()
                 os.fsync(file.fileno())
         atomic_replace(temporary, target)
+        if durable:
+            sync_directory(target.parent)
     finally:
         temporary.unlink(missing_ok=True)
 

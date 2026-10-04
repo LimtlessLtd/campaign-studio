@@ -1008,14 +1008,7 @@ async function mapStudio(slugArg) {
     return;
   }
   const keyName = 'mapkey/' + slugArg;
-  const key = await doc(keyName, {
-    map: m.name,
-    areas: [],
-    events: [],
-    notes: '',
-    stocked: false,
-    session: m.session || '',
-  });
+  const key = await doc(keyName, blank('map_key', { map: m.name, session: m.session || '' }));
   const c = await doc('codex', { entries: [] });
   const t = await doc('threads', { threads: [] });
   const art = await doc('art', { items: [] });
@@ -1108,22 +1101,12 @@ async function mapStudio(slugArg) {
         h('div', {}, formInput(f, 'name', 'Location name'), formInput(f, 'kind', 'Kind')),
         async () => {
           if (!f.name.trim()) throw new Error('Give the location a name.');
-          selected = {
+          selected = blank('area', {
             n: Math.max(0, ...key.areas.map((a) => a.n)) + 1,
             name: f.name.trim(),
             kind: f.kind,
             at,
-            rooms: [],
-            text: '',
-            creatures: '',
-            loot: [],
-            events: [],
-            npcs: [],
-            items: [],
-            journal: [],
-            images: [],
-            threads: [],
-          };
+          });
           key.areas.push(selected);
           save(keyName);
           placing = false;
@@ -1305,19 +1288,7 @@ async function mapStudio(slugArg) {
       async () => {
         if (!f.name.trim()) throw new Error('Enter a name.');
         const id = uid(type);
-        c.entries.push({
-          id,
-          type,
-          ...f,
-          group: '',
-          status: '',
-          secrets: '',
-          image: '',
-          files: [],
-          tags: [],
-          map: slugArg,
-          area: selected.n,
-        });
+        c.entries.push(blank('codex_entry', { id, type, ...f, map: slugArg, area: selected.n }));
         selected[type === 'npc' ? 'npcs' : 'items'].push(id);
         save('codex');
         save(keyName);
@@ -1479,7 +1450,7 @@ async function mapStudio(slugArg) {
               ['where', 'Where', 2],
               ['value', 'Value', 1],
             ],
-            { item: '', where: '', value: '' },
+            () => blank('loot'),
           ),
         ),
       ),
@@ -1495,7 +1466,7 @@ async function mapStudio(slugArg) {
               ['trigger', 'When…', 2],
               ['effect', '…then', 3],
             ],
-            { id: uid('event'), trigger: '', effect: '' },
+            () => blank('event', { id: uid('event') }),
           ),
           h('button', { onclick: () => generateOne('event') }, icon('spark'), 'Generate event'),
         ),
@@ -1533,7 +1504,7 @@ async function mapStudio(slugArg) {
               'button',
               {
                 onclick: () => {
-                  a.journal.push({ id: uid('journal'), title: 'New entry', text: '', secrets: '' });
+                  a.journal.push(blank('journal', { id: uid('journal'), title: 'New entry' }));
                   save(keyName);
                   drawInspector();
                 },
@@ -3556,13 +3527,15 @@ async function studioArt() {
                     {
                       class: 'small',
                       onclick: () => {
-                        art.items.unshift({
-                          ...i,
-                          id: uid('art'),
-                          image: '',
-                          status: 'queued',
-                          created: Date.now(),
-                        });
+                        art.items.unshift(
+                          blank('art_item', {
+                            ...i,
+                            id: uid('art'),
+                            image: '',
+                            status: 'queued',
+                            created: Date.now(),
+                          }),
+                        );
                         save('art');
                         draw();
                       },

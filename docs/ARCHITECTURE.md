@@ -36,6 +36,7 @@ flowchart LR
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
 | `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
+| `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser  |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply         |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                |
@@ -45,7 +46,7 @@ flowchart LR
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                              |
 | `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                     |
 | `DM/app/app.js`                       | Shared DOM/API/autosave/merge helpers, routing, codex/threads/prep/inbox views     |
-| `DM/app/merge.js`                     | Document copy/compare helpers and the three-way autosave merge, tested in Node     |
+| `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge     |
 | `DM/app/studio.js`                    | Studio navigation, first run, World Library, maps, settings and image queue        |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
 
@@ -68,7 +69,9 @@ and generated-image links) go through `campaign_core.commit_docs`. Before the fi
 `data/.commits` durably records every target's new value and a digest of the bytes it replaces. Put the
 record that marks the change finished (workflow or request status) last. If the server stops part way,
 startup replays the entry: targets still holding their old bytes are completed and targets already written
-are left alone. Every write request and job result also replays pending entries first, so no change starts
+are left alone. Each target is flushed to disk before the entry is deleted, so a power cut cannot leave a
+journaled document truncated without a record to recover it from. Only the server replays entries:
+`python DM/migrate.py --apply` refuses while one is pending, because replaying can queue a render. Every write request and job result also replays pending entries first, so no change starts
 from a half-applied state. Follow-up steps recorded with a change (queueing the render after a layout apply
 or restore, marking the map catalogue populated) run once its documents are written, and again on replay;
 they are idempotent and best effort. If a target was changed some other way, nothing is overwritten; the
@@ -80,17 +83,35 @@ Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
 ## Data schema and migrations
 
 `data/.schema.json` records the campaign's data schema (`schema.CURRENT`). Existing data without it is
-schema 0 (0.1.x); an empty campaign is stamped on the first start that finds documents. On startup the
+schema 0 (0.1.x). A new campaign records the current schema just before its first document is written, so
+an older build refuses it; data copied into a campaign before its first write is still migrated. On startup the
 server refuses data from a newer schema, completes interrupted changes, then migrates older data. When a
 migration changes documents, every document it may rewrite is first copied to `DM/backups` and each copy is
 verified by SHA-256. Migrations fill or reshape stored documents only. They are idempotent, migrated
 documents are flushed to disk before the version is recorded, and an interrupted migration runs again from
 a new backup. `python DM/migrate.py` reports pending changes, `--apply` migrates and
-`--restore DM/backups/<name>` returns documents to a backup's version. Changing a stored shape needs a new
-numbered migration and a fixture test.
+`--restore DM/backups/<name>` returns documents to a backup's version.
 
-Schema 1 gives codex entries, threads, session prep, scenes, map keys and areas the complete fields the app
-creates, filling only missing or null values. Existing values, unknown fields and other documents are kept.
+### Record shapes
+
+`DM/shapes.py` defines each stored record once: the fields a new one needs, the defaults for the rest and
+the shapes of the records in its lists (a map key's areas, an area's journal entries). Apply paths build
+records with `Shape.new`, and the browser builds them with `blank(kind, fields)` from `GET /api/shapes`.
+Links and provenance such as `map`, `area`, `workflow` or `request` are optional extra fields.
+
+| Document                   | Shape     | Records in its lists                               |
+| -------------------------- | --------- | -------------------------------------------------- |
+| `data/codex.json`          | `codex`   | codex entries                                      |
+| `data/threads.json`        | `threads` | threads                                            |
+| `data/art.json`            | `art`     | art items                                          |
+| `data/prep/<session>.json` | `prep`    | scenes, handouts, checklist items, loot            |
+| `maps/<slug>/key.json`     | `map_key` | areas (with journal entries, events, loot), events |
+
+Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
+values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
+scenes, map keys and areas; schema 2 completed every shaped record. Adding a field to a shape changes
+`shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
+`schema.SHAPES_DIGEST` is updated. Renaming or removing a field needs its own migration and fixture test.
 
 ## Workflows and jobs
 
@@ -120,7 +141,8 @@ is rendering that map.
 
 ## APIs and providers
 
-- `GET /api/state`, `/api/settings`, `/api/jobs`, `/api/doc/<name>` return local state.
+- `GET /api/state`, `/api/settings`, `/api/jobs`, `/api/doc/<name>` return local state; `/api/shapes`
+  returns the stored record shapes.
 - `PUT /api/doc/<name>` uses `X-Rev`; `PUT /api/plan/<slug>` checkpoints a valid plan.
 - `POST /api/maps/create`, `/api/maps/import` create maps; `/api/maps/<slug>/populate|revise` create workflows.
 - `/api/workflow/<id>/pack` exports prompt/schema; POST `run|stage|feedback|apply` operates on a proposal.

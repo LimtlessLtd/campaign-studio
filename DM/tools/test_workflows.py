@@ -29,6 +29,8 @@ import http_routes
 import workflow
 import request_workflow
 import revisions
+import schema
+import shapes
 import maps_io
 import forge
 import image_worker
@@ -145,19 +147,9 @@ class StudioIntegration(unittest.TestCase):
         slug = result['slug']
         key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
         key['areas'] = [
-            {
-                'n': 1,
-                'name': 'Landing',
-                'kind': 'bridge',
-                'at': [1, 1],
-                'text': 'Established description',
-                'creatures': '',
-                'journal': [],
-                'events': [],
-                'npcs': [],
-                'items': [],
-                'images': [],
-            }
+            shapes.AREA.new(
+                n=1, name='Landing', kind='bridge', at=[1, 1], text='Established description'
+            )
         ]
         campaign_core.write_doc('mapkey/' + slug, key)
         brief = campaign_core.read_json(campaign_core.doc_path('mapbrief/' + slug))
@@ -171,6 +163,12 @@ class StudioIntegration(unittest.TestCase):
         }
         campaign_core.write_doc('mapbrief/' + slug, brief)
         return slug, brief
+
+    def assert_shaped(self):
+        """Every stored record the app wrote has each field of its shape in DM/shapes.py."""
+        for path, shape in schema.shaped_documents(str(self.dm / 'data'), str(self.dm / 'maps')):
+            if os.path.isfile(path):
+                self.assertEqual(shape.problems(campaign_core.read_json(path)), [], path)
 
     def proposal(self):
         return {
@@ -248,6 +246,7 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/workflow/' + wf['id'] + '/stage', {'draft': self.proposal()})
         applied = self.request('/api/workflow/' + wf['id'] + '/apply', {})
         self.assertEqual(applied['counts']['npcs'], 1)
+        self.assert_shaped()
         key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
         self.assertEqual(key['areas'][0]['text'], 'Established description')
         self.assertEqual(len(key['areas'][0]['journal']), 2)
@@ -436,6 +435,18 @@ class StudioIntegration(unittest.TestCase):
         art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
         self.assertEqual([a['status'] for a in art], ['ready', 'failed'])
 
+    def test_finished_job_keeps_its_result_when_recovery_must_wait(self):
+        slug, _ = self.import_map()
+        job = {'id': 'forge-1', 'kind': 'forge', 'slug': slug, 'populate': True, 'status': 'done'}
+        with (
+            patch.object(campaign_core, 'recover_commits', side_effect=TimeoutError('Lock wait')),
+            patch.object(sys, 'stderr', io.StringIO()),
+        ):
+            campaign_core.finish_job(job, 0, '')
+        self.assertEqual(job['status'], 'done')
+        drafts = [json.loads(p.read_text()) for p in (self.dm / 'data/workflows').glob('*.json')]
+        self.assertEqual([(w['map'], w['status']) for w in drafts], [(slug, 'ready')])
+
     def test_generated_image_links_its_codex_entry_and_location(self):
         slug, _ = self.import_map()
         campaign_core.write_doc('codex', {'entries': [{'id': 'npc-one', 'image': ''}]})
@@ -507,15 +518,7 @@ class StudioIntegration(unittest.TestCase):
         }
 
     def test_general_request_review_apply_and_retry(self):
-        prep = {
-            'title': 'Session 1',
-            'scenes': [],
-            'handouts': [],
-            'goals': [],
-            'loot': [],
-            'checklist': [],
-            'notes': 'Existing notes.',
-        }
+        prep = shapes.PREP.new(n=1, title='Session 1', notes='Existing notes.')
         campaign_core.write_doc('prep/s1', prep)
         item = {
             'id': 'req-one',
@@ -561,6 +564,7 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(
             len(campaign_core.read_json(campaign_core.doc_path('prep/s1'))['goals']), 1
         )
+        self.assert_shaped()
 
     def test_general_request_validation_and_stale_source(self):
         campaign_core.write_doc('prep/s1', {'scenes': [], 'goals': []})
@@ -685,6 +689,7 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(workflow.get(value['id'])['status'], 'applied')
         key = campaign_core.read_json(campaign_core.doc_path('mapkey/fixture-layout'))
         self.assertEqual(key['areas'][0]['name'], 'Lodge')
+        self.assert_shaped()
         self.assertEqual(campaign_core.JOURNAL.entries(), [])
         forge.forge(str(folder / 'plan.txt'), foundry_copy=False, jobs=1)
         self.assertTrue((folder / 'fixture-layout.webp').is_file())
@@ -715,6 +720,7 @@ class StudioIntegration(unittest.TestCase):
                 workflow.validate(revision, {'summary': 'Invalid', 'operations': [op], 'areas': []})
 
     def test_http_write_and_path_guards(self):
+        self.assertEqual(self.request('/api/shapes', writable=False), shapes.describe())
         self.request('/api/maps/import', {}, expected=403, writable=False)
         self.request(
             '/api/maps/import', {'name': 'Outside', 'image': '../private.png'}, expected=400
