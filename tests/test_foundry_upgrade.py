@@ -346,7 +346,7 @@ class UpgradeTests(unittest.TestCase):
                 self.assertFalse(reviewed['migration_ready'])
                 self.assertEqual(
                     json.loads(Path(reviewed['review_path']).read_text())['plan_sha256'],
-                    foundry_backup._digest(Path(plan['plan_path'])),
+                    foundry_backup.storage.sha256_file(Path(plan['plan_path'])),
                 )
                 clone_inventory['modules'][1]['enabled'] = False
                 activation_conflict = upgrade.review_clone(plan['plan_path'], clone_inventory, True)

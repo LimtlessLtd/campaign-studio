@@ -245,7 +245,7 @@ function interruptedChanges() {
         h(
           'p',
           {},
-          `${change.label} stopped part way on ${when(change.created)}. Some documents changed before it could be completed, so nothing was overwritten.`,
+          `${change.label} stopped part way${change.created ? ' on ' + when(change.created) : ''}. Documents changed elsewhere in the meantime were not overwritten, and the rest of the change was not applied.`,
         ),
         h(
           'p',
@@ -264,7 +264,7 @@ function interruptedChanges() {
         h(
           'p',
           {},
-          `Check these documents and reapply the proposal if needed. Its values stay in DM/data/.commits/${change.id}.`,
+          `Check these documents and reapply the proposal if needed. The unapplied values are saved in DM/data/.commits/${change.id}.conflict.json (kept as .dismissed.json after you dismiss this).`,
         ),
       ),
       h(

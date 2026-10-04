@@ -1,12 +1,16 @@
 """Atomic writes and cooperating process locks for shared JSON documents."""
 
+import hashlib
 import json
 import os
+import shutil
+import stat
 import threading
 import time
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
+CHUNK = 1024 * 1024
 _guard = threading.Lock()
 _locks = {}
 _depth = threading.local()
@@ -117,3 +121,43 @@ def update_json(path, default, mutate, save=None):
         mutate(value)
         (save or (lambda v: atomic_json(path, v)))(value)
         return value
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as source:
+        for block in iter(lambda: source.read(CHUNK), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def manifest_path(value):
+    """Validate a manifest's relative POSIX path on every platform: no drive, backslash or dots."""
+    if not isinstance(value, str) or not value or '\\' in value or ':' in value:
+        raise ValueError('Invalid backup manifest path.')
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in ('', '.', '..') for part in value.split('/')):
+        raise ValueError('Invalid backup manifest path.')
+    return Path(*path.parts)
+
+
+def copy_and_hash(source, target):
+    """Copy a regular file to a new path, hashing while copying. Fail if the source changes."""
+    source, target = Path(source), Path(target)
+    if source.is_symlink() or not stat.S_ISREG(source.stat(follow_symlinks=False).st_mode):
+        raise ValueError(f'Source is linked or is not a regular file: {source}')
+    before = source.stat()
+    digest = hashlib.sha256()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with source.open('rb') as reader, target.open('xb') as writer:
+        for block in iter(lambda: reader.read(CHUNK), b''):
+            writer.write(block)
+            digest.update(block)
+    shutil.copystat(source, target)
+    after = source.stat()
+    if source.is_symlink() or (before.st_size, before.st_mtime_ns) != (
+        after.st_size,
+        after.st_mtime_ns,
+    ):
+        raise ValueError(f'A source file changed during backup: {source}')
+    return {'bytes': before.st_size, 'sha256': digest.hexdigest()}

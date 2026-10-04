@@ -57,7 +57,7 @@ def main(argv=None):
         print(''.join('  ' + name + '\n' for name in result['changes']), end='')
         print('Run with --apply, or start Campaign Studio, to back up and migrate.')
     elif result['status'] == 'migrated':
-        print(f'Migrated {len(result["changes"])} documents. Backup: {result["backup"]}')
+        print(f'Migrated {len(result["changes"])} documents. Backup: {result["backup"] or "none"}')
     else:
         print('No migration needed.')
     return 0

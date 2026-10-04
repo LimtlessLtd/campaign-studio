@@ -4,41 +4,31 @@ This module copies files only. Foundry performs all world database migrations.
 """
 
 import datetime
-import hashlib
 import json
 import os
 import re
 import shutil
 import stat
 import uuid
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import config
 import psutil
+import storage
 
 FORMAT = 1
 MANIFEST = 'campaign-studio-backup.json'
-CHUNK = 1024 * 1024
 
 
-def _within(path, parent):
+def within(path, parent):
     return path == parent or parent in path.parents
 
 
-def _absolute(value, label):
+def absolute_folder(value, label):
     raw = Path(str(value or '')).expanduser()
     if not raw.is_absolute():
         raise ValueError(f'{label} must be an absolute folder path.')
     return raw.resolve()
-
-
-def _relative(value):
-    if not isinstance(value, str) or not value or '\\' in value or ':' in value:
-        raise ValueError('Invalid backup manifest path.')
-    path = PurePosixPath(value)
-    if path.is_absolute() or any(part in ('', '.', '..') for part in value.split('/')):
-        raise ValueError('Invalid backup manifest path.')
-    return Path(*path.parts)
 
 
 def _source():
@@ -53,7 +43,7 @@ def _source():
     relative_world = (
         Path(data.name) / 'worlds' / Path(world['path']).name / 'world.json'
     ).as_posix()
-    if not (root / _relative(relative_world)).is_file():
+    if not (root / storage.manifest_path(relative_world)).is_file():
         raise ValueError('The selected world manifest is missing from Foundry User Data.')
     return root, world, relative_world
 
@@ -125,34 +115,6 @@ def plan():
     }
 
 
-def _digest(path):
-    digest = hashlib.sha256()
-    with path.open('rb') as source:
-        for block in iter(lambda: source.read(CHUNK), b''):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _copy_and_hash(source, target):
-    if source.is_symlink() or not stat.S_ISREG(source.stat(follow_symlinks=False).st_mode):
-        raise ValueError(f'Source is linked or is not a regular file: {source}')
-    before = source.stat()
-    digest = hashlib.sha256()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with source.open('rb') as reader, target.open('xb') as writer:
-        for block in iter(lambda: reader.read(CHUNK), b''):
-            writer.write(block)
-            digest.update(block)
-    shutil.copystat(source, target)
-    after = source.stat()
-    if source.is_symlink() or (before.st_size, before.st_mtime_ns) != (
-        after.st_size,
-        after.st_mtime_ns,
-    ):
-        raise ValueError(f'A source file changed during backup: {source}')
-    return {'bytes': before.st_size, 'sha256': digest.hexdigest()}
-
-
 def _space(path, bytes_needed):
     if shutil.disk_usage(path).free < int(bytes_needed * 1.05):
         raise ValueError('The destination does not have enough free space for this copy.')
@@ -160,8 +122,8 @@ def _space(path, bytes_needed):
 
 def create(destination, confirmed_closed=False):
     root, world, relative_world = _source()
-    target_root = _absolute(destination, 'Backup destination')
-    if _within(target_root, root):
+    target_root = absolute_folder(destination, 'Backup destination')
+    if within(target_root, root):
         raise ValueError('Choose a backup destination outside Foundry User Data.')
     if not confirmed_closed:
         raise ValueError('Confirm that Foundry VTT is closed before making an offline backup.')
@@ -179,14 +141,14 @@ def create(destination, confirmed_closed=False):
     payload.mkdir(mode=0o700)
     try:
         for name in dirs:
-            (payload / _relative(name)).mkdir(parents=True, exist_ok=True)
+            (payload / storage.manifest_path(name)).mkdir(parents=True, exist_ok=True)
         records = []
         for name, expected_size, expected_mtime in files:
-            source = root / _relative(name)
+            source = root / storage.manifest_path(name)
             metadata = source.stat()
             if (metadata.st_size, metadata.st_mtime_ns) != (expected_size, expected_mtime):
                 raise ValueError(f'A source file changed during backup: {source}')
-            record = _copy_and_hash(source, payload / _relative(name))
+            record = storage.copy_and_hash(source, payload / storage.manifest_path(name))
             records.append({'path': name, **record})
         if running_foundry():
             raise ValueError('Foundry VTT started during the backup. This copy is incomplete.')
@@ -221,7 +183,7 @@ def create(destination, confirmed_closed=False):
     }
 
 
-def _read_manifest(package):
+def read_manifest(package):
     if package.name.startswith('.incomplete-'):
         raise ValueError('An incomplete backup cannot be restored.')
     manifest_path = package / MANIFEST
@@ -245,14 +207,14 @@ def _verify_tree(payload, manifest):
         if not isinstance(record, dict):
             raise ValueError('Invalid Foundry backup manifest.')
         name = record.get('path')
-        _relative(name)
+        storage.manifest_path(name)
         if not isinstance(record.get('bytes'), int) or record['bytes'] < 0:
             raise ValueError('Invalid Foundry backup file size.')
         if not re.fullmatch(r'[0-9a-f]{64}', str(record.get('sha256', ''))):
             raise ValueError('Invalid Foundry backup checksum.')
         names.append(name)
     for name in directories:
-        _relative(name)
+        storage.manifest_path(name)
     if len(set(names)) != len(names) or len(set(directories)) != len(directories):
         raise ValueError('Duplicate path in Foundry backup manifest.')
     actual_files, actual_dirs = _inventory(payload)
@@ -261,13 +223,13 @@ def _verify_tree(payload, manifest):
     ) != sorted(actual_dirs):
         raise ValueError('Backup file list differs from its manifest.')
     for record in records:
-        path = payload / _relative(record['path'])
-        if path.stat().st_size != record['bytes'] or _digest(path) != record['sha256']:
+        path = payload / storage.manifest_path(record['path'])
+        if path.stat().st_size != record['bytes'] or storage.sha256_file(path) != record['sha256']:
             raise ValueError(f'Backup checksum failed: {record["path"]}')
     world = manifest.get('world')
     if not isinstance(world, dict):
         raise ValueError('Invalid Foundry world in backup manifest.')
-    world_manifest = payload / _relative(world.get('manifest_path'))
+    world_manifest = payload / storage.manifest_path(world.get('manifest_path'))
     if not world_manifest.is_file():
         raise ValueError('Selected world is missing from the backup.')
     saved_world = json.loads(world_manifest.read_text(encoding='utf-8'))
@@ -283,17 +245,17 @@ def _verify_tree(payload, manifest):
 
 
 def verify(path):
-    package = _absolute(path, 'Backup folder')
-    manifest = _read_manifest(package)
+    package = absolute_folder(path, 'Backup folder')
+    manifest = read_manifest(package)
     return {'path': str(package), **_verify_tree(package / 'User Data', manifest), 'verified': True}
 
 
 def rehearse(path, destination):
-    package = _absolute(path, 'Backup folder')
-    manifest = _read_manifest(package)
+    package = absolute_folder(path, 'Backup folder')
+    manifest = read_manifest(package)
     summary = _verify_tree(package / 'User Data', manifest)
-    target = _absolute(destination, 'Restore test destination')
-    source_root = _absolute(manifest.get('source_user_data'), 'Original Foundry User Data')
+    target = absolute_folder(destination, 'Restore test destination')
+    source_root = absolute_folder(manifest.get('source_user_data'), 'Original Foundry User Data')
     try:
         current_root, _, _ = _source()
     except (ValueError, OSError):
@@ -301,10 +263,10 @@ def rehearse(path, destination):
     if target.exists():
         raise ValueError('Restore test destination must be a new, empty path.')
     if (
-        _within(target, source_root)
-        or (current_root is not None and _within(target, current_root))
-        or _within(target, package)
-        or _within(package, target)
+        within(target, source_root)
+        or (current_root is not None and within(target, current_root))
+        or within(target, package)
+        or within(package, target)
     ):
         raise ValueError('Restore test destination must be separate from live data and the backup.')
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -313,10 +275,10 @@ def rehearse(path, destination):
     staging.mkdir(mode=0o700)
     try:
         for name in manifest['directories']:
-            (staging / _relative(name)).mkdir(parents=True, exist_ok=True)
+            (staging / storage.manifest_path(name)).mkdir(parents=True, exist_ok=True)
         for record in manifest['files']:
-            name = _relative(record['path'])
-            _copy_and_hash(package / 'User Data' / name, staging / name)
+            name = storage.manifest_path(record['path'])
+            storage.copy_and_hash(package / 'User Data' / name, staging / name)
         _verify_tree(staging, manifest)
         staging.rename(target)
     except Exception as error:
@@ -325,7 +287,7 @@ def rehearse(path, destination):
     receipt = {
         'format': 'campaign-studio-foundry-restore-test',
         'backup_path': str(package),
-        'backup_manifest_sha256': _digest(package / MANIFEST),
+        'backup_manifest_sha256': storage.sha256_file(package / MANIFEST),
         'restore_path': str(target),
         'world': summary['world'],
         'verified_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -334,7 +296,7 @@ def rehearse(path, destination):
         json.dump(receipt, stream, indent=2)
     return {
         'path': str(target),
-        'world_path': str(target / _relative(summary['world']['manifest_path']).parent),
+        'world_path': str(target / storage.manifest_path(summary['world']['manifest_path']).parent),
         'world': summary['world'],
         'files': summary['files'],
         'verified': True,

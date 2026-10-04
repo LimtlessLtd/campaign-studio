@@ -19,6 +19,7 @@ import storage
 PENDING = '.pending.json'
 CONFLICT = '.conflict.json'
 DISMISSED = '.dismissed.json'
+UNREADABLE = '.unreadable'
 ENTRY_ID = re.compile(r'^[0-9]{8}-[0-9]{6}-[0-9]{6}-[0-9a-f]{6}$')
 
 
@@ -35,10 +36,13 @@ def digest(path):
 
 
 class Journal:
-    def __init__(self, folder, path_of, write):
+    def __init__(self, folder, path_of, write, finish=lambda actions: []):
         self.folder = folder  # callable, so tests and relocated campaigns resolve it late
         self.path_of = path_of  # target name -> file path
         self.write = write  # (target name, value) -> None; each target is replaced atomically
+        # Runs an entry's recorded follow-up actions (such as queueing a render) once every target
+        # is written, before the entry is cleared. It must be idempotent and must not raise.
+        self.finish = finish
 
     def entries(self, suffix=PENDING):
         try:
@@ -47,10 +51,11 @@ class Journal:
             return []
         return [os.path.join(self.folder(), name) for name in names]
 
-    def commit(self, label, changes):
-        """Write [(name, value), ...] in order. A str value is a text file; anything else is JSON.
+    def commit(self, label, changes, after=()):
+        """Write [(name, value), ...] in order, then run the follow-up actions in after.
 
-        Put the record that marks the change as finished (a workflow or request status) last.
+        A str value is a text file; anything else is JSON. Put the record that marks the change
+        as finished (a workflow or request status) last. Returns the follow-up results.
         """
         if self.entries():
             raise IncompleteCommit(
@@ -74,6 +79,7 @@ class Journal:
             'label': str(label)[:200],
             'created': now.isoformat(timespec='seconds'),
             'targets': targets,
+            'after': list(after),
         }
         path = os.path.join(self.folder(), entry['id'] + PENDING)
         storage.atomic_json(path, entry, durable=True)
@@ -83,7 +89,7 @@ class Journal:
         except OSError as error:
             # One replay rides out a brief sharing failure. Otherwise the entry stays pending.
             try:
-                outcome, _ = self.replay(path)
+                outcome, summary = self.replay(path)
             except OSError:
                 raise IncompleteCommit(
                     f'{entry["label"]} was interrupted ({error}). Campaign Studio will finish '
@@ -94,45 +100,56 @@ class Journal:
                     f'{entry["label"]} was interrupted and a document changed meanwhile. '
                     'Review the interrupted change on the dashboard.'
                 ) from error
-            return entry['id']
+            return summary['results']
+        results = self.finish(entry['after'])
         os.remove(path)
-        return entry['id']
+        return results
 
     def state(self, target):
         path = self.path_of(target['name'])
         if digest(path) == target['before']:
             return 'pending'
         try:
-            with open(path, encoding='utf-8') as file:
+            # newline='' compares text exactly as atomic_text wrote it, including any \r.
+            with open(path, encoding='utf-8', newline='') as file:
                 raw = file.read()
             value = raw if target['text'] else json.loads(raw)
         except (FileNotFoundError, ValueError):
             return 'changed'
         return 'written' if value == target['value'] else 'changed'
 
+    @staticmethod
+    def set_aside(path, value):
+        """Record a conflict for GM review, then stop replaying the pending entry."""
+        storage.atomic_json(path[: -len(PENDING)] + CONFLICT, value, durable=True)
+        if os.path.exists(path):
+            os.remove(path)
+
     def replay(self, path):
         try:
             with open(path, encoding='utf-8') as file:
                 entry = json.load(file)
-        except ValueError as error:
-            raise IncompleteCommit(f'The change record {path} is unreadable: {error}') from error
-        states = [self.state(target) for target in entry['targets']]
-        summary = {
-            'id': entry['id'],
-            'label': entry['label'],
-            'created': entry['created'],
-            'targets': [
-                {'name': target['name'], 'state': state}
-                for target, state in zip(entry['targets'], states)
-            ],
-        }
-        if 'changed' in states:
-            storage.atomic_json(path[: -len(PENDING)] + CONFLICT, dict(entry, review=summary))
-            os.remove(path)
+            targets = entry['targets']
+            summary = {
+                'id': entry['id'],
+                'label': entry['label'],
+                'created': entry['created'],
+                'targets': [{'name': t['name'], 'state': self.state(t)} for t in targets],
+            }
+        except (ValueError, KeyError, TypeError) as error:
+            # A damaged record can never complete; keep its bytes and stop it blocking every change.
+            os.replace(path, path[: -len(PENDING)] + UNREADABLE)
+            summary = unreadable(path, error)
+            self.set_aside(path, {'review': summary})
             return 'conflicts', summary
-        for target, state in zip(entry['targets'], states):
+        states = [target['state'] for target in summary['targets']]
+        if 'changed' in states:
+            self.set_aside(path, dict(entry, review=summary))
+            return 'conflicts', summary
+        for target, state in zip(targets, states):
             if state == 'pending':
                 self.write(target['name'], target['value'])
+        summary['results'] = self.finish(entry.get('after', []))
         os.remove(path)
         return 'completed', summary
 
@@ -147,8 +164,11 @@ class Journal:
     def conflicts(self):
         result = []
         for path in self.entries(CONFLICT):
-            with open(path, encoding='utf-8') as file:
-                result.append(json.load(file)['review'])
+            try:
+                with open(path, encoding='utf-8') as file:
+                    result.append(json.load(file)['review'])
+            except (ValueError, KeyError, TypeError) as error:
+                result.append(unreadable(path, error))
         return result
 
     def dismiss(self, entry_id):
@@ -159,3 +179,13 @@ class Journal:
         if not os.path.isfile(path):
             raise ValueError('That interrupted change is no longer awaiting review.')
         storage.atomic_replace(path, path[: -len(CONFLICT)] + DISMISSED)
+
+
+def unreadable(path, error):
+    name = os.path.basename(path).split('.', 1)[0]
+    return {
+        'id': name,
+        'label': f'An unreadable change record ({error})',
+        'created': '',
+        'targets': [],
+    }

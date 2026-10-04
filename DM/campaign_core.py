@@ -1,6 +1,7 @@
 """Campaign document storage, map workflows and job result handling."""
 
 import datetime
+import functools
 import json
 import os
 import re
@@ -130,23 +131,52 @@ def write_target(name, value):
         write_doc(name, value)
 
 
-JOURNAL = commits.Journal(lambda: os.path.join(DATA, '.commits'), target_path, write_target)
+def forge_follow_up(slug, label, populate=False):
+    return {'type': 'forge', 'slug': slug, 'label': label, 'populate': populate}
 
 
-def commit_docs(label, changes):
+def run_follow_ups(actions):
+    """Steps recorded with a change and run once its documents are written, also after a crash.
+
+    Each step is idempotent and best effort: a failure is logged and never blocks the change.
+    """
+    results = []
+    for action in actions:
+        try:
+            if action['type'] == 'forge':
+                results.append(queue_forge(action['slug'], action['label'], action['populate']))
+            elif action['type'] == 'mark_stocked':
+                results.append(mark_stocked(action['slug']))
+            else:
+                raise ValueError('unknown follow-up')
+        except Exception as error:  # the journal contract: follow-ups never raise
+            sys.stderr.write(f'Follow-up {action} after a change failed: {error}\n')
+            results.append(None)
+    return results
+
+
+JOURNAL = commits.Journal(
+    lambda: os.path.join(DATA, '.commits'), target_path, write_target, run_follow_ups
+)
+
+
+def commit_docs(label, changes, after=()):
     """Write several documents so an interruption is completed rather than left half applied."""
-    return JOURNAL.commit(label, changes)
+    return JOURNAL.commit(label, changes, after)
 
 
 def recover_commits():
     """Finish interrupted changes. Call before any read/modify/write of campaign documents."""
     with LOCK:
-        report = JOURNAL.recover()
-        for entry in report['completed']:
-            for target in entry['targets']:
-                if target['name'].startswith('mapkey/'):
-                    mark_stocked(target['name'][7:])
-        return report
+        return JOURNAL.recover()
+
+
+def queue_forge(slug, label, populate=False):
+    plan = os.path.join(MAPS, slug, 'plan.txt')
+    cmd = [sys.executable, '-u', os.path.join(FORGE, 'forge.py'), plan]
+    if not os.path.isfile(plan):
+        cmd.append('--key-only')  # imported artwork has a scene and key but no grid plan
+    return new_job('forge', 'forge', label, cmd, slug=slug, populate=populate)
 
 
 def mark_stocked(slug):
@@ -207,40 +237,34 @@ def public_content():
 
 
 # ---------- background jobs ----------
-def fail_job(job, error):
-    recover_commits()
+def settle_failed_job(job, message):
+    """Mark what a failed job was producing as failed, unless that record has moved on."""
     if job.get('workflow'):
         value = workflow.get(job['workflow'])
-        value.update(status='failed', error=str(error))
-        workflow.save(value)
+        if value.get('status') == 'running' and value.get('job') == job['id']:
+            value.update(status='failed', error=message)
+            workflow.save(value)
     if job.get('art'):
         art = read_json(doc_path('art'), {'items': []})
-        for item in art['items']:
-            if item['id'] == job['art']:
-                item.update(status='failed', error=str(error))
-        write_doc('art', art)
+        item = next((i for i in art['items'] if i['id'] == job['art']), None)
+        if item and item.get('status') == 'generating':
+            item.update(status='failed', error=message)
+            write_doc('art', art)
     if job.get('request'):
-        fail_request(job, str(error))
+        fail_request(job, message)
+
+
+def fail_job(job, error):
+    try:
+        recover_commits()
+    except OSError as pending:
+        # Settle the job regardless: a record left 'running' could never be retried.
+        sys.stderr.write(f'An interrupted change is still pending: {pending}\n')
+    settle_failed_job(job, str(error))
 
 
 def recover_interrupted_job(job):
-    if job.get('workflow'):
-        value = workflow.get(job['workflow'])
-        value.update(
-            status='failed', error='The server stopped during this draft. You can retry it.'
-        )
-        workflow.save(value)
-    if job.get('art'):
-        art = read_json(doc_path('art'), {'items': []})
-        for item in art['items']:
-            if item['id'] == job['art']:
-                item.update(
-                    status='failed',
-                    error='The server stopped during image generation. You can retry it.',
-                )
-        write_doc('art', art)
-    if job.get('request'):
-        fail_request(job, 'The server stopped during this draft. You can retry it.')
+    settle_failed_job(job, 'The server stopped before this finished. You can retry it.')
 
 
 def finish_job(job, code, tail):
@@ -544,6 +568,28 @@ def map_busy(slug):
     )
 
 
+def apply_content(wid):
+    """Link a reviewed content draft to the map, codex, threads and art queue."""
+    with LOCK:
+        value = workflow.get(wid)
+        if value['status'] != 'review':
+            raise ValueError('There is no draft awaiting review.')
+        workflow.check_base(value)
+        revisions.checkpoint(value['map'], 'Before applying AI content')
+        stocked = {'type': 'mark_stocked', 'slug': value['map']}
+        return workflow.apply_content(value, functools.partial(commit_docs, after=[stocked]))
+
+
+def restore_revision(slug, rid):
+    """Restore a map checkpoint and re-render it; recovery re-renders after a crash too."""
+    rerender = forge_follow_up(slug, 'Restore ' + slug)
+    with LOCK:
+        [job] = revisions.restore(slug, rid, functools.partial(commit_docs, after=[rerender]))
+    if job is None:
+        raise ValueError('The revision was restored, but its render could not be queued.')
+    return job
+
+
 def apply_layout(wid):
     with LOCK:
         value = workflow.get(wid)
@@ -583,14 +629,14 @@ def apply_layout(wid):
                         images=[],
                     )
                 )
-        plan_path = os.path.join(folder, 'plan.txt')
         key['session'] = value['brief'].get('session', key.get('session', ''))
         value.update(status='applied', draft=draft)
-        commit_docs(
+        # The render is recorded with the change, so recovery after a crash still queues it.
+        [job] = commit_docs(
             'Apply layout ' + wid,
             [('plan/' + slug, draft['plan']), ('mapkey/' + slug, key), ('workflows/' + wid, value)],
+            after=[forge_follow_up(slug, 'Render ' + slug, populate=value['kind'] == 'layout')],
         )
-        cmd = [sys.executable, '-u', os.path.join(FORGE, 'forge.py'), plan_path]
-        return new_job(
-            'forge', 'forge', 'Render ' + slug, cmd, slug=slug, populate=value['kind'] == 'layout'
-        )
+        if job is None:
+            raise ValueError('The layout was applied, but its render could not be queued.')
+        return job

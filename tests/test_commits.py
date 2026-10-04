@@ -152,6 +152,53 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(len(self.journal.recover()['completed']), 1)
         self.assertEqual(self.read('status'), {'state': 'applied'})
 
+    def test_text_with_carriage_returns_is_recognised_as_written(self):
+        changes = [('plan', 'name: A\r\nB\n---\n..\n'), ('status', {'state': 'applied'})]
+        self.journal.write = self.crash_after(1)
+        with self.assertRaises(Crash):
+            self.journal.commit('Fixture change', changes)
+        self.journal.write = self.write
+        report = self.journal.recover()
+        self.assertEqual(len(report['completed']), 1)
+        self.assertEqual(self.read('status'), {'state': 'applied'})
+
+    def test_follow_ups_run_after_the_writes_and_again_after_a_crash(self):
+        ran = []
+
+        def finish(actions):
+            ran.append(actions)
+            return ['queued' for _ in actions]
+
+        self.journal.finish = finish
+        after = [{'type': 'render', 'slug': 'fixture'}]
+        self.assertEqual(self.journal.commit('First', self.changes()[:1], after), ['queued'])
+        self.assertEqual(ran, [after])
+
+        self.journal.write = self.crash_after(len(self.changes()))
+        with self.assertRaises(Crash):
+            self.journal.commit('Second', self.changes(), after)
+        self.assertEqual(len(ran), 1)  # the crash came after the writes, before the follow-up
+        self.journal.write = self.write
+        report = self.journal.recover()
+        self.assertEqual(report['completed'][0]['results'], ['queued'])
+        self.assertEqual(ran, [after, after])
+
+    def test_damaged_record_is_set_aside_instead_of_blocking_changes(self):
+        folder = self.root / '.commits'
+        folder.mkdir()
+        (folder / '20261004-120000-000000-abcdef.pending.json').write_text('{"targets": 5}')
+        (folder / '20261004-120001-000000-abcdef.conflict.json').write_text('not json')
+
+        report = self.journal.recover()
+
+        self.assertIn('unreadable', report['conflicts'][0]['label'])
+        self.assertTrue((folder / '20261004-120000-000000-abcdef.unreadable').is_file())
+        self.assertEqual(len(self.journal.conflicts()), 2)
+        self.journal.commit('Next change', [('threads', {'threads': []})])
+        for conflict in self.journal.conflicts():
+            self.journal.dismiss(conflict['id'])
+        self.assertEqual(self.journal.conflicts(), [])
+
     def test_a_change_writes_each_document_once(self):
         with self.assertRaises(ValueError):
             self.journal.commit('Duplicate', [('codex', {}), ('codex', {})])

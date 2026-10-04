@@ -317,7 +317,7 @@ class StudioIntegration(unittest.TestCase):
                 slug, brief = self.import_map()
                 value = workflow.stage(workflow.create(slug, brief), self.proposal())
                 with self.crash_after(count), self.assertRaises(Crash):
-                    workflow.apply_content(value, campaign_core.commit_docs)
+                    campaign_core.apply_content(value['id'])
 
                 report = campaign_core.recover_commits()  # what the next server start does
 
@@ -390,6 +390,51 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/workflow/' + value['id'] + '/apply', {})
         codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
         self.assertEqual(len(codex), 2)
+
+    def test_recovered_layout_still_queues_its_render(self):
+        brief = campaign_core.normal_brief(
+            {'name': 'Fixture yard', 'type': 'custom', 'width': 20, 'height': 20, 'seed': 3}
+        )
+        value = workflow.create('fixture-yard', brief, 'layout')
+        draft = {
+            'summary': 'An open yard.',
+            'operations': [
+                {'type': 'rect', 'row': 0, 'col': 0, 'width': 20, 'height': 20, 'fill': ','}
+            ],
+            'areas': [{'n': 1, 'name': 'Yard', 'kind': 'yard', 'at': [5, 5]}],
+        }
+        workflow.stage(value, draft)
+        # The server stops after the plan, key and status are written, before the render is queued.
+        with self.crash_after(3), self.assertRaises(Crash):
+            campaign_core.apply_layout(value['id'])
+        self.assertFalse(any(j.get('slug') == 'fixture-yard' for j in campaign_core.list_jobs()))
+
+        campaign_core.recover_commits()
+
+        renders = [j for j in campaign_core.list_jobs() if j.get('slug') == 'fixture-yard']
+        self.assertEqual([(j['kind'], j['populate']) for j in renders], [('forge', True)])
+        self.assertEqual(workflow.get(value['id'])['status'], 'applied')
+
+    def test_job_failure_does_not_overwrite_records_that_moved_on(self):
+        slug, brief = self.import_map()
+        value = workflow.create(slug, brief)
+        value.update(status='review', job='newer-job')
+        workflow.save(value)
+        campaign_core.write_doc(
+            'art',
+            {
+                'items': [
+                    {'id': 'art-ready', 'status': 'ready', 'image': 'one.png'},
+                    {'id': 'art-busy', 'status': 'generating'},
+                ]
+            },
+        )
+        campaign_core.fail_job({'id': 'old-job', 'workflow': value['id']}, 'Late failure')
+        campaign_core.fail_job({'id': 'img-1', 'art': 'art-ready'}, 'Late failure')
+        campaign_core.recover_interrupted_job({'id': 'img-2', 'art': 'art-busy'})
+        self.assertEqual(workflow.get(value['id'])['status'], 'review')
+        art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
+        self.assertEqual([a['status'] for a in art], ['ready', 'failed'])
 
     def test_generated_image_links_its_codex_entry_and_location(self):
         slug, _ = self.import_map()
@@ -658,7 +703,8 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assertNotEqual(changed['draft']['plan'], original)
         (folder / 'plan.txt').write_text(changed['draft']['plan'])
-        revisions.restore('fixture-layout', checkpoint['id'], campaign_core.commit_docs)
+        job = campaign_core.restore_revision('fixture-layout', checkpoint['id'])
+        self.assertEqual((job['label'], job['populate']), ('Restore fixture-layout', False))
         self.assertEqual((folder / 'plan.txt').read_text(), original)
         for op in (
             {'type': 'rect', 'row': 19, 'col': 0, 'width': 5, 'height': 5, 'fill': '.'},

@@ -18,7 +18,6 @@ import maps_io
 import packaging_source
 import request_workflow
 import revisions
-import storage
 import workflow
 from campaign_core import (
     APP,
@@ -31,6 +30,7 @@ from campaign_core import (
     MAPS,
     SLUG,
     UPLOADS,
+    apply_content,
     apply_layout,
     campaign_path,
     commit_docs,
@@ -42,7 +42,6 @@ from campaign_core import (
     list_jobs,
     log_tail,
     map_busy,
-    mark_stocked,
     new_job,
     normal_brief,
     public_content,
@@ -51,10 +50,12 @@ from campaign_core import (
     request_item,
     request_pack,
     request_read,
+    restore_revision,
     rev_of,
     start_request,
     start_workflow,
     write_doc,
+    write_target,
 )
 
 
@@ -320,9 +321,8 @@ class Handler(SimpleHTTPRequestHandler):
 
                 forge.parse_plan(text)
                 revisions.checkpoint(slug, 'Before plan edit')
-                plan = os.path.join(MAPS, slug, 'plan.txt')
-                with LOCK, storage.file_lock(plan):
-                    storage.atomic_text(plan, text)
+                with LOCK:
+                    write_target('plan/' + slug, text)
                 return self.send_json({'ok': True})
         except (ValueError, KeyError) as e:
             return self.fail(400, str(e))
@@ -640,19 +640,7 @@ class Handler(SimpleHTTPRequestHandler):
                             409,
                             'Wait for the current map job to finish before restoring a revision.',
                         )
-                    with LOCK:
-                        revisions.restore(slug, p.get('revision', ''), commit_docs)
-                    cmd = [
-                        sys.executable,
-                        '-u',
-                        os.path.join(FORGE, 'forge.py'),
-                        os.path.join(MAPS, slug, 'plan.txt'),
-                    ]
-                    if not os.path.isfile(cmd[-1]):
-                        cmd += ['--key-only']
-                    return self.send_json(
-                        new_job('forge', 'forge', 'Restore ' + slug, cmd, slug=slug)
-                    )
+                    return self.send_json(restore_revision(slug, p.get('revision', '')))
             if path.startswith('/api/workflow/'):
                 parts = path.split('/')
                 if len(parts) != 5:
@@ -707,15 +695,7 @@ class Handler(SimpleHTTPRequestHandler):
                             409, 'Wait for the current job to finish before applying this proposal.'
                         )
                     if value['kind'] == 'content':
-                        with LOCK:
-                            value = workflow.get(value['id'])
-                            if value['status'] != 'review':
-                                raise ValueError('There is no draft awaiting review.')
-                            workflow.check_base(value)
-                            revisions.checkpoint(slug, 'Before applying AI content')
-                            result = workflow.apply_content(value, commit_docs)
-                            mark_stocked(slug)
-                        return self.send_json(result)
+                        return self.send_json(apply_content(value['id']))
                     return self.send_json(apply_layout(value['id']))
             if path == '/api/generate':
                 cmd, label = generate_cmd(p)

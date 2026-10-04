@@ -88,6 +88,8 @@ class JobsStorageTests(unittest.TestCase):
             job['status'] = 'done'
 
         with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(core, 'DATA', temporary),  # failure handling also replays the journal
             patch.dict(core.LANES, fixture=lane),
             patch.object(lane, 'get', take),
             patch.object(core.JOBS_SERVICE, 'execute_job', execute),

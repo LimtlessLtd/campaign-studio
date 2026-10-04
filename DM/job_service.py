@@ -134,9 +134,14 @@ class JobService:
                     break
         return out
 
-    def recover_unfinished(self):
+    def recover_unfinished(self, before=None):
+        """Fail jobs a stopped server left unfinished; keep any queued at or after before."""
         for job in self.list_jobs(200):
-            if job and job.get('status') in ('queued', 'running'):
+            if (
+                job
+                and job.get('status') in ('queued', 'running')
+                and (before is None or job.get('created', 0) < before)
+            ):
                 job['status'] = 'failed'
                 job['note'] = 'the DM site stopped while this was running'
                 self.save_job(job)

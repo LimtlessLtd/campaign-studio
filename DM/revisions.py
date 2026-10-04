@@ -88,4 +88,4 @@ def restore(slug, rid, commit):
             with open(path, encoding='utf-8') as f:
                 changes.append((doc, json.load(f)))
     checkpoint(slug, 'Before restoring ' + rid)
-    commit('Restore ' + slug + ' revision ' + rid, changes)
+    return commit('Restore ' + slug + ' revision ' + rid, changes)

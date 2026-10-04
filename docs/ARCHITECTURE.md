@@ -68,20 +68,25 @@ and generated-image links) go through `campaign_core.commit_docs`. Before the fi
 record that marks the change finished (workflow or request status) last. If the server stops part way,
 startup replays the entry: targets still holding their old bytes are completed and targets already written
 are left alone. Every write request and job result also replays pending entries first, so no change starts
-from a half-applied state. If a target was changed some other way, nothing is overwritten; the entry is set
-aside and shown on the dashboard for GM review. Stable workflow-derived IDs and retry checks remain a second
+from a half-applied state. Follow-up steps recorded with a change (queueing the render after a layout apply
+or restore, marking the map catalogue populated) run once its documents are written, and again on replay;
+they are idempotent and best effort. If a target was changed some other way, nothing is overwritten; the
+entry is set aside and shown on the dashboard for GM review. A damaged journal record is set aside the same
+way, so it never blocks later changes. Stable workflow-derived IDs and retry checks remain a second
 guard against duplicates. Map import/export are not journaled: they create files that later steps tolerate.
 Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
 
 ## Data schema and migrations
 
 `data/.schema.json` records the campaign's data schema (`schema.CURRENT`). Existing data without it is
-schema 0 (0.1.x). On startup the server refuses data from a newer schema, completes interrupted changes,
-then migrates older data after copying every document a migration may rewrite to `DM/backups` and verifying
-each copy by SHA-256. Migrations fill or reshape stored documents only; they are idempotent, and the version
-is recorded only after all documents are written, so an interrupted migration runs again from a new backup.
-`python DM/migrate.py` reports pending changes, `--apply` migrates and `--restore DM/backups/<name>` returns
-documents to a backup's version. Changing a stored shape needs a new numbered migration and a fixture test.
+schema 0 (0.1.x); an empty campaign is stamped on the first start that finds documents. On startup the
+server refuses data from a newer schema, completes interrupted changes, then migrates older data. When a
+migration changes documents, every document it may rewrite is first copied to `DM/backups` and each copy is
+verified by SHA-256. Migrations fill or reshape stored documents only. They are idempotent, migrated
+documents are flushed to disk before the version is recorded, and an interrupted migration runs again from
+a new backup. `python DM/migrate.py` reports pending changes, `--apply` migrates and
+`--restore DM/backups/<name>` returns documents to a backup's version. Changing a stored shape needs a new
+numbered migration and a fixture test.
 
 Schema 1 gives codex entries, threads, session prep, scenes, map keys and areas the complete fields the app
 creates, filling only missing or null values. Existing values, unknown fields and other documents are kept.

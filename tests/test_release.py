@@ -91,7 +91,7 @@ class ReleaseTests(unittest.TestCase):
                 proc.terminate()
                 proc.wait(timeout=10)
             schema_file = extracted / 'DM/data' / schema.MARKER
-            self.assertEqual(json.loads(schema_file.read_text())['version'], schema.CURRENT)
+            self.assertFalse(schema_file.exists())  # nothing to version until documents exist
             # Data saved by a newer Campaign Studio is never opened, migrated or rewritten.
             schema_file.write_text(
                 json.dumps({'format': schema.FORMAT, 'version': schema.CURRENT + 1})

@@ -221,13 +221,46 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(schema.SchemaError, 'not a Campaign Studio schema'):
             self.migrate()
 
-    def test_new_campaign_is_stamped_without_a_backup(self):
+    def test_empty_campaign_is_stamped_only_once_it_has_documents(self):
         empty = Path(self.temp.name) / 'empty'
+        data, maps, backups = (str(empty / n) for n in ('data', 'maps', 'backups'))
         (empty / 'data' / 'jobs').mkdir(parents=True)
-        result = schema.migrate(str(empty / 'data'), str(empty / 'maps'), str(empty / 'backups'))
-        self.assertEqual(result['status'], 'new')
-        self.assertEqual(schema.version(str(empty / 'data'), str(empty / 'maps')), schema.CURRENT)
-        self.assertFalse((empty / 'backups').exists())
+        self.assertEqual(schema.migrate(data, maps, backups)['status'], 'new')
+        self.assertFalse((empty / 'data' / schema.MARKER).exists())
+        # Documents copied in later are still recognised as unversioned and migrated.
+        (empty / 'data/threads.json').write_text('{"threads": null}', encoding='utf-8')
+        result = schema.migrate(data, maps, backups)
+        self.assertEqual((result['status'], result['from']), ('migrated', 0))
+        self.assertTrue(Path(result['backup']).is_dir())
+        self.assertEqual(json.loads((empty / 'data/threads.json').read_text())['threads'], [])
+        self.assertEqual(schema.version(data, maps), schema.CURRENT)
+
+    def test_unchanged_documents_are_stamped_without_a_backup(self):
+        bare = Path(self.temp.name) / 'bare'
+        (bare / 'data').mkdir(parents=True)
+        (bare / 'data/settings.json').write_text('{"campaign_name": "Fixture"}')
+        result = schema.migrate(str(bare / 'data'), str(bare / 'maps'), str(bare / 'backups'))
+        self.assertEqual((result['status'], result['backup']), ('migrated', None))
+        self.assertFalse((bare / 'backups').exists())
+        self.assertEqual(schema.version(str(bare / 'data'), str(bare / 'maps')), schema.CURRENT)
+
+    def test_restore_refuses_paths_outside_the_campaign_on_any_platform(self):
+        result = self.migrate()
+        manifest_file = Path(result['backup']) / 'backup.json'
+        manifest = json.loads(manifest_file.read_text(encoding='utf-8'))
+        for unsafe in (
+            'data/..\\..\\escape.json',
+            'data/C:\\escape.json',
+            'data/../escape.json',
+            'uploads/x.json',
+        ):
+            with self.subTest(path=unsafe):
+                manifest['files'][0]['path'] = unsafe
+                manifest_file.write_text(json.dumps(manifest), encoding='utf-8')
+                before = self.snapshot()
+                with self.assertRaisesRegex(schema.SchemaError, 'Unsafe backup path'):
+                    schema.restore(result['backup'], self.data, self.maps)
+                self.assertEqual(self.snapshot(), before)
 
     def test_interrupted_migration_runs_again_from_a_fresh_backup(self):
         writes = []

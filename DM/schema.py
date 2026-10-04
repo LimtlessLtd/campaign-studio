@@ -8,7 +8,6 @@ interrupted, the version is unchanged and the next start runs it again from a fr
 
 import datetime
 import glob
-import hashlib
 import json
 import os
 import shutil
@@ -110,7 +109,9 @@ def fill(row, defaults):
 def records(value, container, path):
     if not isinstance(value, dict):
         raise SchemaError(f'{path} must contain a JSON object.')
-    rows = value.setdefault(container, [])
+    if value.get(container) is None:
+        value[container] = []
+    rows = value[container]
     if not isinstance(rows, list):
         raise SchemaError(f'{path}: {container} must be a list.')
     return [row for row in rows if isinstance(row, dict)]
@@ -177,14 +178,6 @@ def planned_changes(data, maps, start):
 
 
 # ---------- backups ----------
-def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as file:
-        for block in iter(lambda: file.read(1024 * 1024), b''):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def backup(data, maps, backups, label):
     """Copy every document a migration may rewrite, then verify each copy by SHA-256."""
     root = os.path.dirname(os.path.abspath(data))
@@ -193,12 +186,11 @@ def backup(data, maps, backups, label):
     files = []
     for path in campaign_files(data, maps):
         rel = os.path.relpath(path, root).replace(os.sep, '/')
-        copy = os.path.join(target, *rel.split('/'))
-        os.makedirs(os.path.dirname(copy), exist_ok=True)
-        shutil.copy2(path, copy)
-        files.append({'path': rel, 'sha256': sha256(path), 'size': os.path.getsize(path)})
+        record = storage.copy_and_hash(path, os.path.join(target, storage.manifest_path(rel)))
+        files.append({'path': rel, 'sha256': record['sha256'], 'size': record['bytes']})
     for entry in files:
-        if sha256(os.path.join(target, *entry['path'].split('/'))) != entry['sha256']:
+        copy = os.path.join(target, storage.manifest_path(entry['path']))
+        if storage.sha256_file(copy) != entry['sha256']:
             raise OSError('Backup verification failed for ' + entry['path'])
     manifest = {
         'format': FORMAT + '-backup',
@@ -215,25 +207,30 @@ def restore(backup_path, data, maps):
 
     Use this to return to an older Campaign Studio. Stop the server first.
     """
-    root = os.path.dirname(os.path.abspath(data))
+    root = os.path.realpath(os.path.dirname(os.path.abspath(data)))
     with open(os.path.join(backup_path, 'backup.json'), encoding='utf-8') as file:
         manifest = json.load(file)
     if manifest.get('format') != FORMAT + '-backup' or type(manifest.get('version')) is not int:
         raise SchemaError('Choose a Campaign Studio migration backup folder.')
+    restores = []
     for entry in manifest['files']:
-        parts = entry['path'].split('/')
-        if '..' in parts or parts[0] not in ('data', 'maps'):
+        try:
+            rel = storage.manifest_path(entry['path'])  # rejects drives, backslashes and dots
+        except ValueError as error:
+            raise SchemaError('Unsafe backup path: ' + str(entry['path'])) from error
+        destination = os.path.realpath(os.path.join(root, rel))
+        if rel.parts[0] not in ('data', 'maps') or not destination.startswith(root + os.sep):
             raise SchemaError('Unsafe backup path: ' + entry['path'])
-        if sha256(os.path.join(backup_path, *parts)) != entry['sha256']:
+        copy = os.path.join(backup_path, rel)
+        if storage.sha256_file(copy) != entry['sha256']:
             raise SchemaError('Backup copy changed since it was made: ' + entry['path'])
-    for entry in manifest['files']:
-        parts = entry['path'].split('/')
-        destination = os.path.join(root, *parts)
+        restores.append((copy, destination))
+    for copy, destination in restores:
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         with storage.file_lock(destination):
             temporary = destination + '.tmp-' + os.urandom(6).hex()
             try:
-                shutil.copy2(os.path.join(backup_path, *parts), temporary)
+                shutil.copy2(copy, temporary)
                 storage.atomic_replace(temporary, destination)
             finally:
                 if os.path.exists(temporary):
@@ -265,8 +262,7 @@ def migrate(data, maps, backups, dry_run=False):
     """Bring the campaign to CURRENT. Back up first whenever an existing campaign changes."""
     found = check(data, maps)
     if found is None:
-        if not dry_run:
-            write_marker(data, CURRENT, 'New campaign')
+        # Nothing to stamp yet: unversioned documents found by a later start are migrated then.
         return {'status': 'new', 'version': CURRENT, 'changes': []}
     if found == CURRENT:
         return {'status': 'current', 'version': CURRENT, 'changes': []}
@@ -276,11 +272,13 @@ def migrate(data, maps, backups, dry_run=False):
     result = {'status': 'migrated', 'from': found, 'version': CURRENT, 'changes': names}
     if dry_run:
         return dict(result, status='needs migration')
-    result['backup'] = backup(data, maps, backups, f'schema-{found}-to-{CURRENT}')
+    result['backup'] = None
+    if changes:
+        result['backup'] = backup(data, maps, backups, f'schema-{found}-to-{CURRENT}')
     for path, value in changes:
         with storage.file_lock(path):
-            storage.atomic_json(path, value)
-    write_marker(
-        data, CURRENT, f'Migrated from schema {found}; backup {os.path.basename(result["backup"])}'
-    )
+            # Flushed before the marker below, so a recorded version implies migrated documents.
+            storage.atomic_json(path, value, durable=True)
+    note = os.path.basename(result['backup']) if result['backup'] else 'no changes'
+    write_marker(data, CURRENT, f'Migrated from schema {found}; backup {note}')
     return result
