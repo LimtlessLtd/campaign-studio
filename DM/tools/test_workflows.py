@@ -34,6 +34,10 @@ import forge
 import image_worker
 
 
+class Crash(BaseException):
+    """Stands in for the server stopping: application code cannot catch it."""
+
+
 class StudioIntegration(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='campaign-studio-test-')
@@ -263,7 +267,7 @@ class StudioIntegration(unittest.TestCase):
         checkpoint = self.request(f'/api/maps/{slug}/checkpoint', {'label': 'Before annotation'})
         key['areas'][0]['name'] = 'Changed location'
         campaign_core.write_doc('mapkey/' + slug, key)
-        revisions.restore(slug, checkpoint['id'], campaign_core.write_doc)
+        revisions.restore(slug, checkpoint['id'], campaign_core.commit_docs)
         self.assertEqual(
             campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))['areas'][0]['name'],
             'Landing',
@@ -292,25 +296,169 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/workflow/' + value['id'] + '/apply', {}, expected=400)
         self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
 
-    def test_partial_content_application_can_retry_without_duplicates(self):
+    def crash_after(self, count):
+        """Stop the next commit after count document writes, as a killed server would."""
+        written = []
+        original = campaign_core.JOURNAL.write
+
+        def write(name, value):
+            if len(written) == count:
+                raise Crash
+            original(name, value)
+            written.append(name)
+            if len(written) == count:
+                raise Crash
+
+        return patch.object(campaign_core.JOURNAL, 'write', write)
+
+    def test_content_crash_at_each_write_boundary_recovers_without_dangling_links(self):
+        for count in range(6):
+            with self.subTest(after_writes=count):
+                slug, brief = self.import_map()
+                value = workflow.stage(workflow.create(slug, brief), self.proposal())
+                with self.crash_after(count), self.assertRaises(Crash):
+                    campaign_core.apply_content(value['id'])
+
+                report = campaign_core.recover_commits()  # what the next server start does
+
+                self.assertEqual(len(report['completed']), 1)
+                self.assertEqual(workflow.get(value['id'])['status'], 'applied')
+                codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+                threads = campaign_core.read_json(campaign_core.doc_path('threads'))['threads']
+                art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
+                mine = lambda rows: [r for r in rows if r.get('workflow') == value['id']]
+                self.assertEqual(len(mine(codex)), 2)
+                self.assertEqual(len(mine(threads)), 1)
+                self.assertEqual(len(mine(art)), 4)
+                area = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))['areas'][0]
+                ids = {e['id'] for e in codex} | {t['id'] for t in threads}
+                for link in area['npcs'] + area['items'] + area['threads']:
+                    self.assertIn(link, ids)
+                self.assertTrue(all(a['codex'] in ids for a in mine(art) if a['codex']))
+                self.assertEqual(len(area['journal']), 2)
+                index = campaign_core.read_json(campaign_core.doc_path('maps/index'))
+                self.assertTrue(next(m for m in index['items'] if m['slug'] == slug)['stocked'])
+                with self.assertRaises(ValueError):
+                    workflow.apply_content(workflow.get(value['id']), campaign_core.commit_docs)
+
+    def test_next_change_completes_an_interrupted_one_first(self):
         slug, brief = self.import_map()
         value = workflow.stage(workflow.create(slug, brief), self.proposal())
-
-        def failing_save(name, doc):
-            if name.startswith('mapkey/'):
-                raise OSError('Simulated interrupted write')
-            return campaign_core.write_doc(name, doc)
-
-        with self.assertRaises(OSError):
-            workflow.apply_content(value, failing_save)
-        workflow.apply_content(value, campaign_core.write_doc)
-        self.assertEqual(
-            len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 2
+        codex_rev = campaign_core.rev_of(campaign_core.doc_path('codex'))
+        with self.crash_after(0), self.assertRaises(Crash):
+            workflow.apply_content(value, campaign_core.commit_docs)
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        # A browser tab holding the old codex revision must merge the completed change.
+        conflict = urllib.request.Request(
+            self.url + '/api/doc/codex',
+            data=json.dumps({'entries': []}).encode(),
+            headers={'Content-Type': 'application/json', 'X-DM-Site': '1', 'X-Rev': codex_rev},
+            method='PUT',
         )
+        with self.assertRaises(urllib.error.HTTPError) as stale:
+            urllib.request.urlopen(conflict)
+        self.assertEqual(stale.exception.code, 409)
+        self.assertEqual(len(json.loads(stale.exception.read())['doc']['entries']), 2)
+        self.assertEqual(workflow.get(value['id'])['status'], 'applied')
+        self.request('/api/workflow/' + value['id'] + '/apply', {}, expected=400)
+
+    def test_interrupted_change_with_an_edited_document_is_reported_not_overwritten(self):
+        slug, brief = self.import_map()
+        value = workflow.stage(workflow.create(slug, brief), self.proposal())
+        with self.crash_after(1), self.assertRaises(Crash):
+            workflow.apply_content(value, campaign_core.commit_docs)
+        # Someone edits a pending document while the server is stopped.
+        campaign_core.write_doc('threads', {'threads': [{'id': 'hand-edited'}]})
+
+        report = campaign_core.recover_commits()
+
+        self.assertEqual(report['completed'], [])
         self.assertEqual(
-            len(campaign_core.read_json(campaign_core.doc_path('threads'))['threads']), 1
+            campaign_core.read_json(campaign_core.doc_path('threads')),
+            {'threads': [{'id': 'hand-edited'}]},
         )
-        self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 4)
+        self.assertEqual(workflow.get(value['id'])['status'], 'review')
+        changes = self.request('/api/state')['interrupted_changes']
+        self.assertEqual(changes[0]['id'], report['conflicts'][0]['id'])
+        states = {t['name']: t['state'] for t in changes[0]['targets']}
+        self.assertEqual(states['codex'], 'written')
+        self.assertEqual(states['threads'], 'changed')
+        self.assertEqual(states['workflows/' + value['id']], 'pending')
+        dismissed = self.request('/api/commits/' + changes[0]['id'] + '/dismiss', {})
+        self.assertEqual(dismissed['interrupted_changes'], [])
+        # The proposal is still awaiting review, and reapplying it does not duplicate the codex.
+        self.request('/api/workflow/' + value['id'] + '/apply', {})
+        codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+        self.assertEqual(len(codex), 2)
+
+    def test_recovered_layout_still_queues_its_render(self):
+        brief = campaign_core.normal_brief(
+            {'name': 'Fixture yard', 'type': 'custom', 'width': 20, 'height': 20, 'seed': 3}
+        )
+        value = workflow.create('fixture-yard', brief, 'layout')
+        draft = {
+            'summary': 'An open yard.',
+            'operations': [
+                {'type': 'rect', 'row': 0, 'col': 0, 'width': 20, 'height': 20, 'fill': ','}
+            ],
+            'areas': [{'n': 1, 'name': 'Yard', 'kind': 'yard', 'at': [5, 5]}],
+        }
+        workflow.stage(value, draft)
+        # The server stops after the plan, key and status are written, before the render is queued.
+        with self.crash_after(3), self.assertRaises(Crash):
+            campaign_core.apply_layout(value['id'])
+        self.assertFalse(any(j.get('slug') == 'fixture-yard' for j in campaign_core.list_jobs()))
+
+        campaign_core.recover_commits()
+
+        renders = [j for j in campaign_core.list_jobs() if j.get('slug') == 'fixture-yard']
+        self.assertEqual([(j['kind'], j['populate']) for j in renders], [('forge', True)])
+        self.assertEqual(workflow.get(value['id'])['status'], 'applied')
+
+    def test_job_failure_does_not_overwrite_records_that_moved_on(self):
+        slug, brief = self.import_map()
+        value = workflow.create(slug, brief)
+        value.update(status='review', job='newer-job')
+        workflow.save(value)
+        campaign_core.write_doc(
+            'art',
+            {
+                'items': [
+                    {'id': 'art-ready', 'status': 'ready', 'image': 'one.png'},
+                    {'id': 'art-busy', 'status': 'generating'},
+                ]
+            },
+        )
+        campaign_core.fail_job({'id': 'old-job', 'workflow': value['id']}, 'Late failure')
+        campaign_core.fail_job({'id': 'img-1', 'art': 'art-ready'}, 'Late failure')
+        campaign_core.recover_interrupted_job({'id': 'img-2', 'art': 'art-busy'})
+        self.assertEqual(workflow.get(value['id'])['status'], 'review')
+        art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
+        self.assertEqual([a['status'] for a in art], ['ready', 'failed'])
+
+    def test_generated_image_links_its_codex_entry_and_location(self):
+        slug, _ = self.import_map()
+        campaign_core.write_doc('codex', {'entries': [{'id': 'npc-one', 'image': ''}]})
+        campaign_core.write_doc(
+            'art',
+            {
+                'items': [
+                    {'id': 'art-one', 'map': slug, 'area': 1, 'codex': 'npc-one'},
+                    {'id': 'art-two', 'map': slug, 'area': 1, 'codex': ''},
+                ]
+            },
+        )
+        done = {'kind': 'image', 'art': 'art-one', 'status': 'done'}
+        campaign_core.finish_job(done, 0, '{"path": "one.png"}')
+        failed = {'kind': 'image', 'art': 'art-two', 'status': 'done'}
+        campaign_core.finish_job(failed, 1, 'Provider refused')
+        art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
+        self.assertEqual((art[0]['status'], art[0]['image']), ('ready', 'one.png'))
+        self.assertEqual((art[1]['status'], failed['status']), ('failed', 'failed'))
+        codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+        self.assertEqual(codex[0]['image'], 'one.png')
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
+        self.assertEqual(key['areas'][0]['images'], ['one.png'])
 
     def request_proposal(self):
         return {
@@ -382,19 +530,20 @@ class StudioIntegration(unittest.TestCase):
         self.assertIn('scenes', pack['schema']['properties'])
         self.request('/api/requests/req-one/stage', {'draft': self.request_proposal()})
         self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
-        staged = campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]
-
-        def interrupted_save(name, doc):
-            if name == 'prep/s1':
-                raise OSError('Simulated interrupted prep write')
-            return campaign_core.write_doc(name, doc)
-
-        with self.assertRaises(OSError):
-            request_workflow.apply(staged, campaign_core.request_read, interrupted_save)
-        applied = self.request('/api/requests/req-one/apply', {})
+        box = campaign_core.read_json(campaign_core.doc_path('inbox'))
+        # The server stops after the codex and threads are written, before prep and status.
+        with self.crash_after(2), self.assertRaises(Crash):
+            request_workflow.apply(
+                box['items'][0], campaign_core.request_read, campaign_core.commit_docs, box
+            )
+        self.assertEqual(
+            campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]['status'],
+            'review',
+        )
+        self.request('/api/requests/req-one/apply', {}, expected=409)
+        applied = campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]
         self.assertEqual(applied['status'], 'done')
         self.assertTrue(applied['applied'])
-        self.request('/api/requests/req-one/apply', {}, expected=409)
         box = campaign_core.read_json(campaign_core.doc_path('inbox'))
         box['items'][0]['status'] = 'new'
         campaign_core.write_doc('inbox', box)
@@ -529,9 +678,14 @@ class StudioIntegration(unittest.TestCase):
         self.assertTrue((self.root / staged['preview']).exists())
         folder = self.dm / 'maps/fixture-layout'
         original = staged['draft']['plan']
-        (folder / 'plan.txt').write_text(original)
-        campaign_core.write_doc('mapkey/fixture-layout', {'areas': draft['areas']})
         campaign_core.write_doc('mapbrief/fixture-layout', brief)
+        job = campaign_core.apply_layout(value['id'])
+        self.assertEqual((job['kind'], job['populate']), ('forge', True))
+        self.assertEqual((folder / 'plan.txt').read_text(), original)
+        self.assertEqual(workflow.get(value['id'])['status'], 'applied')
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/fixture-layout'))
+        self.assertEqual(key['areas'][0]['name'], 'Lodge')
+        self.assertEqual(campaign_core.JOURNAL.entries(), [])
         forge.forge(str(folder / 'plan.txt'), foundry_copy=False, jobs=1)
         self.assertTrue((folder / 'fixture-layout.webp').is_file())
         scene = json.loads((folder / 'fixture-layout.foundry.json').read_text())
@@ -549,7 +703,8 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assertNotEqual(changed['draft']['plan'], original)
         (folder / 'plan.txt').write_text(changed['draft']['plan'])
-        revisions.restore('fixture-layout', checkpoint['id'], campaign_core.write_doc)
+        job = campaign_core.restore_revision('fixture-layout', checkpoint['id'])
+        self.assertEqual((job['label'], job['populate']), ('Restore fixture-layout', False))
         self.assertEqual((folder / 'plan.txt').read_text(), original)
         for op in (
             {'type': 'rect', 'row': 19, 'col': 0, 'width': 5, 'height': 5, 'fill': '.'},

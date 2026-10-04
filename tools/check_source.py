@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
 import packaging_source
 
-PRIVATE_PARTS = {'data', 'maps', 'uploads', 'exports', '.history', '.env', '.local'}
+PRIVATE_PARTS = {'data', 'maps', 'uploads', 'exports', 'backups', '.history', '.env', '.local'}
 IGNORED_DIRS = {'.git', '.venv', 'venv', 'node_modules', '__pycache__', '.ruff_cache', 'dist'}
 PERSONAL_PATH = re.compile(r'[A-Z]:[\\/](?:Users[\\/]|DnD[\\/])', re.IGNORECASE)
 TOKEN = re.compile(

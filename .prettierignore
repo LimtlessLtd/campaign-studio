@@ -2,6 +2,7 @@ DM/data/
 DM/maps/
 DM/uploads/
 DM/exports/
+DM/backups/
 node_modules/
 .venv/
 dist/

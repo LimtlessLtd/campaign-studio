@@ -19,6 +19,7 @@ from pathlib import Path
 
 import config
 import foundry_backup
+import storage
 
 INVENTORY_FORMAT = 'campaign-studio-foundry-upgrade-inventory'
 CORE_RE = re.compile(r'^(\d{1,2})(?:\.(\d{1,4}))?$')
@@ -679,7 +680,7 @@ def report(inventory, backup_path, disabled_modules=(), approved_dependencies=()
     with inventory_path.open('x', encoding='utf-8') as stream:
         json.dump(inventory, stream, indent=2, ensure_ascii=False)
     result['inventory_path'] = str(inventory_path)
-    result['inventory_sha256'] = foundry_backup._digest(inventory_path)
+    result['inventory_sha256'] = storage.sha256_file(inventory_path)
     result['report_path'] = str(report_path)
     with report_path.open('x', encoding='utf-8') as stream:
         json.dump(result, stream, indent=2, ensure_ascii=False)
@@ -687,7 +688,7 @@ def report(inventory, backup_path, disabled_modules=(), approved_dependencies=()
 
 
 def _sidecar(path, backup, prefix, limit):
-    item = foundry_backup._absolute(path, 'Upgrade evidence file')
+    item = foundry_backup.absolute_folder(path, 'Upgrade evidence file')
     if item.parent != backup or not item.name.startswith(prefix) or item.suffix != '.json':
         raise ValueError('Upgrade evidence must be a JSON sidecar beside the backup.')
     if not item.is_file() or item.stat().st_size > limit:
@@ -708,7 +709,7 @@ def prepare_clone(
     """Copy a reviewed, verified v12 backup to a separate pre-migration clone."""
     if confirmed_v12_restore is not True or confirmed_report is not True:
         raise ValueError('Confirm the v12 restore test and review the compatibility report first.')
-    selected_report = foundry_backup._absolute(report_path, 'Compatibility report')
+    selected_report = foundry_backup.absolute_folder(report_path, 'Compatibility report')
     if not selected_report.is_file() or selected_report.stat().st_size > 20 * 1024 * 1024:
         raise ValueError('Select a saved compatibility report.')
     preliminary = json.loads(selected_report.read_text(encoding='utf-8'))
@@ -726,7 +727,7 @@ def prepare_clone(
         report_data.get('report_path') != str(report_file)
         or report_data.get('backup_path') != str(backup_path)
         or inventory_data.get('schema') != 2
-        or report_data.get('inventory_sha256') != foundry_backup._digest(inventory_file)
+        or report_data.get('inventory_sha256') != storage.sha256_file(inventory_file)
     ):
         raise ValueError('The compatibility report and v12 inventory do not match.')
     world = report_data.get('world') or {}
@@ -763,8 +764,8 @@ def prepare_clone(
     ):
         raise ValueError('The report has unresolved module decisions.')
     receipt_file, receipt = _sidecar(restore_receipt_path, backup_path, 'restore-test-', 64 * 1024)
-    restore = foundry_backup._absolute(receipt.get('restore_path'), 'Restore test copy')
-    backup_manifest_hash = foundry_backup._digest(backup_path / foundry_backup.MANIFEST)
+    restore = foundry_backup.absolute_folder(receipt.get('restore_path'), 'Restore test copy')
+    backup_manifest_hash = storage.sha256_file(backup_path / foundry_backup.MANIFEST)
     if (
         receipt.get('format') != 'campaign-studio-foundry-restore-test'
         or receipt.get('backup_path') != str(backup_path)
@@ -773,17 +774,17 @@ def prepare_clone(
         or not restore.is_dir()
     ):
         raise ValueError('The restore-test receipt does not match this verified backup.')
-    backup_manifest = foundry_backup._read_manifest(backup_path)
-    original_user_data = foundry_backup._absolute(
+    backup_manifest = foundry_backup.read_manifest(backup_path)
+    original_user_data = foundry_backup.absolute_folder(
         backup_manifest.get('source_user_data'), 'Original Foundry User Data'
     )
     if (
-        foundry_backup._within(restore, original_user_data)
-        or foundry_backup._within(restore, backup_path)
-        or foundry_backup._within(backup_path, restore)
+        foundry_backup.within(restore, original_user_data)
+        or foundry_backup.within(restore, backup_path)
+        or foundry_backup.within(backup_path, restore)
     ):
         raise ValueError('The restore test copy must be separate from live data and the backup.')
-    relative_world = foundry_backup._relative(backup['world']['manifest_path'])
+    relative_world = storage.manifest_path(backup['world']['manifest_path'])
     restored_world = json.loads((restore / relative_world).read_text(encoding='utf-8'))
     if (
         not isinstance(restored_world, dict)
@@ -792,8 +793,8 @@ def prepare_clone(
         or _core(restored_world.get('coreVersion'))[0] != 12
     ):
         raise ValueError('The restore test copy is no longer the original v12 world.')
-    target = foundry_backup._absolute(destination, 'Upgrade clone destination')
-    if foundry_backup._within(target, restore) or foundry_backup._within(restore, target):
+    target = foundry_backup.absolute_folder(destination, 'Upgrade clone destination')
+    if foundry_backup.within(target, restore) or foundry_backup.within(restore, target):
         raise ValueError('The upgrade clone must be separate from the restore test copy.')
     clone = foundry_backup.rehearse(str(backup_path), str(target))
     to_disable = [
@@ -814,7 +815,7 @@ def prepare_clone(
         'target_build': build,
         'backup_path': str(backup_path),
         'report_path': str(report_file),
-        'report_sha256': foundry_backup._digest(report_file),
+        'report_sha256': storage.sha256_file(report_file),
         'restore_receipt_path': str(receipt_file),
         'clone_path': clone['path'],
         'clone_receipt_path': clone['receipt_path'],
@@ -848,7 +849,7 @@ def _installed_clone_packages(clone, kind):
         not root.is_dir()
         or root.is_symlink()
         or getattr(root, 'is_junction', lambda: False)()
-        or not foundry_backup._within(root.resolve(), clone)
+        or not foundry_backup.within(root.resolve(), clone)
     ):
         raise ValueError(f'The clone has no safe {kind} directory.')
     packages = {}
@@ -858,7 +859,7 @@ def _installed_clone_packages(clone, kind):
             not folder.is_dir()
             or folder.is_symlink()
             or getattr(folder, 'is_junction', lambda: False)()
-            or not foundry_backup._within(folder.resolve(), clone)
+            or not foundry_backup.within(folder.resolve(), clone)
             or not ID_RE.fullmatch(folder.name)
         ):
             raise ValueError(f'Invalid or linked package folder in the clone: {folder.name}')
@@ -866,7 +867,7 @@ def _installed_clone_packages(clone, kind):
         if (
             manifest.is_symlink()
             or not manifest.is_file()
-            or not foundry_backup._within(manifest.resolve(), clone)
+            or not foundry_backup.within(manifest.resolve(), clone)
             or manifest.stat().st_size > MAX_MANIFEST
         ):
             raise ValueError(f'Missing, linked or oversized clone manifest: {folder.name}')
@@ -891,7 +892,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
     """
     if confirmed_clone is not True:
         raise ValueError('Confirm that this inventory was exported from the isolated v12 clone.')
-    selected_plan = foundry_backup._absolute(plan_path, 'Clone plan')
+    selected_plan = foundry_backup.absolute_folder(plan_path, 'Clone plan')
     if not selected_plan.is_file() or selected_plan.stat().st_size > 256 * 1024:
         raise ValueError('Select a saved clone plan.')
     preliminary = json.loads(selected_plan.read_text(encoding='utf-8'))
@@ -906,9 +907,9 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
     receipt_file, receipt = _sidecar(
         plan.get('clone_receipt_path'), backup_path, 'restore-test-', 64 * 1024
     )
-    clone = foundry_backup._absolute(plan.get('clone_path'), 'Upgrade clone')
-    backup_manifest = foundry_backup._read_manifest(backup_path)
-    original_root = foundry_backup._absolute(
+    clone = foundry_backup.absolute_folder(plan.get('clone_path'), 'Upgrade clone')
+    backup_manifest = foundry_backup.read_manifest(backup_path)
+    original_root = foundry_backup.absolute_folder(
         backup_manifest.get('source_user_data'), 'Original Foundry User Data'
     )
     report_modules = report_data.get('modules')
@@ -940,7 +941,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         plan.get('format') != 'campaign-studio-foundry-clone-plan'
         or plan.get('status') != 'awaiting_v12_module_review'
         or plan.get('backup_path') != str(backup_path)
-        or plan.get('report_sha256') != foundry_backup._digest(report_file)
+        or plan.get('report_sha256') != storage.sha256_file(report_file)
         or plan.get('target_build') != report_data.get('recommended_build')
         or not isinstance(plan_world, dict)
         or plan_world != report_data.get('world')
@@ -956,13 +957,13 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         or receipt.get('format') != 'campaign-studio-foundry-restore-test'
         or receipt.get('backup_path') != str(backup_path)
         or receipt.get('backup_manifest_sha256')
-        != foundry_backup._digest(backup_path / foundry_backup.MANIFEST)
+        != storage.sha256_file(backup_path / foundry_backup.MANIFEST)
         or receipt.get('restore_path') != str(clone)
         or receipt.get('world') != backup['world']
         or not clone.is_dir()
-        or foundry_backup._within(clone, original_root)
-        or foundry_backup._within(clone, backup_path)
-        or foundry_backup._within(backup_path, clone)
+        or foundry_backup.within(clone, original_root)
+        or foundry_backup.within(clone, backup_path)
+        or foundry_backup.within(backup_path, clone)
     ):
         raise ValueError('The clone plan, report, receipt and verified backup do not match.')
     if (
@@ -976,11 +977,11 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         inventory['world'].get(key) != world.get(key) for key in ('id', 'system', 'coreVersion')
     ):
         raise ValueError('The inventory is for a different world or Foundry build.')
-    world_manifest = clone / foundry_backup._relative(backup['world']['manifest_path'])
+    world_manifest = clone / storage.manifest_path(backup['world']['manifest_path'])
     if (
         world_manifest.is_symlink()
         or not world_manifest.is_file()
-        or not foundry_backup._within(world_manifest.resolve(), clone)
+        or not foundry_backup.within(world_manifest.resolve(), clone)
         or world_manifest.stat().st_size > MAX_MANIFEST
     ):
         raise ValueError('The clone world manifest is missing or linked.')
@@ -1049,7 +1050,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         'backup_path': str(backup_path),
         'clone_path': str(clone),
         'plan_path': str(plan_file),
-        'plan_sha256': foundry_backup._digest(plan_file),
+        'plan_sha256': storage.sha256_file(plan_file),
         'report_path': str(report_file),
         'clone_receipt_path': str(receipt_file),
         'target_build': plan['target_build'],
@@ -1069,7 +1070,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
     with inventory_file.open('x', encoding='utf-8') as stream:
         json.dump(inventory, stream, indent=2, ensure_ascii=False)
     result['inventory_path'] = str(inventory_file)
-    result['inventory_sha256'] = foundry_backup._digest(inventory_file)
+    result['inventory_sha256'] = storage.sha256_file(inventory_file)
     result['review_path'] = str(review_file)
     with review_file.open('x', encoding='utf-8') as stream:
         json.dump(result, stream, indent=2, ensure_ascii=False)
@@ -1080,7 +1081,7 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
     """Audit a GM-exported migrated clone against its saved target package plan."""
     if confirmed_clone is not True:
         raise ValueError('Confirm that this export came from the isolated migrated clone.')
-    selected_review = foundry_backup._absolute(review_path, 'v12 clone review')
+    selected_review = foundry_backup.absolute_folder(review_path, 'v12 clone review')
     if not selected_review.is_file() or selected_review.stat().st_size > 256 * 1024:
         raise ValueError('Select a passing v12 clone review.')
     preliminary = json.loads(selected_review.read_text(encoding='utf-8'))
@@ -1101,9 +1102,9 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
     clone_receipt_file, clone_receipt = _sidecar(
         plan.get('clone_receipt_path'), backup_path, 'restore-test-', 64 * 1024
     )
-    clone = foundry_backup._absolute(plan.get('clone_path'), 'Upgrade clone')
-    backup_manifest = foundry_backup._read_manifest(backup_path)
-    original_root = foundry_backup._absolute(
+    clone = foundry_backup.absolute_folder(plan.get('clone_path'), 'Upgrade clone')
+    backup_manifest = foundry_backup.read_manifest(backup_path)
+    original_root = foundry_backup.absolute_folder(
         backup_manifest.get('source_user_data'), 'Original Foundry User Data'
     )
     plan_modules = plan.get('selected_modules')
@@ -1136,10 +1137,10 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
         or review.get('blockers') != []
         or review.get('backup_path') != str(backup_path)
         or review.get('review_path') != str(review_file)
-        or review.get('plan_sha256') != foundry_backup._digest(plan_file)
+        or review.get('plan_sha256') != storage.sha256_file(plan_file)
         or review.get('report_path') != str(report_file)
         or review.get('disabled_in_v12') != plan.get('disable_in_v12')
-        or review.get('inventory_sha256') != foundry_backup._digest(reviewed_inventory_file)
+        or review.get('inventory_sha256') != storage.sha256_file(reviewed_inventory_file)
         or review.get('expected_enabled') != v12_enabled
         or review.get('configured_enabled') != v12_enabled
         or review.get('runtime_active') != v12_enabled
@@ -1150,7 +1151,7 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
         or plan.get('format') != 'campaign-studio-foundry-clone-plan'
         or plan.get('status') != 'awaiting_v12_module_review'
         or plan.get('migration_ready') is not False
-        or plan.get('report_sha256') != foundry_backup._digest(report_file)
+        or plan.get('report_sha256') != storage.sha256_file(report_file)
         or plan.get('target_build') != report_data.get('recommended_build')
         or plan.get('world') != report_data.get('world')
         or plan_modules != selected_from_report
@@ -1158,13 +1159,13 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
         or clone_receipt.get('backup_path') != str(backup_path)
         or clone_receipt.get('restore_path') != str(clone)
         or clone_receipt.get('backup_manifest_sha256')
-        != foundry_backup._digest(backup_path / foundry_backup.MANIFEST)
+        != storage.sha256_file(backup_path / foundry_backup.MANIFEST)
         or clone_receipt.get('world') != backup['world']
         or review.get('clone_receipt_path') != str(clone_receipt_file)
         or not clone.is_dir()
-        or foundry_backup._within(clone, original_root)
-        or foundry_backup._within(clone, backup_path)
-        or foundry_backup._within(backup_path, clone)
+        or foundry_backup.within(clone, original_root)
+        or foundry_backup.within(clone, backup_path)
+        or foundry_backup.within(backup_path, clone)
     ):
         raise ValueError('The passing v12 review, clone plan and verified backup do not match.')
     if (
@@ -1210,11 +1211,11 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
     checks = manual_checks if isinstance(manual_checks, dict) else {}
     check_names = ('launch', 'scenes', 'journals', 'actors_items', 'modules')
     checks = {name: checks.get(name) is True for name in check_names}
-    world_manifest = clone / foundry_backup._relative(backup['world']['manifest_path'])
+    world_manifest = clone / storage.manifest_path(backup['world']['manifest_path'])
     if (
         world_manifest.is_symlink()
         or not world_manifest.is_file()
-        or not foundry_backup._within(world_manifest.resolve(), clone)
+        or not foundry_backup.within(world_manifest.resolve(), clone)
         or world_manifest.stat().st_size > MAX_MANIFEST
     ):
         raise ValueError('The migrated clone world manifest is missing or linked.')
@@ -1274,7 +1275,7 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
         'backup_path': str(backup_path),
         'clone_path': str(clone),
         'v12_review_path': str(review_file),
-        'v12_review_sha256': foundry_backup._digest(review_file),
+        'v12_review_sha256': storage.sha256_file(review_file),
         'plan_path': str(plan_file),
         'target_build': plan['target_build'],
         'reported_build': world.get('coreVersion'),
@@ -1295,7 +1296,7 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
     with inventory_file.open('x', encoding='utf-8') as stream:
         json.dump(inventory, stream, indent=2, ensure_ascii=False)
     result['inventory_path'] = str(inventory_file)
-    result['inventory_sha256'] = foundry_backup._digest(inventory_file)
+    result['inventory_sha256'] = storage.sha256_file(inventory_file)
     result['audit_path'] = str(audit_file)
     with audit_file.open('x', encoding='utf-8') as stream:
         json.dump(result, stream, indent=2, ensure_ascii=False)

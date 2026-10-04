@@ -1,0 +1,97 @@
+// The autosave merge must never drop an edit made on either side.
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+
+const context = {};
+vm.runInNewContext(
+  fs.readFileSync('DM/app/merge.js', 'utf8') + '\nthis.mergeInto = mergeInto; this.clone = clone;',
+  context,
+);
+const { mergeInto, clone } = context;
+const merge = (base, local, server) => {
+  const result = clone(local);
+  return JSON.parse(JSON.stringify(mergeInto(clone(base), result, clone(server))));
+};
+
+// Keyed lists merge item by item; untouched deletions follow the server.
+assert.deepEqual(
+  merge(
+    {
+      entries: [
+        { id: 'a', name: 'A' },
+        { id: 'b', name: 'B' },
+      ],
+    },
+    {
+      entries: [
+        { id: 'a', name: 'A edited' },
+        { id: 'b', name: 'B' },
+      ],
+    },
+    {
+      entries: [
+        { id: 'a', name: 'A' },
+        { id: 'c', name: 'C' },
+      ],
+    },
+  ),
+  {
+    entries: [
+      { id: 'a', name: 'A edited' },
+      { id: 'c', name: 'C' },
+    ],
+  },
+);
+
+// Lists without ids keep both sides' additions instead of one side replacing the other.
+assert.deepEqual(
+  merge(
+    { goals: ['Reach the gate'], checklist: [{ text: 'Map', done: false }] },
+    { goals: ['Reach the gate', 'Find the key'], checklist: [{ text: 'Map', done: true }] },
+    {
+      goals: ['Reach the gate', 'Learn who sent the notice'],
+      checklist: [
+        { text: 'Map', done: false },
+        { text: 'Prepare the patrol', done: false },
+      ],
+    },
+  ),
+  {
+    goals: ['Reach the gate', 'Find the key', 'Learn who sent the notice'],
+    checklist: [
+      { text: 'Map', done: true },
+      { text: 'Prepare the patrol', done: false },
+    ],
+  },
+);
+
+// An item the server removed is dropped unless it was edited here.
+assert.deepEqual(merge({ goals: ['A', 'B'] }, { goals: ['A', 'B', 'C'] }, { goals: ['A'] }), {
+  goals: ['A', 'C'],
+});
+
+// A field the server removed stays removed unless it was edited here.
+assert.deepEqual(
+  merge(
+    { status: 'new', error: 'Failed' },
+    { status: 'new', error: 'Failed' },
+    { status: 'review' },
+  ),
+  { status: 'review' },
+);
+assert.deepEqual(merge({ notes: 'x' }, { notes: 'mine' }, {}), { notes: 'mine' });
+
+// Unchanged local values take the server's; local edits win over server edits to the same value.
+assert.deepEqual(merge({ a: 1, b: 1 }, { a: 2, b: 1 }, { a: 3, b: 4 }), { a: 2, b: 4 });
+
+// Lists change in place, because an open editor keeps a reference to the array it renders.
+for (const local of [['A', 'B'], ['A']]) {
+  const page = { goals: local };
+  const goals = page.goals;
+  mergeInto({ goals: ['A'] }, page, { goals: ['A', 'C'] });
+  assert.equal(page.goals, goals);
+  assert.ok(goals.includes('C'));
+}
+
+console.log('Autosave merge cases passed.');

@@ -89,7 +89,7 @@ class FoundryBackupTests(unittest.TestCase):
         self.assertFalse(target.exists())
 
     def test_new_source_file_during_copy_keeps_backup_incomplete(self):
-        original = foundry_backup._copy_and_hash
+        original = foundry_backup.storage.copy_and_hash
         changed = False
 
         def copy_then_change(source, target):
@@ -100,7 +100,7 @@ class FoundryBackupTests(unittest.TestCase):
                 (self.live / 'Data' / 'assets' / 'late.png').write_bytes(b'late file')
             return record
 
-        with patch.object(foundry_backup, '_copy_and_hash', side_effect=copy_then_change):
+        with patch.object(foundry_backup.storage, 'copy_and_hash', side_effect=copy_then_change):
             with self.assertRaisesRegex(ValueError, 'changed during the backup'):
                 foundry_backup.create(str(self.root / 'copies'), confirmed_closed=True)
         self.assertEqual(list((self.root / 'copies').glob('foundry-*')), [])

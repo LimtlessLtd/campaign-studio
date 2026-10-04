@@ -2,6 +2,11 @@
 
 Describe the user outcome and link the issue/acceptance criteria.
 
+## Previous PR review
+
+Agent PRs: one `Reviewed-PR:` line per PR merged since the last recorded review, also recorded as a commit
+trailer (see Review relay in docs/DEVELOPMENT.md). Outside contributors can leave this blank.
+
 ## Verification
 
 - Commands run and results:

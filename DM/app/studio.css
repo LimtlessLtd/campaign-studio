@@ -1256,6 +1256,10 @@ hr {
   border-radius: 8px;
   margin-bottom: 24px;
 }
+.connection-banner.attention {
+  border-color: var(--blood);
+  background: #2f2020;
+}
 .connection-banner > div {
   flex: 1;
 }

@@ -56,9 +56,6 @@ const slug = (s) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 const uid = (p) => p + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-const clone = (x) => JSON.parse(JSON.stringify(x));
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 const when = (t) =>
   new Date(typeof t === 'number' && t < 1e12 ? t * 1000 : t).toLocaleString([], {
     dateStyle: 'short',
@@ -189,46 +186,6 @@ async function doc(name, fallback) {
   return S.docs[name];
 }
 
-/* Fold the server's version into ours, in place (pages hold references into these objects): anything we
-   haven't changed since we loaded it takes the server's value; lists of objects with ids merge item by item. */
-function mergeInto(base, local, server) {
-  if (Array.isArray(local) && Array.isArray(server)) {
-    const keyed = (a) => a.every((x) => isObj(x) && ('id' in x || 'n' in x));
-    const idOf = (x) => ('id' in x ? x.id : 'n' + x.n);
-    if (keyed(local) && keyed(server)) {
-      const b = new Map((Array.isArray(base) ? base : []).filter(isObj).map((x) => [idOf(x), x]));
-      const l = new Map(local.map((x) => [idOf(x), x]));
-      const s = new Map(server.map((x) => [idOf(x), x]));
-      server.forEach((x, i) => {
-        if (l.has(idOf(x))) mergeInto(b.get(idOf(x)), l.get(idOf(x)), x);
-        else if (!b.has(idOf(x))) local.splice(Math.min(i, local.length), 0, x); // new on the server
-      });
-      for (let i = local.length - 1; i >= 0; i--) {
-        // deleted on the server and untouched here
-        const x = local[i];
-        if (!s.has(idOf(x)) && b.has(idOf(x)) && same(b.get(idOf(x)), x)) local.splice(i, 1);
-      }
-      return local;
-    }
-    return same(base, local) ? server : local;
-  }
-  if (isObj(local) && isObj(server)) {
-    for (const k of Object.keys(server)) {
-      const bv = isObj(base) ? base[k] : undefined;
-      if (!(k in local)) {
-        if (!(isObj(base) && k in base)) local[k] = server[k];
-        continue;
-      }
-      if (isObj(local[k]) || Array.isArray(local[k])) {
-        const m = mergeInto(bv, local[k], server[k]);
-        if (m !== local[k]) local[k] = m;
-      } else if (same(bv, local[k])) local[k] = server[k];
-    }
-    return local;
-  }
-  return same(base, local) ? server : local;
-}
-
 const timers = {};
 function save(name) {
   const flag = $('#saved');
@@ -248,6 +205,8 @@ function save(name) {
 async function flush(name) {
   clearTimeout(timers[name]);
   for (let attempt = 0; attempt < 4; attempt++) {
+    // Edits can continue while the request is in flight: only what was sent becomes the saved base.
+    const sent = JSON.stringify(S.docs[name]);
     const r = await fetch('/api/doc/' + name, {
       method: 'PUT',
       headers: {
@@ -255,7 +214,7 @@ async function flush(name) {
         'X-DM-Site': '1',
         'X-Rev': S.revs[name] || '',
       },
-      body: JSON.stringify(S.docs[name]),
+      body: sent,
     });
     if (r.status === 409) {
       const { doc: server, rev } = await r.json();
@@ -267,8 +226,8 @@ async function flush(name) {
     }
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
     S.revs[name] = (await r.json()).rev;
-    S.base[name] = clone(S.docs[name]);
-    delete S.pending[name];
+    S.base[name] = JSON.parse(sent);
+    if (JSON.stringify(S.docs[name]) === sent) delete S.pending[name];
     $('#saved').textContent =
       (S.merged ? 'Merged with changes made elsewhere · ' : '') +
       'Saved ' +

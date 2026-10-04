@@ -9,8 +9,10 @@ your campaign or credentials. Describe bugs with steps, versions, expected behav
 fixture. For UI changes, include a synthetic screenshot and the viewport you checked.
 
 Keep PRs focused, describe the user outcome and tests, and identify migrations or unverified integrations.
-CI must pass. A maintainer reviews persistence and Foundry ownership changes before merging. Update the
-source manifest for new files and add a changelog entry for user-visible behavior.
+CI must pass. A maintainer reviews outside contributions, especially persistence and Foundry ownership
+changes, before merging. The owner's coding agents merge their own PRs under the review relay in
+[development](docs/DEVELOPMENT.md). Update the source manifest for new files and add a changelog entry for
+user-visible behavior.
 
 Contributions are provided under the repository's MIT license. Foundry VTT and optional AI services are
 separate products; this project does not bundle them or their credentials.

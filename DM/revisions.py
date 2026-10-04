@@ -65,7 +65,8 @@ def listing(slug):
     return result
 
 
-def restore(slug, rid, save_doc):
+def restore(slug, rid, commit):
+    """Checkpoint the current map, then restore its plan, key and brief in one commit."""
     if not re.fullmatch(r'[0-9a-f-]+', rid):
         raise ValueError('Invalid revision id.')
     source = os.path.join(folder(slug), 'revisions', rid)
@@ -80,12 +81,11 @@ def restore(slug, rid, save_doc):
     text = Path(plan).read_text(encoding='utf-8') if os.path.isfile(plan) else None
     if text is not None:
         forge.parse_plan(text)
-    checkpoint(slug, 'Before restoring ' + rid)
-    if text is not None:
-        with open(os.path.join(folder(slug), 'plan.txt'), 'w', encoding='utf-8', newline='\n') as f:
-            f.write(text)
+    changes = [] if text is None else [('plan/' + slug, text)]
     for name, doc in (('key.json', 'mapkey/' + slug), ('brief.json', 'mapbrief/' + slug)):
         path = os.path.join(source, name)
         if os.path.isfile(path):
             with open(path, encoding='utf-8') as f:
-                save_doc(doc, json.load(f))
+                changes.append((doc, json.load(f)))
+    checkpoint(slug, 'Before restoring ' + rid)
+    return commit('Restore ' + slug + ' revision ' + rid, changes)

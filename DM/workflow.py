@@ -548,7 +548,8 @@ def parse_output(raw):
     return result
 
 
-def apply_content(value, save_doc):
+def apply_content(value, commit):
+    """Link a reviewed content draft. commit(label, changes) writes every document together."""
     if value['status'] != 'review' or value['kind'] != 'content':
         raise ValueError('This workflow has no content draft awaiting review.')
     draft = validate(value, deepcopy(value['draft']))
@@ -677,15 +678,20 @@ def apply_content(value, save_doc):
                 )
     key['stocked'] = True
     link(key.setdefault('applied_workflows', []), value['id'])
-    # All validated canonical writes go through the server's history-preserving save function.
-    save_doc('codex', codex)
-    save_doc('threads', threads)
-    save_doc('art', art)
-    save_doc('mapkey/' + slug, key)
     value.update(
         status='applied',
         applied=datetime.datetime.now().isoformat(timespec='seconds'),
         counts=counts,
     )
-    save(value)
+    # The workflow status is written last, so 'applied' always means every link exists.
+    commit(
+        'Apply content ' + value['id'],
+        [
+            ('codex', codex),
+            ('threads', threads),
+            ('art', art),
+            ('mapkey/' + slug, key),
+            ('workflows/' + value['id'], value),
+        ],
+    )
     return value

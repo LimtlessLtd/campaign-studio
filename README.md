@@ -98,6 +98,10 @@ record the GM's scene, journal, actor/item and module checks.
 ## Your files
 
 Runtime content lives in `DM/data`, maps in `DM/maps`, artwork in `DM/uploads`. Back up these directories.
+If the server stops during a change that spans several documents, it completes the change when it restarts.
+When an update changes how documents are stored, Campaign Studio copies them to `DM/backups`, verifies the
+copies and migrates on startup; it refuses a campaign saved by a newer version. `python DM/migrate.py`
+reports pending migrations and `--restore` returns to a backup. See [architecture](docs/ARCHITECTURE.md).
 Document saves retain previous versions in `DM/data/.history`; layout checkpoints live beside each map.
 Story thread statuses are open, planned, foreshadowed and resolved. Session prep and the codex remain editable.
 Text handouts drafted for a session appear in that session's prep, with player text and GM secrets separated.

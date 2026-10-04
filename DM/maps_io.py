@@ -174,8 +174,7 @@ def export(slug, save_doc):
             if config.settings().get('world_path')
             else ''
         )
-        with open(scene_path, 'w', encoding='utf-8') as f:
-            json.dump(scene, f, indent=1)
+        storage.atomic_json(scene_path, scene)
         target = os.path.join(data_path, 'wotg-maps')
         os.makedirs(target, exist_ok=True)
         image_path = os.path.join(os.path.dirname(ROOT), entry['image'])
@@ -184,13 +183,7 @@ def export(slug, save_doc):
         roofs = os.path.join(folder, slug + '.roofs')
         if os.path.isdir(roofs):
             shutil.copytree(roofs, os.path.join(target, slug, 'roofs'), dirs_exist_ok=True)
-        listing = []
-        for name in sorted(os.listdir(target)):
-            if name.endswith('.json') and name != 'index.json':
-                info = read_json(os.path.join(target, name))
-                listing.append({'slug': name[:-5], 'name': info.get('name', name[:-5])})
-        with open(os.path.join(target, 'index.json'), 'w', encoding='utf-8') as f:
-            json.dump(listing, f, indent=1)
+        forge.write_foundry_index(target)
         entry.update(
             in_foundry=True,
             exported_world=tag['targetWorld'],
