@@ -1,10 +1,23 @@
-/* Document helpers shared by the app: copies, comparison and the three-way autosave merge.
-   Free of DOM access so tools/check_merge.cjs can test the merge in Node. */
+/* Document helpers shared by the app: copies, comparison, new records and the three-way autosave merge.
+   Free of DOM access so tools/check_merge.cjs can test them in Node. */
 'use strict';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+
+/* A new record of a stored shape ({required, defaults}, defined once in DM/shapes.py): required fields
+   first, then the defaults, then extra links such as map or area. */
+function newRecord(shape, kind, fields = {}) {
+  if (!shape) throw new Error('Unknown record shape: ' + kind);
+  const missing = shape.required.filter((k) => !(k in fields));
+  if (missing.length) throw new Error(`A new ${kind} needs ${missing.join(', ')}.`);
+  const record = {};
+  for (const k of shape.required) record[k] = fields[k];
+  for (const [k, v] of Object.entries(shape.defaults))
+    record[k] = k in fields ? fields[k] : clone(v);
+  return Object.assign(record, fields);
+}
 
 /* Fold the server's version into ours, in place (pages hold references into these objects): anything we
    haven't changed since we loaded it takes the server's value; lists of objects with ids merge item by item. */

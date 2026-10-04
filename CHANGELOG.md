@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Each stored record (codex entry, thread, art brief, session prep, scene, handout, checklist item, loot,
+  map key, location, journal entry and event) is now defined once in `DM/shapes.py`. AI content and request
+  application, layout application, map import and the browser all build records from it, so records no
+  longer differ by where they were created: new locations from layouts now have rooms and threads lists,
+  new session preps have a handouts list and map events have a title. Schema 2 completes older records
+  with any missing field; threads that had no status are now listed as open instead of disappearing from
+  the threads page.
 - Development process: coding agents no longer wait for a human review. Each agent reviews the PRs merged
   since the last `Reviewed-PR:` trailer, fixes what they broke, then merges its own PR once CI is green.
   Releases, CI permissions and publishing campaign data still need the owner. See `docs/DEVELOPMENT.md`.
@@ -18,12 +25,12 @@
   the server restarts or before the next change; if a document was edited meanwhile, nothing is overwritten
   and the dashboard asks the GM to review it. Map plan edits and restores are now atomic.
 - Added a versioned data schema. On first start, existing 0.1.x data (schema 0) is copied to `DM/backups`,
-  verified by SHA-256 and migrated to schema 1, which fills missing list/text fields in codex entries,
-  threads, session prep, scenes, map keys and areas. Data from a newer version is refused.
+  verified by SHA-256 and migrated to the current schema, which fills missing list/text fields in stored
+  records. Data from a newer version is refused.
   `python DM/migrate.py` reports, applies or restores migrations.
 
   **Migration note:** keep `DM/backups` with your runtime folders. To return to 0.1.x, stop the server,
-  run `python DM/migrate.py --restore DM/backups/<schema-0-to-1 folder>` and start the older version.
+  run `python DM/migrate.py --restore DM/backups/<schema-0-to-2 folder>` and start the older version.
 
 - Added a read-only migrated-clone audit for Foundry v13/v14. A GM macro exports the isolated clone's build,
   package versions and activation; Studio compares them with the saved plan and records manual world checks.

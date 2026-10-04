@@ -9,6 +9,7 @@ import re
 import sys
 from copy import deepcopy
 from pathlib import Path
+import shapes
 import storage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -577,12 +578,11 @@ def apply_content(value, commit):
             # Preserve an existing description: proposed additions become a distinct journal entry.
             if target.get('text') and target['text'] != a['text']:
                 target.setdefault('journal', []).append(
-                    {
-                        'id': prefix + 'area-' + str(a['n']),
-                        'title': 'Additional scene detail',
-                        'text': a['text'],
-                        'secrets': '',
-                    }
+                    shapes.JOURNAL.new(
+                        id=prefix + 'area-' + str(a['n']),
+                        title='Additional scene detail',
+                        text=a['text'],
+                    )
                 )
             else:
                 target['text'] = a['text']
@@ -596,85 +596,69 @@ def apply_content(value, commit):
             rid = prefix + row['id']
             target = areas[row['area']]
             if kind in ('npcs', 'items'):
-                entry = {
-                    'id': rid,
-                    'type': 'npc' if kind == 'npcs' else 'item',
-                    'name': row['name'],
-                    'group': '',
-                    'status': 'alive' if kind == 'npcs' else '',
-                    'public': row['public'],
-                    'secrets': row['secrets'],
-                    'notes': row['notes'],
-                    'image': '',
-                    'files': [],
-                    'tags': [],
-                    'map': slug,
-                    'area': row['area'],
-                    'workflow': value['id'],
-                }
+                entry = shapes.CODEX_ENTRY.new(
+                    id=rid,
+                    type='npc' if kind == 'npcs' else 'item',
+                    name=row['name'],
+                    status='alive' if kind == 'npcs' else '',
+                    public=row['public'],
+                    secrets=row['secrets'],
+                    notes=row['notes'],
+                    map=slug,
+                    area=row['area'],
+                    workflow=value['id'],
+                )
                 add(codex['entries'], entry)
                 link(target.setdefault(kind, []), rid)
                 if kind == 'items':
                     add(
                         target.setdefault('loot', []),
-                        {
-                            'id': rid,
-                            'item': row['name'],
-                            'where': row['where'],
-                            'value': row['value'],
-                        },
+                        shapes.LOOT.new(
+                            id=rid, item=row['name'], where=row['where'], value=row['value']
+                        ),
                     )
             elif kind == 'journals':
                 add(
                     target.setdefault('journal', []),
-                    {
-                        'id': rid,
-                        'title': row['title'],
-                        'text': row['text'],
-                        'secrets': row['secrets'],
-                    },
+                    shapes.JOURNAL.new(
+                        id=rid, title=row['title'], text=row['text'], secrets=row['secrets']
+                    ),
                 )
             elif kind == 'events':
                 add(
                     target.setdefault('events', []),
-                    {
-                        'id': rid,
-                        'title': row['title'],
-                        'trigger': row['trigger'],
-                        'effect': row['effect'],
-                    },
+                    shapes.EVENT.new(
+                        id=rid, title=row['title'], trigger=row['trigger'], effect=row['effect']
+                    ),
                 )
             else:
                 add(
                     threads['threads'],
-                    {
-                        'id': rid,
-                        'title': row['title'],
-                        'status': row['status'],
-                        'detail': row['detail'],
-                        'pcs': [],
-                        'source': 'AI draft · ' + key.get('map', slug),
-                        'map': slug,
-                        'area': row['area'],
-                        'workflow': value['id'],
-                    },
+                    shapes.THREAD.new(
+                        id=rid,
+                        title=row['title'],
+                        status=row['status'],
+                        detail=row['detail'],
+                        source='AI draft · ' + key.get('map', slug),
+                        map=slug,
+                        area=row['area'],
+                        workflow=value['id'],
+                    ),
                 )
                 link(target.setdefault('threads', []), rid)
             if value['brief'].get('content', {}).get('art') and row.get('image_prompt'):
                 add(
                     art['items'],
-                    {
-                        'id': 'art-' + rid,
-                        'title': row.get('name') or row.get('title'),
-                        'prompt': row['image_prompt'],
-                        'map': slug,
-                        'area': row['area'],
-                        'codex': rid if kind in ('npcs', 'items') else '',
-                        'image': '',
-                        'status': 'queued',
-                        'created': datetime.datetime.now().timestamp(),
-                        'workflow': value['id'],
-                    },
+                    shapes.ART_ITEM.new(
+                        id='art-' + rid,
+                        prompt=row['image_prompt'],
+                        title=row.get('name') or row.get('title'),
+                        codex=rid if kind in ('npcs', 'items') else '',
+                        created=datetime.datetime.now().timestamp(),
+                        map=slug,
+                        area=row['area'],
+                        workflow=value['id'],
+                    ),
                 )
     key['stocked'] = True
     link(key.setdefault('applied_workflows', []), value['id'])

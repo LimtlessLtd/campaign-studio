@@ -1,0 +1,189 @@
+"""The stored shape of each campaign record, defined once.
+
+A shape names the fields a new record must be given and the defaults for the rest, and the shape of the
+records in each of its lists. Apply paths build records with Shape.new, the schema migration completes
+stored documents with Shape.fill_all, and the browser builds records from GET /api/shapes. Links and
+provenance (map, area, codex, workflow, request) are optional extra fields, not part of a shape.
+
+Adding a field changes fields_digest(). Stored records gain the field only through a migration, so a test
+fails until schema.py has a new version that fills it.
+"""
+
+import hashlib
+import json
+from copy import deepcopy
+
+
+class ShapeError(ValueError):
+    pass
+
+
+def json_type(value):
+    if isinstance(value, bool):
+        return 'boolean'
+    if isinstance(value, (int, float)):
+        return 'number'
+    return {str: 'string', list: 'array', dict: 'object'}.get(type(value), 'null')
+
+
+class Shape:
+    """A stored record type: required fields, defaults for the rest, and the shapes of its lists."""
+
+    def __init__(self, name, required, defaults, rows=None):
+        self.name = name
+        self.required = tuple(required)
+        self.defaults = defaults
+        self.rows = rows or {}  # list field -> Shape of the records in it
+        assert set(self.rows) <= set(defaults), name
+
+    def new(self, **fields):
+        """A complete new record: required fields first, then defaults, then any extra links."""
+        missing = [key for key in self.required if key not in fields]
+        if missing:
+            raise TypeError(f'A new {self.name} needs {", ".join(missing)}.')
+        record = {key: fields[key] for key in self.required}
+        for key, default in self.defaults.items():
+            record[key] = fields[key] if key in fields else deepcopy(default)
+        record.update((key, value) for key, value in fields.items() if key not in record)
+        return record
+
+    def fill(self, record):
+        """Give an existing record each missing (or null) default field, keeping every other value."""
+        for key, default in self.defaults.items():
+            if record.get(key) is None:
+                record[key] = deepcopy(default)
+        return record
+
+    def fill_all(self, document, path):
+        """Fill a stored document and every record in its lists. Rows that are not objects are kept."""
+        if not isinstance(document, dict):
+            raise ShapeError(f'{path} must contain a JSON object.')
+        self.fill(document)
+        for field, shape in self.rows.items():
+            if not isinstance(document[field], list):
+                raise ShapeError(f'{path}: {field} must be a list.')
+            for row in document[field]:
+                if isinstance(row, dict):
+                    shape.fill_all(row, path)
+        return document
+
+    def problems(self, record, where=None):
+        """Each field a record (or a record in its lists) lacks, or holds with another JSON type."""
+        where = where or self.name
+        if not isinstance(record, dict):
+            return [f'{where} is not an object']
+        found = [f'{where}.{key} is missing' for key in self.required if key not in record]
+        for key, default in self.defaults.items():
+            if key not in record:
+                found.append(f'{where}.{key} is missing')
+            elif json_type(record[key]) != json_type(default):
+                found.append(f'{where}.{key} is {json_type(record[key])}, not {json_type(default)}')
+        for field, shape in self.rows.items():
+            for i, row in enumerate(
+                record.get(field) if isinstance(record.get(field), list) else []
+            ):
+                found += shape.problems(row, f'{where}.{field}[{i}]')
+        return found
+
+    def describe(self):
+        return {'required': list(self.required), 'defaults': deepcopy(self.defaults)}
+
+
+CODEX_ENTRY = Shape(
+    'codex_entry',
+    ['id', 'type', 'name'],
+    dict(group='', status='', public='', secrets='', notes='', image='', files=[], tags=[]),
+)
+THREAD = Shape('thread', ['id', 'title'], dict(status='open', detail='', pcs=[], source=''))
+ART_ITEM = Shape(
+    'art_item', ['id', 'prompt'], dict(title='', codex='', image='', status='queued', created=0)
+)
+SCENE = Shape(
+    'scene',
+    ['id'],
+    dict(title='', where='', map='', npcs=[], encounter='', notes='', done=False),
+)
+HANDOUT = Shape('handout', ['id'], dict(title='', player_text='', secrets=''))
+CHECKLIST_ITEM = Shape('checklist_item', [], dict(text='', done=False))
+LOOT = Shape('loot', [], dict(item='', where='', value=''))
+JOURNAL = Shape('journal', ['id'], dict(title='', text='', secrets=''))
+EVENT = Shape('event', ['id'], dict(title='', trigger='', effect=''))
+AREA = Shape(
+    'area',
+    ['n', 'name', 'kind', 'at'],
+    dict(
+        rooms=[],
+        text='',
+        creatures='',
+        loot=[],
+        events=[],
+        npcs=[],
+        items=[],
+        journal=[],
+        images=[],
+        threads=[],
+    ),
+    {'journal': JOURNAL, 'events': EVENT, 'loot': LOOT},
+)
+# Stored documents.
+CODEX = Shape('codex', [], dict(entries=[]), {'entries': CODEX_ENTRY})
+THREADS = Shape('threads', [], dict(threads=[]), {'threads': THREAD})
+ART = Shape('art', [], dict(items=[]), {'items': ART_ITEM})
+PREP = Shape(
+    'prep',
+    ['n', 'title'],
+    dict(
+        date='',
+        status='planning',
+        recap='',
+        goals=[],
+        threads=[],
+        scenes=[],
+        checklist=[],
+        notes='',
+        loot=[],
+        handouts=[],
+    ),
+    {'scenes': SCENE, 'handouts': HANDOUT, 'checklist': CHECKLIST_ITEM, 'loot': LOOT},
+)
+MAP_KEY = Shape(
+    'map_key',
+    [],
+    dict(map='', areas=[], events=[], notes='', session='', stocked=False, images=[]),
+    {'areas': AREA, 'events': EVENT},
+)
+
+SHAPES = {
+    shape.name: shape
+    for shape in (
+        CODEX_ENTRY,
+        THREAD,
+        ART_ITEM,
+        SCENE,
+        HANDOUT,
+        CHECKLIST_ITEM,
+        LOOT,
+        JOURNAL,
+        EVENT,
+        AREA,
+        CODEX,
+        THREADS,
+        ART,
+        PREP,
+        MAP_KEY,
+    )
+}
+
+
+def describe():
+    """Every shape, as GET /api/shapes serves it to the browser."""
+    return {name: shape.describe() for name, shape in SHAPES.items()}
+
+
+def fields_digest():
+    """A fingerprint of every shape's fields; it changes when a field is added or removed."""
+    fields = {
+        name: [sorted(shape.required), sorted(shape.defaults), sorted(shape.rows)]
+        for name, shape in SHAPES.items()
+    }
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode('utf-8')).hexdigest()

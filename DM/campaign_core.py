@@ -13,6 +13,7 @@ import config
 import request_workflow
 import workflow
 import revisions
+import shapes
 import storage
 from job_service import JobService
 
@@ -601,34 +602,15 @@ def apply_layout(wid):
         if os.path.exists(os.path.join(folder, 'plan.txt')):
             revisions.checkpoint(slug, 'Before AI revision')
         os.makedirs(folder, exist_ok=True)
-        key = read_json(
-            doc_path('mapkey/' + slug),
-            {
-                'map': value['brief']['name'],
-                'areas': [],
-                'events': [],
-                'notes': '',
-                'stocked': False,
-            },
-        )
+        key = read_json(doc_path('mapkey/' + slug))
+        if key is None:
+            key = shapes.MAP_KEY.new(map=value['brief']['name'])
         existing = {a['n']: a for a in key['areas']}
         for area in draft['areas']:
             if area['n'] in existing:
                 existing[area['n']].update(area)
             else:
-                key['areas'].append(
-                    dict(
-                        area,
-                        text='',
-                        creatures='',
-                        loot=[],
-                        events=[],
-                        journal=[],
-                        npcs=[],
-                        items=[],
-                        images=[],
-                    )
-                )
+                key['areas'].append(shapes.AREA.new(**area))
         key['session'] = value['brief'].get('session', key.get('session', ''))
         value.update(status='applied', draft=draft)
         # The render is recorded with the change, so recovery after a crash still queues it.

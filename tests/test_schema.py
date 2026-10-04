@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / 'DM'))
 import campaign_core
 import migrate
 import schema
+import shapes
 
 
 def legacy_campaign(dm):
@@ -159,7 +160,9 @@ class SchemaTests(unittest.TestCase):
 
         result = self.migrate()
 
-        self.assertEqual((result['status'], result['from'], result['version']), ('migrated', 0, 1))
+        self.assertEqual(
+            (result['status'], result['from'], result['version']), ('migrated', 0, schema.CURRENT)
+        )
         self.assertEqual(schema.version(self.data, self.maps), schema.CURRENT)
         backup = Path(result['backup'])
         manifest = json.loads((backup / 'backup.json').read_text(encoding='utf-8'))
@@ -194,6 +197,44 @@ class SchemaTests(unittest.TestCase):
 
         self.assertEqual(self.migrate()['status'], 'current')
         self.assertEqual(len(list(Path(self.backups).iterdir())), 1)
+
+    def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
+        self.migrate()
+        schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')
+        (self.dm / 'data/art.json').write_text(
+            json.dumps({'items': [{'id': 'art-1', 'prompt': 'A harbour at dusk'}]})
+        )
+        key = self.read('maps/harbour/key.json')
+        key['areas'][0]['journal'] = [{'id': 'j1', 'title': 'Tide table'}]
+        key['areas'][0]['events'] = [{'id': 'e1', 'trigger': 'Bell rings'}]
+        (self.dm / 'maps/harbour/key.json').write_text(json.dumps(key))
+        prep = self.read('data/prep/s1.json')
+        prep['loot'] = [{'item': 'Rope'}]
+        (self.dm / 'data/prep/s1.json').write_text(json.dumps(prep))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (1, schema.CURRENT))
+        self.assertEqual(
+            result['changes'], ['data/art.json', 'data/prep/s1.json', 'maps/harbour/key.json']
+        )
+        art = self.read('data/art.json')['items'][0]
+        self.assertEqual((art['status'], art['image'], art['codex']), ('queued', '', ''))
+        area = self.read('maps/harbour/key.json')['areas'][0]
+        self.assertEqual(
+            area['journal'][0], {'id': 'j1', 'title': 'Tide table', 'text': '', 'secrets': ''}
+        )
+        self.assertEqual(area['events'][0]['effect'], '')
+        self.assertEqual(
+            self.read('data/prep/s1.json')['loot'][0], {'item': 'Rope', 'where': '', 'value': ''}
+        )
+        for rel, shape in (
+            ('data/codex.json', shapes.CODEX),
+            ('data/threads.json', shapes.THREADS),
+            ('data/art.json', shapes.ART),
+            ('maps/harbour/key.json', shapes.MAP_KEY),
+        ):
+            self.assertEqual(shape.problems(self.read(rel)), [], rel)
 
     def test_restore_returns_documents_and_their_version(self):
         result = self.migrate()

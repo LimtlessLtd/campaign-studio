@@ -6,6 +6,7 @@ import re
 import time
 from copy import deepcopy
 
+import shapes
 import workflow
 
 REQUEST_ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
@@ -236,20 +237,16 @@ def apply(item, read_doc, commit, inbox):
         for row in draft['entries']:
             add(
                 codex['entries'],
-                {
-                    'id': prefix + row['id'],
-                    'type': row['type'],
-                    'name': row['name'],
-                    'group': '',
-                    'status': 'alive' if row['type'] in ('npc', 'monster') else '',
-                    'public': row['public'],
-                    'secrets': row['secrets'],
-                    'notes': row['notes'],
-                    'image': '',
-                    'files': [],
-                    'tags': [],
-                    'request': item['id'],
-                },
+                shapes.CODEX_ENTRY.new(
+                    id=prefix + row['id'],
+                    type=row['type'],
+                    name=row['name'],
+                    status='alive' if row['type'] in ('npc', 'monster') else '',
+                    public=row['public'],
+                    secrets=row['secrets'],
+                    notes=row['notes'],
+                    request=item['id'],
+                ),
             )
         changes.append(('codex', codex))
     if draft['threads']:
@@ -257,18 +254,14 @@ def apply(item, read_doc, commit, inbox):
         for row in draft['threads']:
             add(
                 threads['threads'],
-                {
-                    'id': prefix + row['id'],
-                    'title': row['title'],
-                    'detail': row['detail'],
-                    'status': row['status'],
-                    'pcs': [],
-                    'npcs': [],
-                    'next': '',
-                    'notes': '',
-                    'source': 'Request · ' + item['id'],
-                    'request': item['id'],
-                },
+                shapes.THREAD.new(
+                    id=prefix + row['id'],
+                    title=row['title'],
+                    status=row['status'],
+                    detail=row['detail'],
+                    source='Request · ' + item['id'],
+                    request=item['id'],
+                ),
             )
         changes.append(('threads', threads))
     art_rows = [row for row in draft['entries'] if row['image_prompt'].strip()]
@@ -277,16 +270,14 @@ def apply(item, read_doc, commit, inbox):
         for row in art_rows:
             add(
                 art['items'],
-                {
-                    'id': 'art-' + prefix + row['id'],
-                    'title': row['name'],
-                    'prompt': row['image_prompt'],
-                    'codex': prefix + row['id'],
-                    'image': '',
-                    'status': 'queued',
-                    'created': time.time(),
-                    'request': item['id'],
-                },
+                shapes.ART_ITEM.new(
+                    id='art-' + prefix + row['id'],
+                    prompt=row['image_prompt'],
+                    title=row['name'],
+                    codex=prefix + row['id'],
+                    created=time.time(),
+                    request=item['id'],
+                ),
             )
         changes.append(('art', art))
     if session:
@@ -300,35 +291,31 @@ def apply(item, read_doc, commit, inbox):
             for row in draft['scenes']:
                 add(
                     prep.setdefault('scenes', []),
-                    {
-                        'id': prefix + row['id'],
-                        'title': row['title'],
-                        'where': row['where'],
-                        'map': '',
-                        'npcs': [
-                            prefix + npc if npc in proposed_npcs else npc for npc in row['npcs']
-                        ],
-                        'encounter': row['encounter'],
-                        'notes': row['notes'],
-                        'done': False,
-                        'request': item['id'],
-                    },
+                    shapes.SCENE.new(
+                        id=prefix + row['id'],
+                        title=row['title'],
+                        where=row['where'],
+                        npcs=[prefix + npc if npc in proposed_npcs else npc for npc in row['npcs']],
+                        encounter=row['encounter'],
+                        notes=row['notes'],
+                        request=item['id'],
+                    ),
                 )
             for row in draft['handouts']:
                 add(
                     prep.setdefault('handouts', []),
-                    {
-                        'id': prefix + row['id'],
-                        'title': row['title'],
-                        'player_text': row['player_text'],
-                        'secrets': row['secrets'],
-                        'request': item['id'],
-                    },
+                    shapes.HANDOUT.new(
+                        id=prefix + row['id'],
+                        title=row['title'],
+                        player_text=row['player_text'],
+                        secrets=row['secrets'],
+                        request=item['id'],
+                    ),
                 )
             prep.setdefault('goals', []).extend(draft['goals'])
-            prep.setdefault('loot', []).extend(deepcopy(draft['loot']))
+            prep.setdefault('loot', []).extend(shapes.LOOT.new(**row) for row in draft['loot'])
             prep.setdefault('checklist', []).extend(
-                {'text': text, 'done': False} for text in draft['checklist']
+                shapes.CHECKLIST_ITEM.new(text=text) for text in draft['checklist']
             )
             if draft['notes'].strip():
                 prep['notes'] = '\n\n'.join(x for x in (prep.get('notes', ''), draft['notes']) if x)

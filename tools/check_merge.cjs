@@ -1,14 +1,15 @@
-// The autosave merge must never drop an edit made on either side.
+// The autosave merge must never drop an edit made on either side, and new records follow their shape.
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 
 const context = {};
 vm.runInNewContext(
-  fs.readFileSync('DM/app/merge.js', 'utf8') + '\nthis.mergeInto = mergeInto; this.clone = clone;',
+  fs.readFileSync('DM/app/merge.js', 'utf8') +
+    '\nthis.mergeInto = mergeInto; this.clone = clone; this.newRecord = newRecord;',
   context,
 );
-const { mergeInto, clone } = context;
+const { mergeInto, clone, newRecord } = context;
 const merge = (base, local, server) => {
   const result = clone(local);
   return JSON.parse(JSON.stringify(mergeInto(clone(base), result, clone(server))));
@@ -94,4 +95,13 @@ for (const local of [['A', 'B'], ['A']]) {
   assert.ok(goals.includes('C'));
 }
 
-console.log('Autosave merge cases passed.');
+// New records: required fields first, then fresh copies of the defaults, then extra links.
+const thread = { required: ['id', 'title'], defaults: { status: 'open', pcs: [] } };
+const made = newRecord(thread, 'thread', { map: 'harbour', title: 'T', id: 't1' });
+assert.deepEqual(Object.keys(made), ['id', 'title', 'status', 'pcs', 'map']);
+made.pcs.push('ash');
+assert.deepEqual(thread.defaults.pcs, []);
+assert.throws(() => newRecord(thread, 'thread', { id: 't2' }), /A new thread needs title/);
+assert.throws(() => newRecord(undefined, 'unknown', {}), /Unknown record shape/);
+
+console.log('Autosave merge and new record cases passed.');

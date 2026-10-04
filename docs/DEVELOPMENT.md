@@ -18,8 +18,10 @@ image endpoint. They do not invoke paid AI services or import documents into a l
 
 1. Describe the user outcome and acceptance criteria. Read the affected module and its callers.
 2. Identify stored fields, stable IDs, concurrency and export implications before choosing an approach.
-3. Implement within module boundaries. Preserve old saved documents, or bump `schema.CURRENT` with an
-   idempotent migration and a legacy fixture test. Write multi-document changes with `commit_docs`.
+3. Implement within module boundaries. Build stored records from `DM/shapes.py`. Preserve old saved
+   documents, or bump `schema.CURRENT` with an idempotent migration and a legacy fixture test (adding a
+   shape field only needs `fill_campaign`; see Record shapes in `ARCHITECTURE.md`). Write multi-document
+   changes with `commit_docs`.
 4. Add a focused regression test for changed business behavior. For UI work, exercise the actual flow.
 5. Format, run the checks below, inspect the diff and update docs/changelog/manifest.
 6. Open a PR with the change, evidence and remaining limitations, then merge it under the review relay.

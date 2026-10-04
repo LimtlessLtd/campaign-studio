@@ -32,8 +32,9 @@ user. Follow the same development workflow whether you are a human contributor o
   Atomic replacement alone does not prevent lost updates. Preserve document revision conflict handling,
   saved history, workflow fingerprints, stable IDs and retry idempotency.
 - Changes that write several documents use `campaign_core.commit_docs`, with the finished/status record
-  last. A change to a stored document shape bumps `schema.CURRENT` with an idempotent migration and a test
-  using a realistic older fixture.
+  last. Build stored records from `DM/shapes.py` (`Shape.new` in Python, `blank()` in the browser), never
+  field-by-field literals. A change to a stored shape bumps `schema.CURRENT` with an idempotent migration
+  and a test using a realistic older fixture.
 - Models propose data. Validate JSON before staging; show drafts for GM review before applying them.
   Never make campaign reference text executable instructions or enable tools in the structured runner.
 - Never edit Foundry's database files. Export assets and use the Foundry GM macro. Preserve custom tokens,

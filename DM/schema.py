@@ -11,12 +11,12 @@ import glob
 import json
 import os
 import shutil
-from copy import deepcopy
 
+import shapes
 import storage
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 1
+CURRENT = 2
 MARKER = '.schema.json'
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
 
@@ -74,85 +74,39 @@ def check(data, maps):
     return found
 
 
-# ---------- version 1: complete document shapes ----------
-# Fill only missing (or null) fields with the defaults the app itself creates. Existing values,
-# unknown fields and unrecognized record types are preserved untouched.
-CODEX_ENTRY = dict(
-    group='', status='', public='', secrets='', notes='', image='', files=[], tags=[]
-)
-THREAD = dict(pcs=[], detail='', source='')
-PREP = dict(
-    date='', recap='', goals=[], threads=[], scenes=[], checklist=[], notes='', loot=[], handouts=[]
-)
-SCENE = dict(npcs=[])
-MAP_KEY = dict(areas=[], events=[], notes='', session='')
-AREA = dict(
-    rooms=[],
-    text='',
-    creatures='',
-    loot=[],
-    events=[],
-    npcs=[],
-    items=[],
-    journal=[],
-    images=[],
-    threads=[],
-)
+# ---------- migrations ----------
+# Fields of every stored record at CURRENT (shapes.fields_digest()). When a shape changes, add a version
+# whose migration is fill_campaign, so stored records gain the new fields, then update this digest.
+SHAPES_DIGEST = 'bab7aea01dd3a047073eab09a3435c2410c5ccf32c4369d4aaafb3fa3e1b0c90'
 
 
-def fill(row, defaults):
-    for key, default in defaults.items():
-        if row.get(key) is None:
-            row[key] = deepcopy(default)
-
-
-def records(value, container, path):
-    if not isinstance(value, dict):
-        raise SchemaError(f'{path} must contain a JSON object.')
-    if value.get(container) is None:
-        value[container] = []
-    rows = value[container]
-    if not isinstance(rows, list):
-        raise SchemaError(f'{path}: {container} must be a list.')
-    return [row for row in rows if isinstance(row, dict)]
-
-
-def v1_codex(value, path):
-    for entry in records(value, 'entries', path):
-        fill(entry, CODEX_ENTRY)
-
-
-def v1_threads(value, path):
-    for thread in records(value, 'threads', path):
-        fill(thread, THREAD)
-
-
-def v1_prep(value, path):
-    if not isinstance(value, dict):
-        raise SchemaError(f'{path} must contain a JSON object.')
-    fill(value, PREP)
-    for scene in records(value, 'scenes', path):
-        fill(scene, SCENE)
-
-
-def v1_key(value, path):
-    if not isinstance(value, dict):
-        raise SchemaError(f'{path} must contain a JSON object.')
-    fill(value, MAP_KEY)
-    for area in records(value, 'areas', path):
-        fill(area, AREA)
-
-
-def v1_documents(data, maps):
-    yield os.path.join(data, 'codex.json'), v1_codex
-    yield os.path.join(data, 'threads.json'), v1_threads
+def shaped_documents(data, maps):
+    """(path, shape) for each stored document built from shapes."""
+    yield os.path.join(data, 'codex.json'), shapes.CODEX
+    yield os.path.join(data, 'threads.json'), shapes.THREADS
+    yield os.path.join(data, 'art.json'), shapes.ART
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'prep', '*.json'))):
-        yield path, v1_prep
+        yield path, shapes.PREP
     for path in sorted(glob.glob(os.path.join(glob.escape(maps), '*', 'key.json'))):
-        yield path, v1_key
+        yield path, shapes.MAP_KEY
 
 
-MIGRATIONS = {0: v1_documents}  # from version -> (path, normalize) pairs reaching version + 1
+def fill_campaign(data, maps):
+    """Give every stored record each field of its shape. Existing values and unknown fields are kept."""
+    for path, shape in shaped_documents(data, maps):
+
+        def normalize(value, path, shape=shape):
+            try:
+                shape.fill_all(value, path)
+            except shapes.ShapeError as error:
+                raise SchemaError(str(error)) from error
+
+        yield path, normalize
+
+
+# From version -> (path, normalize) pairs reaching version + 1. Version 1 completed codex, thread, prep and
+# map key records; version 2 completed art, handout, checklist, loot, journal and event records too.
+MIGRATIONS = {0: fill_campaign, 1: fill_campaign}
 
 
 def planned_changes(data, maps, start):

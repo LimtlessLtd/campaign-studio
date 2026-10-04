@@ -18,6 +18,7 @@ import maps_io
 import packaging_source
 import request_workflow
 import revisions
+import shapes
 import workflow
 from campaign_core import (
     APP,
@@ -122,6 +123,8 @@ class Handler(SimpleHTTPRequestHandler):
                         interrupted_changes=JOURNAL.conflicts(),
                     )
                 )
+            if path == '/api/shapes':
+                return self.send_json(shapes.describe())
             if path == '/api/settings':
                 cfg = config.settings()
                 world = None
