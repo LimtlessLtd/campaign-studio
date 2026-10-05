@@ -13,7 +13,6 @@ Next ID: W16
 
 | ID  | Priority | Work                                                                | Acceptance criteria                                                                                                                                            |
 | --- | -------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W3  | 2        | Split `foundry_upgrade` into catalogue, solver and workflow modules | Same public functions and fixtures pass; no module imports another's private names                                                                             |
 | W4  | 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus                                                                                 |
 | W5  | 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                                                                                       |
 | W6  | 2        | Build supported Foundry version/system adapters                     | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport                                                                          |

@@ -75,11 +75,11 @@ defect by itself. The problems below are the ones object-oriented principles exi
    migrations and the browser (through `GET /api/shapes`) build records from it, and tests fail when a
    writer or a stored shape diverges.
 3. **God functions (single responsibility). Partly resolved.** HTTP methods now dispatch from a route
-   table to handlers under 60 lines. `render2d.prop` is 424 lines, and `foundry_upgrade` has 220- and
-   190-line workflows inside a 1,300-line module. `studio.js` has `mapStudio` at 1,064 lines and
-   `foundryUpgradeCard` at 524. The remaining work calls for a prop-painter registry, separate
-   `foundry_catalog`, `package_solver` and `upgrade_workflow` modules, and page controllers for the map
-   studio.
+   table to handlers under 60 lines. Foundry upgrade catalogue collection, compatibility solving and
+   inventory/clone workflows now live in separate modules behind the existing API; its long clone workflows
+   still need care when extended. `render2d.prop` is 424 lines. `studio.js` has `mapStudio` at 1,064 lines and
+   `foundryUpgradeCard` at 524. The remaining work calls for a prop-painter registry and page controllers
+   for the map studio.
 4. **HTTP errors are untyped. Resolved at the transport boundary.** Route handlers raise `Invalid`,
    `NotFound` and `Conflict`; one dispatcher maps them to 400, 404 and 409. Domain `ValueError`s become
    `Invalid` at that boundary. A stale document save still carries its merge payload with the conflict.
