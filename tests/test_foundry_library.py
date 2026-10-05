@@ -234,7 +234,7 @@ class FoundryLibraryTests(unittest.TestCase):
         source_key = actor['foundry']['world_key']
         self.assertEqual(actor['image'], 'worlds/fixture-world/portrait.png')
         self.assertEqual(item['image'], '')
-        self.assertEqual(foundry_library.media_file(actor['image'], source_key)[0], image)
+        self.assertTrue(foundry_library.media_file(actor['image'], source_key)[0].samefile(image))
         self.settings_file.write_text(json.dumps({'world_path': str(self.other)}), encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'different connected world'):
             foundry_library.media_file(actor['image'], source_key)

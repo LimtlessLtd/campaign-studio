@@ -64,6 +64,12 @@ supported local images through the read-only Foundry asset route. `campaign_core
 snapshot/codex commit; `foundry_library` converts documents. Synthetic unit, route and browser checks cover
 these behaviors. Live import and live Foundry image handling remain unverified.
 
+Review of PR #29 found that its login failure table could still grow beyond its cap when all entries were
+active. New addresses now wait for a slot to expire, while existing addresses retain their lockouts; the
+gate checks capacity under its lock. This can temporarily delay a legitimate new address when 1,024 peers
+have recently failed. An oversized login form could also reset the response connection on Windows while
+the request body remained unread; modest oversized forms are now drained before the 400 response.
+
 ### Fixed in this review
 
 | Finding                                                                                    | Resolution                                                                          |

@@ -203,7 +203,12 @@ class Handler(SimpleHTTPRequestHandler):
     def _post_login(self):
         peer = self.client_address[0]
         try:
-            form = urllib.parse.parse_qs(self.body(4096).decode('utf-8', 'replace'))
+            # Consume a modest oversized form before replying; unread request bytes can reset the
+            # response connection on Windows.
+            raw = self.body(64 * 1024)
+            if len(raw) > 4096:
+                raise Invalid('too large')
+            form = urllib.parse.parse_qs(raw.decode('utf-8', 'replace'))
         except (Invalid, ValueError):
             return self.send_login(400, 'That request could not be read.')
         wait = GATE.locked_for(peer)

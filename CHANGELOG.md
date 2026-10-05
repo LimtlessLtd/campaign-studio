@@ -6,6 +6,7 @@
   and other devices sign in once with the code (session cookie `HttpOnly`, `SameSite=Strict`; wrong codes lock
   an address for a minute). Without a code the site still answers only on localhost, and it refuses to listen
   on another address without one. The connection is plain HTTP; the README says how to add TLS.
+  The login failure table is capped; when every slot is active, new addresses wait until a slot expires.
 - **World map** page: upload a world map image, drop pins on it and link each pin to a battle map, then open
   the battle map from the pin. Pins are stored as fractions of the image in `data/world-maps.json`
   (data schema 3), and the document holds a list of world maps, so several can be added later.
