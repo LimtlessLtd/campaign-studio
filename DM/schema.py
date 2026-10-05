@@ -11,6 +11,7 @@ import datetime
 import glob
 import json
 import os
+import re
 import shutil
 
 import shapes
@@ -138,14 +139,18 @@ def pending_path(backups):
     return os.path.join(backups, PENDING)
 
 
-def interrupted_attempt(backups):
-    """The complete backup of the first attempt of a migration that never finished, or None."""
+def interrupted_attempt(backups, found):
+    """The first backup only if its migration target is still ahead of the saved version."""
     try:
         with open(pending_path(backups), encoding='utf-8') as file:
             record = json.load(file)
+        latest = record.get('backup')
         first = record.get('first') or record.get('backup')
     except (FileNotFoundError, ValueError, AttributeError):
         return None
+    target = re.match(r'^schema-\d+-to-(\d+)-', latest) if isinstance(latest, str) else None
+    if target is None or int(target.group(1)) <= found:
+        return None  # the marker was recorded, but cleanup was interrupted
     return first if isinstance(first, str) and first else None
 
 
@@ -254,6 +259,9 @@ def migrate(data, maps, backups, dry_run=False):
         # Nothing to stamp yet: unversioned documents found by a later start are migrated then.
         return {'status': 'new', 'version': CURRENT, 'changes': []}
     if found == CURRENT:
+        if not dry_run:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(pending_path(backups))
         return {'status': 'current', 'version': CURRENT, 'changes': []}
     changes = planned_changes(data, maps, found)
     root = os.path.dirname(os.path.abspath(data))
@@ -263,7 +271,7 @@ def migrate(data, maps, backups, dry_run=False):
         return dict(result, status='needs migration')
     result['backup'] = None
     if changes:
-        first = interrupted_attempt(backups)
+        first = interrupted_attempt(backups, found)
         result['backup'] = backup(data, maps, backups, f'schema-{found}-to-{CURRENT}', first)
         # Left in place until the version is recorded, so a retry knows its documents may be partly migrated.
         storage.atomic_json(

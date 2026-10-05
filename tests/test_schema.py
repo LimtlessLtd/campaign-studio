@@ -376,6 +376,25 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(manifests[2]['first_attempt_backup'], names[0])  # not the second attempt
         self.assertFalse((Path(self.backups) / schema.PENDING).exists())
 
+    def test_completed_migration_clears_a_pending_record_left_by_interrupted_cleanup(self):
+        real_remove = schema.os.remove
+
+        def interrupt_cleanup(path):
+            if path == schema.pending_path(self.backups):
+                raise OSError('Synthetic interruption after recording the schema version')
+            return real_remove(path)
+
+        with patch.object(schema.os, 'remove', interrupt_cleanup):
+            with self.assertRaises(OSError):
+                self.migrate()
+        self.assertEqual(schema.version(self.data, self.maps), schema.CURRENT)
+        pending = Path(schema.pending_path(self.backups))
+        self.assertTrue(pending.exists())
+        self.assertIsNone(schema.interrupted_attempt(self.backups, schema.CURRENT))
+
+        self.assertEqual(self.migrate()['status'], 'current')
+        self.assertFalse(pending.exists())
+
     def test_a_document_that_cannot_be_backed_up_blocks_migration_cleanly(self):
         linked = self.dm / 'data/prep/linked.json'
         try:

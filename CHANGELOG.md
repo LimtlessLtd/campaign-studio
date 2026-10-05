@@ -6,7 +6,8 @@
   logs. A retired file left on disk during compaction can no longer make a deleted document reappear;
   manifest changes also trigger a fresh read when the page is reopened.
 - After an interrupted schema migration, the retry's backup is marked `partly_migrated` and names
-  the first attempt's complete backup (`first_attempt_backup`).
+  the first attempt's complete backup (`first_attempt_backup`). A pending marker left after the schema
+  version was recorded is cleared on the next start and cannot mislabel a later migration's backup.
 - The migrated-clone audit now shows each selected module and dependency release alongside its installed
   version and saved/active state for package-by-package GM review.
 - The World Library now reads a world's scenes, journals (with their pages), actors and items straight from

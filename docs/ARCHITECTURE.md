@@ -105,7 +105,9 @@ server refuses data from a newer schema, completes interrupted changes, then mig
 migration changes documents, every document it may rewrite is first copied to `DM/backups` and each copy is
 verified by SHA-256. Migrations fill or reshape stored documents only. They are idempotent, migrated
 documents are flushed to disk before the version is recorded, and an interrupted migration runs again from
-a new backup. `python DM/migrate.py` reports pending changes, `--apply` migrates and
+a new backup. A retry's backup names the first attempt and is marked partly migrated; the pending record is
+cleared once the schema version is recorded, including after an interrupted cleanup. `python DM/migrate.py`
+reports pending changes, `--apply` migrates and
 `--restore DM/backups/<name>` returns documents to a backup's version.
 
 ### Record shapes
