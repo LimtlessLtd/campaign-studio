@@ -18,8 +18,13 @@
   "DM/AI_WORKFLOW.md",
   "DM/CLAUDE.md",
   "DM/app/app.js",
+  "DM/app/campaign-pages.js",
+  "DM/app/controls.js",
+  "DM/app/foundry-pages.js",
   "DM/app/index.html",
+  "DM/app/map-pages.js",
   "DM/app/merge.js",
+  "DM/app/state.js",
   "DM/app/studio.css",
   "DM/app/studio.js",
   "DM/app/style.css",
@@ -88,5 +93,6 @@
   "tests/test_shapes.py",
   "tools/check_macro.cjs",
   "tools/check_merge.cjs",
+  "tools/check_routes.cjs",
   "tools/check_source.py"
 ]

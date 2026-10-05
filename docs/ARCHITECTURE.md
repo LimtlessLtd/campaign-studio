@@ -49,9 +49,14 @@ flowchart LR
 | `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                           |
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                              |
 | `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                     |
-| `DM/app/app.js`                       | Shared DOM/API/autosave/merge helpers, routing, codex/threads/prep/inbox views     |
 | `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge     |
-| `DM/app/studio.js`                    | Studio navigation, first run, World Library, maps, settings and image queue        |
+| `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                    |
+| `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                             |
+| `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                              |
+| `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                    |
+| `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                            |
+| `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                   |
+| `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation              |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
 
 `http_routes.ROUTES` maps methods and paths to focused handlers. The dispatcher converts typed
