@@ -179,6 +179,7 @@ audit and confirm Foundry is closed. Studio repeats the migration audit against 
 verifies the original User Data still matches the offline backup byte for byte, and checks the backup again.
 It saves a cutover review beside the backup only when all checks pass. A changed original means the clone may
 be missing later edits: take a new backup and repeat the upgrade. A changed clone needs a fresh GM audit.
+The world selected in Studio Settings must still be the original world named by the backup.
 
 The cutover review shows the exact isolated User Data path, target build and world ID. Configure the target
 Foundry installation to use that path, then open the world. Studio does not change the target installation or

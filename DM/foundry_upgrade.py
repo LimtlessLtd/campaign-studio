@@ -848,6 +848,16 @@ def review_cutover(audit_path, confirmed_closed=False):
             'The migrated clone or its evidence changed after the audit. Audit it again.'
         )
     source = foundry_backup.verify_source(backup_path)
+    backup_manifest = foundry_backup.read_manifest(backup_path)
+    original_world = (
+        Path(source['path']) / storage.manifest_path(backup_manifest['world']['manifest_path'])
+    ).parent.resolve()
+    selected = config.world_info(config.settings().get('world_path'))
+    if (
+        Path(selected['path']).resolve() != original_world
+        or selected['id'] != backup['world']['id']
+    ):
+        raise ValueError('Select the original Foundry world in Settings before cutover review.')
     if foundry_backup.running_foundry():
         raise ValueError('Foundry started during cutover review. Close it and review again.')
     result = {

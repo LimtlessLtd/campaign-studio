@@ -431,6 +431,13 @@ class UpgradeTests(unittest.TestCase):
                 ):
                     with self.assertRaisesRegex(ValueError, 'started during'):
                         upgrade.review_cutover(audited['audit_path'], True)
+                with patch.object(
+                    upgrade.config,
+                    'world_info',
+                    return_value={'id': 'different-world', 'path': str(world_path)},
+                ):
+                    with self.assertRaisesRegex(ValueError, 'Select the original'):
+                        upgrade.review_cutover(audited['audit_path'], True)
                 original_world = world_path / 'world.json'
                 original_world.write_text(
                     json.dumps({**world_json, 'title': 'Changed after backup'}), encoding='utf-8'
