@@ -1,6 +1,7 @@
 """Bounded retrieval and parsing of official Foundry releases and package metadata."""
 
 import html
+import http.client
 import ipaddress
 import json
 import re
@@ -22,10 +23,41 @@ def _validate_url(url, official=False):
         raise ValueError('Package metadata URL must use public HTTPS.')
     if official and parsed.hostname != 'foundryvtt.com':
         raise ValueError('Expected a Foundry directory URL.')
-    addresses = socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM)
+    return parsed
+
+
+def _public_address(host, port):
+    """Resolve once and return an address only if every answer is public."""
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     if not addresses or any(not ipaddress.ip_address(entry[4][0]).is_global for entry in addresses):
         raise ValueError('Package metadata URL resolved to a private address.')
-    return parsed
+    return addresses[0]
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to the address the public-address check approved, not a second DNS answer.
+
+    The hostname still drives SNI and certificate verification. Redirects open new connections, so
+    every hop is checked and pinned the same way.
+    """
+
+    def connect(self):
+        if self._tunnel_host:
+            raise ValueError('Package metadata downloads do not support HTTPS proxies.')
+        family, kind, proto, _name, address = _public_address(self.host, self.port)
+        sock = socket.socket(family, kind, proto)
+        try:
+            sock.settimeout(self.timeout)
+            sock.connect(address)
+            self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+        except BaseException:
+            sock.close()
+            raise
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, request):
+        return self.do_open(_PinnedHTTPSConnection, request, context=self._context)
 
 
 class _SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -36,7 +68,10 @@ class _SafeRedirect(urllib.request.HTTPRedirectHandler):
 
 def fetch(url, limit=MAX_PAGE, official=False):
     _validate_url(url, official=official)
-    opener = urllib.request.build_opener(_SafeRedirect)
+    # A proxy may resolve the target a second time. Connect directly to the approved address.
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _PinnedHTTPSHandler, _SafeRedirect
+    )
     request = urllib.request.Request(url, headers={'User-Agent': 'CampaignStudio/upgrade-report'})
     with opener.open(request, timeout=12) as response:
         body = response.read(limit + 1)

@@ -457,5 +457,70 @@ class UpgradeTests(unittest.TestCase):
         self.assertFalse(foundry_compat.compatible({'minimum': '12', 'maximum': '12'}, (13, 341)))
 
 
+class PinnedDownloadTests(unittest.TestCase):
+    PUBLIC = (2, 1, 6, '', ('93.184.216.34', 443))
+    PRIVATE = (2, 1, 6, '', ('127.0.0.1', 443))
+
+    class FakeSocket:
+        connected = []
+
+        def __init__(self, *args):
+            pass
+
+        def settimeout(self, _value):
+            pass
+
+        def connect(self, address):
+            self.connected.append(address)
+            raise ConnectionRefusedError('stop after connect')
+
+        def close(self):
+            pass
+
+    def test_rebinding_answer_cannot_redirect_the_connection(self):
+        answers = [[self.PUBLIC], [self.PRIVATE]]
+        self.FakeSocket.connected = []
+        with (
+            patch.object(
+                foundry_catalog.socket, 'getaddrinfo', side_effect=lambda *a, **k: answers.pop(0)
+            ),
+            patch.object(foundry_catalog.socket, 'socket', self.FakeSocket),
+        ):
+            with self.assertRaises(OSError):
+                foundry_catalog.fetch('https://rebind.example.org/module.json')
+        self.assertEqual(self.FakeSocket.connected, [('93.184.216.34', 443)])
+        self.assertEqual(answers, [[self.PRIVATE]])
+
+    def test_private_resolution_opens_no_connection(self):
+        self.FakeSocket.connected = []
+        with (
+            patch.object(
+                foundry_catalog.socket, 'getaddrinfo', return_value=[self.PUBLIC, self.PRIVATE]
+            ),
+            patch.object(foundry_catalog.socket, 'socket', self.FakeSocket),
+        ):
+            with self.assertRaisesRegex(Exception, 'private address'):
+                foundry_catalog.fetch('https://mixed.example.org/module.json')
+        self.assertEqual(self.FakeSocket.connected, [])
+
+    def test_environment_proxy_cannot_resolve_the_target_again(self):
+        lookups = []
+        self.FakeSocket.connected = []
+
+        def resolve(host, *args, **kwargs):
+            lookups.append(host)
+            return [self.PUBLIC]
+
+        with (
+            patch.dict('os.environ', {'HTTPS_PROXY': 'http://127.0.0.1:8888'}),
+            patch.object(foundry_catalog.socket, 'getaddrinfo', side_effect=resolve),
+            patch.object(foundry_catalog.socket, 'socket', self.FakeSocket),
+        ):
+            with self.assertRaises(OSError):
+                foundry_catalog.fetch('https://public.example.org/module.json')
+        self.assertEqual(lookups, ['public.example.org'])
+        self.assertEqual(self.FakeSocket.connected, [('93.184.216.34', 443)])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -6,6 +6,9 @@
   sheet or journal-only system adapter. Fixture contracts exercise import and reimport for each combination;
   untagged GM journal pages are no longer overwritten by a same-named generated page. A live GM checklist
   and the v14 limitation are documented.
+- Package metadata downloads now connect to the public address the safety check approved, so DNS rebinding
+  between the check and the connection cannot reach a private address. Each redirect is pinned the same way;
+  environment proxies are bypassed so the connection always uses that address directly.
 - Browser smoke tests (Playwright and axe-core) now cover the first-run wizard, pin editing, proposal
   review and narrow navigation, and run in CI. They found and fixed low-contrast sidebar captions and
   workflow steps, and unlabelled prep notes and new-request controls.
