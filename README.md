@@ -117,9 +117,10 @@ to `DM/exports`. This does not publish a repository.
 
 This initial alpha supports the map-driven preparation workflow and a read-only snapshot of selected world
 documents. It does not yet live-sync or edit existing Foundry documents from Studio.
-The [code review and roadmap](docs/CODE_REVIEW.md) describe the remaining work toward managing an entire
-campaign. Live AI availability depends on your provider; live Foundry compatibility needs version-specific
-verification. Existing inbox requests remain readable and can be drafted through the structured workflow.
+The [code review](docs/CODE_REVIEW.md) and [backlog](docs/BACKLOG.md) describe the remaining work toward
+managing an entire campaign. Live AI availability depends on your provider; live Foundry compatibility
+needs version-specific verification. Existing inbox requests remain readable and can be drafted through
+the structured workflow.
 
 See [CONTRIBUTING](CONTRIBUTING.md), [development workflow](docs/DEVELOPMENT.md),
 [architecture](docs/ARCHITECTURE.md), and [coding-agent instructions](AGENTS.md).
