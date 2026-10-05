@@ -186,4 +186,4 @@ Foundry installation to use that path, then open the world. Studio does not chan
 move any folders. Keep the original v12 User Data, backup and v12 installer for rollback; do not open the
 migrated clone in v12. Run the cutover review again immediately before switching if time has passed or files
 may have changed. Foundry documents the [`--dataPath` and `--world` launch flags](https://foundryvtt.com/article/configuration/)
-and [automatic migration on first launch in a newer build](https://foundryvtt.com/article/installation/).
+and [the backup prompt before migration on a newer generation](https://foundryvtt.com/article/backups/).
