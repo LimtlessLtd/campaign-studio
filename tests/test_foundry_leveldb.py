@@ -76,6 +76,39 @@ class ReadTests(unittest.TestCase):
             {b'!j!a': b'new a', b'!j!c': b'old c', b'!j!d': b'fresh d'},
         )
 
+    def test_obsolete_table_cannot_resurrect_a_deleted_document(self):
+        old = writer.table(self.rows((b'!j!deleted', b'private old value')))
+        live = writer.table(self.rows((b'!j!kept', b'current value'), sequence=9))
+        folder = writer.database(self.folder, tables=[old, live])
+        # A compaction committed table 2 and retired table 1, but table 1 still
+        # exists on disk until LevelDB's cleanup. Its deletion marker is gone.
+        (folder / 'MANIFEST-000001').write_bytes(
+            writer.physical_records(
+                [
+                    writer.manifest_edit(tables_added=(1, 2), log_number=3),
+                    writer.manifest_edit(tables_removed=(1,)),
+                ]
+            )
+        )
+        self.assertEqual(foundry_leveldb.read(folder), {b'!j!kept': b'current value'})
+
+    def test_obsolete_log_is_excluded_after_log_number_advances(self):
+        old = writer.log([[(b'!j!deleted', b'private old value')]])
+        live = writer.log([[(b'!j!kept', b'current value')]], first_sequence=9)
+        folder = writer.database(self.folder, logs=[old, live])
+        (folder / 'MANIFEST-000001').write_bytes(
+            writer.physical_records(
+                [writer.manifest_edit(log_number=1), writer.manifest_edit(log_number=2)]
+            )
+        )
+        self.assertEqual(foundry_leveldb.read(folder), {b'!j!kept': b'current value'})
+
+    def test_invalid_current_manifest_is_rejected(self):
+        folder = writer.database(self.folder, tables=[writer.table(self.rows((b'!j!a', b'1')))])
+        (folder / 'CURRENT').write_text('../outside\n')
+        with self.assertRaises(foundry_leveldb.LevelDBError):
+            foundry_leveldb.read(folder)
+
     def test_a_deletion_older_than_a_put_does_not_hide_it(self):
         table = writer.table([(b'!j!a', 2, PUT, b'kept')])
         stale = writer.log([[(b'!j!a', None)]], first_sequence=1)

@@ -38,7 +38,7 @@ flowchart LR
 | `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |
 | `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
-| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the LevelDB folders of a v11+ world         |
+| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world    |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
 | `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
@@ -105,7 +105,9 @@ server refuses data from a newer schema, completes interrupted changes, then mig
 migration changes documents, every document it may rewrite is first copied to `DM/backups` and each copy is
 verified by SHA-256. Migrations fill or reshape stored documents only. They are idempotent, migrated
 documents are flushed to disk before the version is recorded, and an interrupted migration runs again from
-a new backup. `python DM/migrate.py` reports pending changes, `--apply` migrates and
+a new backup. A retry's backup names the first attempt and is marked partly migrated; the pending record is
+cleared once the schema version is recorded, including after an interrupted cleanup. `python DM/migrate.py`
+reports pending changes, `--apply` migrates and
 `--restore DM/backups/<name>` returns documents to a backup's version.
 
 ### Record shapes
@@ -183,7 +185,8 @@ exported prompt packs permit other assistants. Old `/api/claude` calls use the s
 
 The world picker reads `world.json` for identity and system information. The World Library reads selected
 local media under `Data` and the world's scenes, journals, actors and items, read from its database files
-(`foundry_leveldb` for v11+ worlds, one JSON document per line for v10 and earlier) or from a GM-exported
+(`foundry_leveldb` for v11+ worlds, following `CURRENT` and `MANIFEST` to exclude retired files; one JSON
+document per line for v10 and earlier) or from a GM-exported
 snapshot. Both routes pass `normalize_snapshot`, which validates the chosen world and stores only bounded
 summaries under Studio's private `DM/data`. A folder-read snapshot records a fingerprint of the database
 files, so the page re-reads when they change. The reader opens no database, takes no lock and writes

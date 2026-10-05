@@ -49,6 +49,12 @@ campaign supplies its callbacks. `gen_city` models its domain with `Grid` and `C
 The codebase is mostly procedural modules over plain dictionaries. That is reasonable Python and is not a
 defect by itself. The problems below are the ones object-oriented principles exist to prevent.
 
+Review of PR #21 found that the World Library's LevelDB reader scanned every table and log in a database
+folder. During compaction, a retired file can remain on disk after its deletion marker has been dropped;
+scanning it can make a deleted document reappear. The reader now follows the live file set in `CURRENT` and
+`MANIFEST`, and the snapshot fingerprint includes manifest changes. Synthetic fixtures cover retired tables
+and logs; reading during a live Foundry compaction remains unverified.
+
 ### Fixed in this review
 
 | Finding                                                                                    | Resolution                                                                          |

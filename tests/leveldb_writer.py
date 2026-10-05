@@ -84,19 +84,11 @@ def table(rows, per_block=3, compression=0, corrupt_block=None):
     return bytes(data + footer)
 
 
-def log(batches, first_sequence=1):
-    """batches: lists of (key, value or None). Returns .log bytes using 32 KiB blocks."""
+def physical_records(records):
+    """Wrap logical records in LevelDB's 32 KiB physical log format."""
     out = bytearray()
-    sequence = first_sequence
-    for batch in batches:
-        body = bytearray(struct.pack('<QI', sequence, len(batch)))
-        for key, value in batch:
-            if value is None:
-                body += bytes([DELETE]) + varint(len(key)) + key
-            else:
-                body += bytes([PUT]) + varint(len(key)) + key + varint(len(value)) + value
-        sequence += len(batch)
-        rest = bytes(body)
+    for record in records:
+        rest = bytes(record)
         first = True
         while True:
             room = 32768 - len(out) % 32768
@@ -113,6 +105,37 @@ def log(batches, first_sequence=1):
     return bytes(out)
 
 
+def log(batches, first_sequence=1):
+    """batches: lists of (key, value or None). Returns .log bytes using 32 KiB blocks."""
+    records = []
+    sequence = first_sequence
+    for batch in batches:
+        body = bytearray(struct.pack('<QI', sequence, len(batch)))
+        for key, value in batch:
+            if value is None:
+                body += bytes([DELETE]) + varint(len(key)) + key
+            else:
+                body += bytes([PUT]) + varint(len(key)) + key + varint(len(value)) + value
+        sequence += len(batch)
+        records.append(body)
+    return physical_records(records)
+
+
+def manifest_edit(tables_added=(), tables_removed=(), log_number=None, previous_log=None):
+    """Encode the subset of VersionEdit fields needed by the reader fixture."""
+    edit = bytearray()
+    if log_number is not None:
+        edit += varint(2) + varint(log_number)
+    if previous_log is not None:
+        edit += varint(9) + varint(previous_log)
+    for number in tables_removed:
+        edit += varint(6) + varint(0) + varint(number)
+    for number in tables_added:
+        edit += varint(7) + varint(0) + varint(number) + varint(1)
+        edit += varint(8) + b'firstkey' + varint(7) + b'lastkey'
+    return bytes(edit)
+
+
 def database(folder, tables=(), logs=()):
     """Create a folder with numbered table and log files (and the usual bookkeeping files)."""
     folder = Path(folder)
@@ -121,10 +144,21 @@ def database(folder, tables=(), logs=()):
     for content in tables:
         (folder / f'{number:06d}.ldb').write_bytes(content)
         number += 1
+    first_log = number
     for content in logs:
         (folder / f'{number:06d}.log').write_bytes(content)
         number += 1
     (folder / 'CURRENT').write_text('MANIFEST-000001\n')
+    (folder / 'MANIFEST-000001').write_bytes(
+        physical_records(
+            [
+                manifest_edit(
+                    tables_added=range(1, first_log),
+                    log_number=first_log,
+                )
+            ]
+        )
+    )
     (folder / 'LOCK').write_bytes(b'')
     (folder / 'LOG').write_text('not a database file')
     return folder
