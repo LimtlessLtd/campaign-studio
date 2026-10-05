@@ -89,6 +89,7 @@ class RouteTests(unittest.TestCase):
         here = campaign.active()
         owned = {
             'settings': Path(here.settings),
+            'foundry-library': Path(here.data) / 'foundry-library.json',
             'workflows/fixture': Path(here.data) / 'workflows' / 'fixture.json',
             'jobs/fixture': Path(here.jobs) / 'fixture.json',
         }
@@ -104,6 +105,43 @@ class RouteTests(unittest.TestCase):
         for name in ('settings-notes', 'prep/jobs'):
             with self.subTest(name=name):
                 self.assertEqual(self.request('/api/doc/' + name, 'PUT', {'entries': []})[0], 200)
+
+    def test_macro_fallback_imports_codex_and_keeps_studio_edits(self):
+        here = campaign.active()
+        world = Path(here.data).parent / 'Foundry' / 'Data' / 'worlds' / 'fixture'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text(
+            json.dumps({'id': 'fixture', 'title': 'Fixture', 'system': 'dnd5e'}),
+            encoding='utf-8',
+        )
+        settings = http_routes.config.settings()
+        settings['world_path'] = str(world)
+        Path(here.settings).parent.mkdir(parents=True, exist_ok=True)
+        Path(here.settings).write_text(json.dumps(settings), encoding='utf-8')
+        snapshot = {
+            'format': 'campaign-studio-foundry-library',
+            'schema': 1,
+            'world': {'id': 'fixture', 'title': 'Fixture', 'system': 'dnd5e'},
+            'documents': {
+                'actors': [{'id': 'a1', 'name': 'Mira', 'summary': 'Scout'}],
+                'items': [],
+                'scenes': [],
+                'journals': [],
+            },
+        }
+        status, report, _ = self.request('/api/foundry/library/import', 'POST', snapshot)
+        self.assertEqual((status, report['added'], report['counts']['actors']), (200, 1, 1))
+        codex = http_routes.read_json(http_routes.doc_path('codex'))
+        self.assertEqual(codex['entries'][0]['notes'], 'Scout')
+        codex['entries'][0]['notes'] = 'Studio version'
+        http_routes.write_doc('codex', codex)
+        snapshot['documents']['actors'][0]['summary'] = 'Foundry version'
+        status, report, _ = self.request('/api/foundry/library/import', 'POST', snapshot)
+        self.assertEqual((status, report['kept']), (200, 1))
+        self.assertEqual(
+            http_routes.read_json(http_routes.doc_path('codex'))['entries'][0]['notes'],
+            'Studio version',
+        )
 
 
 if __name__ == '__main__':

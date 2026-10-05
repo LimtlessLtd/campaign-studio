@@ -199,6 +199,46 @@ class FoundryLibraryTests(unittest.TestCase):
         self.assertEqual(key['notes'], 'Changed in Foundry')
         self.assertEqual(len({entry['id'] for entry in codex['entries']}), 4)
 
+    def test_import_provenance_separates_worlds_and_legacy_entries(self):
+        first = foundry_library.normalize_snapshot(
+            self.snapshot(), foundry_library.selected_world()
+        )
+        codex = {'entries': []}
+        self.assertEqual(foundry_library.import_into_codex(first, codex)['added'], 3)
+        old = next(entry for entry in codex['entries'] if entry['foundry']['uuid'] == 'Actor.a1')
+        old['foundry'].pop('world_key')  # an entry made by the earlier importer has no source world
+        self.assertEqual(foundry_library.import_into_codex(first, codex)['added'], 1)
+        self.assertEqual(old['name'], 'Mira')
+
+        self.settings_file.write_text(json.dumps({'world_path': str(self.other)}), encoding='utf-8')
+        second = self.snapshot()
+        second['world'].update(id='other-world', title='Other')
+        second['documents']['actors'][0]['name'] = 'Someone else'
+        second = foundry_library.normalize_snapshot(second, foundry_library.selected_world())
+        self.assertEqual(foundry_library.import_into_codex(second, codex)['added'], 3)
+        actors = [entry for entry in codex['entries'] if entry['foundry']['uuid'] == 'Actor.a1']
+        self.assertEqual({entry['name'] for entry in actors}, {'Mira', 'Someone else'})
+        self.assertEqual(len({entry['id'] for entry in codex['entries']}), len(codex['entries']))
+
+    def test_import_only_serves_supported_images_from_the_selected_world(self):
+        image = self.world / 'portrait.png'
+        image.write_bytes(b'synthetic image')
+        snapshot = self.snapshot()
+        snapshot['documents']['actors'][0]['image'] = 'worlds/fixture-world/portrait.png'
+        snapshot['documents']['items'][0]['image'] = 'https://example.test/item.png'
+        clean = foundry_library.normalize_snapshot(snapshot, foundry_library.selected_world())
+        codex = {'entries': []}
+        foundry_library.import_into_codex(clean, codex)
+        actor = next(entry for entry in codex['entries'] if entry['type'] == 'npc')
+        item = next(entry for entry in codex['entries'] if entry['type'] == 'item')
+        source_key = actor['foundry']['world_key']
+        self.assertEqual(actor['image'], 'worlds/fixture-world/portrait.png')
+        self.assertEqual(item['image'], '')
+        self.assertEqual(foundry_library.media_file(actor['image'], source_key)[0], image)
+        self.settings_file.write_text(json.dumps({'world_path': str(self.other)}), encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'different connected world'):
+            foundry_library.media_file(actor['image'], source_key)
+
     def test_reads_documents_from_the_world_folder(self):
         self.world_folder()
         world = foundry_library.selected_world()

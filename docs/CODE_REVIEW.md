@@ -55,6 +55,15 @@ scanning it can make a deleted document reappear. The reader now follows the liv
 `MANIFEST`, and the snapshot fingerprint includes manifest changes. Synthetic fixtures cover retired tables
 and logs; reading during a live Foundry compaction remains unverified.
 
+Review of PR #24 found no confirmed bugs or structural defects. Review of PR #25 found that its one-action
+import silently swallowed a first-run failure, left macro snapshots out of the codex, and put Foundry media
+paths in codex image fields that the browser served as Studio files. Its UUID-only match could also update
+an entry from another world with the same Foundry document ID. The import now reports its result, uses the
+same codex conversion for folder and macro snapshots, scopes provenance to the world folder, and serves
+supported local images through the read-only Foundry asset route. `campaign_core` owns the recoverable
+snapshot/codex commit; `foundry_library` converts documents. Synthetic unit, route and browser checks cover
+these behaviors. Live import and live Foundry image handling remain unverified.
+
 ### Fixed in this review
 
 | Finding                                                                                    | Resolution                                                                          |

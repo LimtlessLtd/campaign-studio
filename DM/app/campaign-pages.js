@@ -108,6 +108,19 @@ const lastSession = () =>
   });
 const plain = (t) => (t || '').replace(/<[^>]+>/g, '');
 
+function codexImageUrl(entry) {
+  if (!entry.image) return null;
+  const imported = entry.foundry;
+  if (imported?.imported?.image === entry.image) {
+    if (!imported.world_key || imported.world_key !== S.state.world_key) return null;
+    return (
+      '/api/foundry/asset?' +
+      new URLSearchParams({ path: entry.image, world_key: imported.world_key })
+    );
+  }
+  return fileUrl(entry.image);
+}
+
 function sessionsMentioning(entry) {
   const names = [entry.name, entry.name.split(' ')[0], ...(entry.aka || [])].filter(
     (n) => n && n.length > 2,
@@ -905,12 +918,13 @@ async function codexPage(id, context) {
     );
     render(
       grid,
-      ...hits.map((e) =>
-        h(
+      ...hits.map((e) => {
+        const imageUrl = codexImageUrl(e);
+        return h(
           'div',
           { class: 'card link', onclick: () => go('#/codex/' + e.id) },
-          e.image
-            ? h('img', { class: 'thumb', src: fileUrl(e.image), loading: 'lazy', alt: '' })
+          imageUrl
+            ? h('img', { class: 'thumb', src: imageUrl, loading: 'lazy', alt: '' })
             : h('div', { class: 'thumb' }),
           h(
             'div',
@@ -932,8 +946,8 @@ async function codexPage(id, context) {
             ),
             h('p', { class: 'clamp' }, e.public || e.notes),
           ),
-        ),
-      ),
+        );
+      }),
     );
     filters
       .querySelectorAll('button')
@@ -1014,19 +1028,21 @@ async function codexEntry(c, id, main, context) {
   e.tags = e.tags || [];
   e.files = e.files || [];
   const img = h('div');
-  const drawImg = () =>
+  const drawImg = () => {
+    const imageUrl = codexImageUrl(e);
     render(
       img,
-      e.image
+      imageUrl
         ? h('img', {
             class: 'thumb big',
-            src: fileUrl(e.image),
+            src: imageUrl,
             alt: e.name,
             style: 'cursor:zoom-in',
-            onclick: () => lightbox(e.image),
+            onclick: () => lightbox(e.image, imageUrl),
           })
         : h('div', { class: 'thumb big', style: 'height:200px' }),
     );
+  };
   drawImg();
   const files = h('div');
   for (const f of e.files) {
@@ -1076,7 +1092,10 @@ async function codexEntry(c, id, main, context) {
         {},
         img,
         field(docName, e, 'image', {
-          label: 'Image (path in the campaign folder)',
+          label:
+            e.foundry?.imported?.image === e.image
+              ? 'Foundry image (upload a Studio image to replace it)'
+              : 'Image (path in the campaign folder)',
           placeholder: 'e.g. DM/uploads/portrait.png',
           onchange: drawImg,
         }),
