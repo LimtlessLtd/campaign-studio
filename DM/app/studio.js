@@ -216,6 +216,20 @@ async function studioLibrary(_arg, context) {
   const list = h('div', { class: 'library-list' });
   const detail = h('div', { class: 'library-detail card' });
   const pager = h('div', { class: 'library-pager' });
+  const importCard = h('section', { class: 'card library-import' });
+  let source = 'macro';
+  let autoRead = false;
+  let readError = '';
+  const readFolder = async () => {
+    render(status, h('p', { class: 'muted' }, 'Reading documents from the Foundry world folder…'));
+    try {
+      const result = await post('/api/foundry/library/read');
+      readError = '';
+      return result;
+    } catch (error) {
+      readError = error.message;
+    }
+  };
   const upload = h('input', {
     type: 'file',
     accept: '.json,application/json',
@@ -246,7 +260,15 @@ async function studioLibrary(_arg, context) {
         : null;
     render(
       detail,
-      h('div', { class: 'eyebrow' }, kind === 'assets' ? 'FOUNDRY MEDIA' : 'FOUNDRY SNAPSHOT'),
+      h(
+        'div',
+        { class: 'eyebrow' },
+        kind === 'assets'
+          ? 'FOUNDRY MEDIA'
+          : source === 'folder'
+            ? 'FOUNDRY WORLD'
+            : 'FOUNDRY SNAPSHOT',
+      ),
       h('h2', {}, item.name),
       item.folder ? h('p', { class: 'muted' }, 'Folder: ' + item.folder) : null,
       item.type && kind !== 'assets' ? badge(item.type) : null,
@@ -270,7 +292,9 @@ async function studioLibrary(_arg, context) {
         { class: 'small-note' },
         kind === 'assets'
           ? 'Read-only. Refresh this page to see media files added later.'
-          : 'Read-only. Refresh the snapshot in Foundry to see later changes.',
+          : source === 'folder'
+            ? 'Read-only. Changes made in Foundry appear when you open this page again.'
+            : 'Read-only. Refresh the snapshot in Foundry to see later changes.',
       ),
     );
   };
@@ -282,6 +306,16 @@ async function studioLibrary(_arg, context) {
         new URLSearchParams({ kind, q: query, offset: String(offset), limit: '60' }),
     );
     if (current !== requestNumber) return;
+    const snapshot = result.snapshot;
+    if (
+      result.readable &&
+      !autoRead &&
+      (!snapshot || (snapshot.source === 'folder' && snapshot.stale))
+    ) {
+      autoRead = true;
+      await readFolder();
+      return refresh();
+    }
     if (!result.world) {
       render(
         status,
@@ -292,6 +326,10 @@ async function studioLibrary(_arg, context) {
       render(pager);
       return;
     }
+    source = snapshot?.source || 'macro';
+    const omitted = Object.entries(snapshot?.omitted || {}).map(
+      ([category, count]) => `${count} more ${category} not shown`,
+    );
     render(
       status,
       h('b', {}, result.world.title),
@@ -303,9 +341,67 @@ async function studioLibrary(_arg, context) {
       h(
         'small',
         {},
-        result.snapshot
-          ? `Document snapshot: ${when(result.snapshot.exported_at)} · Foundry ${result.snapshot.core_version}`
-          : 'No document snapshot imported yet. Media files can still be browsed.',
+        snapshot
+          ? `${source === 'folder' ? 'Read from the world folder' : 'Imported snapshot'}: ${when(snapshot.exported_at)} · Foundry ${snapshot.core_version}` +
+              (omitted.length ? ` · ${omitted.join(', ')}` : '')
+          : result.readable
+            ? 'No documents read yet. Media files can still be browsed.'
+            : 'No document snapshot imported yet. Media files can still be browsed.',
+      ),
+      readError
+        ? h('small', { class: 'error-text' }, 'Could not read the world folder: ' + readError)
+        : null,
+    );
+    render(
+      importCard,
+      h(
+        'div',
+        {},
+        h('h3', {}, 'Documents from the world folder'),
+        h(
+          'p',
+          { class: 'muted' },
+          result.readable
+            ? "Campaign Studio reads scenes, journals, actors and items straight from this world's database files, and never changes them. It checks for changes each time you open this page."
+            : 'This world has no readable document databases, so use the export macro below instead.',
+        ),
+      ),
+      h(
+        'button',
+        {
+          disabled: !result.readable,
+          onclick: () =>
+            attempt(async () => {
+              await readFolder();
+              await refresh();
+            }),
+        },
+        'Read again now',
+      ),
+      h(
+        'details',
+        { class: 'library-fallback', open: !result.readable || !!readError },
+        h('summary', {}, 'Use the export macro instead'),
+        h(
+          'p',
+          { class: 'muted' },
+          'If the folder cannot be read, run the export Script macro as GM in Foundry, then import the downloaded JSON snapshot here.',
+        ),
+        h(
+          'div',
+          { class: 'row' },
+          h(
+            'a',
+            {
+              class: 'btn',
+              href: fileUrl('DM/forge/foundry-library-export.js'),
+              download: 'campaign-studio-library-export.js',
+            },
+            'Download export macro',
+          ),
+          upload,
+          h('button', { onclick: () => upload.click() }, 'Import snapshot'),
+        ),
       ),
     );
     render(
@@ -349,7 +445,9 @@ async function studioLibrary(_arg, context) {
             'p',
             { class: 'muted' },
             kind !== 'assets' && !result.snapshot
-              ? 'Import a Foundry document snapshot to browse this category.'
+              ? result.readable
+                ? 'No documents have been read yet. Try "Read again now".'
+                : 'Import a Foundry document snapshot to browse this category.'
               : 'No entries found.',
           ),
     );
@@ -390,35 +488,7 @@ async function studioLibrary(_arg, context) {
       h('a', { class: 'btn', href: '#/settings' }, 'World settings'),
     ),
     status,
-    h(
-      'section',
-      { class: 'card library-import' },
-      h(
-        'div',
-        {},
-        h('h3', {}, 'Read existing Foundry documents'),
-        h(
-          'p',
-          { class: 'muted' },
-          'In Foundry, run the export Script macro as GM. Then import the downloaded JSON snapshot here. Repeat whenever you want a fresh view.',
-        ),
-      ),
-      h(
-        'div',
-        { class: 'row' },
-        h(
-          'a',
-          {
-            class: 'btn',
-            href: fileUrl('DM/forge/foundry-library-export.js'),
-            download: 'campaign-studio-library-export.js',
-          },
-          'Download export macro',
-        ),
-        upload,
-        h('button', { onclick: () => upload.click() }, 'Import snapshot'),
-      ),
-    ),
+    importCard,
     tabs,
     h(
       'div',

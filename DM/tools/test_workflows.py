@@ -884,6 +884,20 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(imported['counts']['journals'], 1)
         journals = self.request('/api/foundry/library?kind=journals&q=legend')
         self.assertEqual(journals['items'][0]['pages'][0]['text'], 'Hidden door')
+        self.assertFalse(journals['readable'])
+        self.request('/api/foundry/library/read', {}, expected=400)
+        (world / 'data').mkdir()
+        (world / 'data' / 'actors.db').write_text(
+            json.dumps({'_id': 'actor9', 'name': 'Warden', 'type': 'npc'}) + '\n', encoding='utf-8'
+        )
+        self.request('/api/foundry/library/read', {}, expected=403, writable=False)
+        read = self.request('/api/foundry/library/read', {})
+        self.assertEqual(read['counts'], {'scenes': 0, 'journals': 0, 'actors': 1, 'items': 0})
+        actors = self.request('/api/foundry/library?kind=actors')
+        self.assertEqual(actors['items'][0]['uuid'], 'Actor.actor9')
+        self.assertEqual(
+            (actors['snapshot']['source'], actors['snapshot']['stale']), ('folder', False)
+        )
 
     def test_local_image_provider_contract(self):
         captured = []

@@ -106,8 +106,9 @@ The work these findings call for, with the owner's feature requests, is tracked 
   Backups remain necessary.
 - The in-memory queue fails unfinished jobs on restart; automatic resume/cancel is not implemented.
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.
-- The World Library reads selected media and a GM-exported snapshot of top-level world documents. It does
-  not include compendium contents, edit existing documents or provide live two-way synchronization.
+- The World Library reads selected media and top-level world documents, from the world's database files or a
+  GM-exported snapshot. It does not include compendium contents, edit existing documents or provide live
+  two-way synchronization.
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
   macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
   rejected before import.

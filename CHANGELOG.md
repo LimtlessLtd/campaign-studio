@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The World Library now reads a world's scenes, journals (with their pages), actors and items straight from
+  its database files when you open the page, so the export macro is no longer needed. It reads Foundry 11+
+  LevelDB folders with a new standard-library reader and Foundry 10-and-earlier `.db` files, opens nothing
+  for writing, re-reads when the files change, and offers the macro as a fallback when a world cannot be
+  read. A snapshot imported from the macro is never replaced automatically.
+
 - The GM import macro now selects explicit Foundry v11 or v12/v13 scene and roof adapters, and a D&D 5e
   sheet or journal-only system adapter. Fixture contracts exercise import and reimport for each combination;
   untagged GM journal pages are no longer overwritten by a same-named generated page, and pins resolve their

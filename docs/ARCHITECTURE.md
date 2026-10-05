@@ -18,6 +18,7 @@ flowchart LR
   HTTP --> Export[maps_io: Foundry export]
   Export --> Macro[GM runs import macro in Foundry]
   HTTP --> Library[foundry_library: world/media discovery]
+  WorldFiles[World database files] --> LevelDB[foundry_leveldb: read-only reader] --> Library
   FoundrySnapshot[GM exports read-only document snapshot] --> Library
 ```
 
@@ -37,6 +38,7 @@ flowchart LR
 | `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |
 | `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
+| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the LevelDB folders of a v11+ world         |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
 | `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
@@ -180,9 +182,12 @@ exported prompt packs permit other assistants. Old `/api/claude` calls use the s
 ## Foundry boundary
 
 The world picker reads `world.json` for identity and system information. The World Library reads selected
-local media under `Data` and a GM-exported snapshot of scenes, journals, actors and items. Snapshot import
-validates the chosen world and stores only bounded summaries under Studio's private `DM/data`. It is not live
-Foundry synchronization. Assets and JSON are copied to
+local media under `Data` and the world's scenes, journals, actors and items, read from its database files
+(`foundry_leveldb` for v11+ worlds, one JSON document per line for v10 and earlier) or from a GM-exported
+snapshot. Both routes pass `normalize_snapshot`, which validates the chosen world and stores only bounded
+summaries under Studio's private `DM/data`. A folder-read snapshot records a fingerprint of the database
+files, so the page re-reads when they change. The reader opens no database, takes no lock and writes
+nothing. It is not live Foundry synchronization. Assets and JSON are copied to
 `Data/wotg-maps`; the user runs the macro as GM. No world database is written by Python. Imported documents
 carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
 and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
