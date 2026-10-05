@@ -152,7 +152,8 @@ is rendering that map.
 
 - `GET /api/state`, `/api/settings`, `/api/jobs`, `/api/doc/<name>` return local state; `/api/shapes`
   returns the stored record shapes.
-- `PUT /api/doc/<name>` uses `X-Rev`; `PUT /api/plan/<slug>` checkpoints a valid plan.
+- `PUT /api/doc/<name>` uses `X-Rev` and refuses application-owned documents (`settings`, `workflows/*`,
+  `jobs/*`) with 403; `PUT /api/plan/<slug>` checkpoints a valid plan.
 - `POST /api/maps/create`, `/api/maps/import` create maps; `/api/maps/<slug>/populate|revise` create workflows.
 - `/api/workflow/<id>/pack` exports prompt/schema; POST `run|stage|feedback|apply` operates on a proposal.
 - `/api/requests/<id>/pack` exports a request prompt/schema; POST `run|stage|apply` operates on its draft.

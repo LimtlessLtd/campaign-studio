@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The generic document save (`PUT /api/doc/<name>`) now refuses `settings`, `workflows/*` and `jobs/*`
+  with 403. Those change only through their own routes, which validate them; the browser never saved
+  them through this route.
 - `foundry_upgrade` is now the upgrade workflow module itself instead of a facade over it. The facade
   imported helpers and re-wrapped `report` only so tests could patch them; tests now patch
   `foundry_catalog.fetch` and import catalogue, solver and compatibility helpers from their own modules.

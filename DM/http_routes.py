@@ -33,6 +33,7 @@ from campaign_core import (
     campaign_path,
     commit_docs,
     doc_path,
+    editable_doc_path,
     generate_cmd,
     job_file,
     list_docs,
@@ -426,7 +427,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _put_doc(self, path, query, p):
         name = path[9:]
-        p = doc_path(name)
+        p = editable_doc_path(name)
         value = json.loads(self.body().decode('utf-8'))
         with LOCK:
             base = self.headers.get('X-Rev')

@@ -83,9 +83,9 @@ defect by itself. The problems below are the ones object-oriented principles exi
 4. **HTTP errors are untyped. Resolved at the transport boundary.** Route handlers raise `Invalid`,
    `NotFound` and `Conflict`; one dispatcher maps them to 400, 404 and 409. Domain `ValueError`s become
    `Invalid` at that boundary. A stale document save still carries its merge payload with the conflict.
-5. **The generic document API bypasses domain rules.** `PUT /api/doc/<name>` can write `settings`,
-   `workflows/*` or `jobs/*` without the validation of their dedicated routes. That is acceptable for a
-   single-user local app, but restrict writable document prefixes.
+5. **The generic document API bypassed domain rules. Resolved.** `PUT /api/doc/<name>` refuses
+   application-owned documents (`settings`, `workflows/*`, `jobs/*`) with 403; `campaign_core.APP_OWNED_DOC`
+   lists them, so a new runtime document is protected by adding it there.
 6. **The SSRF guard is time-of-check.** `_validate_url` resolves DNS, then `urllib` resolves again when it
    connects, so DNS rebinding could reach a private address. Pin the validated address for the connection.
 7. Minor: `_media_path` repeats the manifest path rules, and `forge.forge` rereads `key.json` three times.

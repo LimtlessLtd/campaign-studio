@@ -40,6 +40,8 @@ FILE_ROOTS = (
 )
 DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
+# Documents the application owns: only their own routes and services change them.
+APP_OWNED_DOC = re.compile(r'^(?:settings|(?:workflows|jobs)/.+)$')
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
     'image/png': ('.png', lambda b: b.startswith(b'\x89PNG\r\n\x1a\n')),
@@ -59,6 +61,14 @@ def doc_path(name):
         slug = name.split('/', 1)[1]
         return os.path.join(campaign.active().map_folder(slug), 'key.json')
     return os.path.join(campaign.active().data, *name.split('/')) + '.json'
+
+
+def editable_doc_path(name):
+    """Path of a document the browser may replace through the generic document save."""
+    path = doc_path(name)
+    if APP_OWNED_DOC.match(name):
+        raise PermissionError(f'{name} is managed by Campaign Studio and cannot be saved directly')
+    return path
 
 
 def rev_of(path):

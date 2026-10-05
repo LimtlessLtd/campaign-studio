@@ -85,6 +85,26 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(conflict['doc'], {'entries': [{'id': 'current'}]})
         self.assertNotEqual(conflict['rev'], old_revision)
 
+    def test_document_save_refuses_application_owned_documents(self):
+        here = campaign.active()
+        owned = {
+            'settings': Path(here.settings),
+            'workflows/fixture': Path(here.data) / 'workflows' / 'fixture.json',
+            'jobs/fixture': Path(here.jobs) / 'fixture.json',
+        }
+        for name, path in owned.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{"kept": true}', encoding='utf-8')
+            with self.subTest(name=name):
+                status, body, _ = self.request('/api/doc/' + name, 'PUT', {'replaced': True})
+                self.assertEqual(status, 403)
+                self.assertIn('managed by Campaign Studio', body['error'])
+                self.assertEqual(json.loads(path.read_text(encoding='utf-8')), {'kept': True})
+        # Names that only resemble an owned document remain ordinary campaign documents.
+        for name in ('settings-notes', 'prep/jobs'):
+            with self.subTest(name=name):
+                self.assertEqual(self.request('/api/doc/' + name, 'PUT', {'entries': []})[0], 200)
+
 
 if __name__ == '__main__':
     unittest.main()
