@@ -15,6 +15,7 @@ from pathlib import Path
 
 import config
 import foundry_leveldb
+import shapes
 import storage
 
 SNAPSHOT_FORMAT = 'campaign-studio-foundry-library'
@@ -522,3 +523,64 @@ def library(saved, kind='scenes', query='', offset=0, limit=60):
         },
         **listing,
     }
+
+
+# Foundry documents Studio turns into codex entries: (snapshot kind, codex type for a given type)
+CODEX_IMPORTS = (
+    ('actors', lambda document: 'pc' if document['type'] == 'character' else 'npc'),
+    ('items', lambda document: 'item'),
+    ('scenes', lambda document: 'place'),
+)
+IMPORTED_FIELDS = ('name', 'group', 'notes', 'image')
+
+
+def import_into_codex(snapshot, codex):
+    """Add or refresh codex entries for the snapshot's actors, items and scenes.
+
+    Each entry remembers its Foundry UUID and the values last imported. A later import refreshes an entry
+    only while it still holds those values, so anything edited in Studio is kept. Returns the counts.
+    """
+    entries = codex.setdefault('entries', [])
+    known = {
+        entry['foundry']['uuid']: entry
+        for entry in entries
+        if isinstance(entry.get('foundry'), dict) and 'uuid' in entry['foundry']
+    }
+    taken = {entry.get('id') for entry in entries}
+    report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0}
+    for kind, entry_type in CODEX_IMPORTS:
+        for document in snapshot['documents'].get(kind, []):
+            values = {
+                'name': document['name'],
+                'group': document['folder'],
+                'notes': document['summary'],
+                'image': document['image'],
+            }
+            uuid = document['uuid'] or f'{COLLECTIONS[kind][1]}.{document["id"]}'
+            entry = known.get(uuid)
+            if entry is None:
+                base = re.sub(r'[^a-z0-9]+', '-', ('fvtt-' + document['id']).lower()).strip('-')
+                identity = base
+                while identity in taken:
+                    identity += '-x'
+                taken.add(identity)
+                entries.append(
+                    shapes.CODEX_ENTRY.new(
+                        id=identity,
+                        type=entry_type(document),
+                        **values,
+                        foundry={'uuid': uuid, 'imported': values},
+                    )
+                )
+                report['added'] += 1
+                continue
+            last = entry['foundry'].get('imported') or {}
+            if values == last:
+                report['unchanged'] += 1
+            elif all(entry.get(field) == last.get(field) for field in IMPORTED_FIELDS):
+                entry.update(values)
+                entry['foundry']['imported'] = values
+                report['updated'] += 1
+            else:
+                report['kept'] += 1
+    return report

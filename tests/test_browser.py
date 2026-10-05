@@ -111,13 +111,13 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page).to_have_url(self.studio.url + '/#/welcome')
         self.assert_accessible('first-run wizard')
 
-        self.page.get_by_role('button', name='Create project and open library').click()
+        self.page.get_by_role('button', name='Create project and import world').click()
         expect(self.page.get_by_text('Name your Studio project.').last).to_be_visible()
         self.page.get_by_label('Campaign name').fill('Synthetic campaign')
         self.page.get_by_label('Foundry User Data folder').fill(str(user_data))
         self.page.get_by_role('button', name='Scan for worlds').click()
         self.page.get_by_label('Wizard world').check()
-        self.page.get_by_role('button', name='Create project and open library').click()
+        self.page.get_by_role('button', name='Create project and import world').click()
 
         expect(self.page).to_have_url(self.studio.url + '/#/library')
         expect(self.page.locator('.campaign-switch')).to_contain_text('Synthetic campaign')

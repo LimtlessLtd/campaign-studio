@@ -823,6 +823,9 @@ async function studioWelcome(_arg, context) {
     await post('/api/settings', settings);
     S.state.campaign = settings.campaign_name.trim();
     S.state.onboarding_needed = false;
+    if (!withoutWorld)
+      // One action connects and imports; a world Studio cannot read yet is handled in the library.
+      await post('/api/foundry/world/import').catch(() => null);
     initStudio();
     go(withoutWorld ? '#/' : '#/library');
   };
@@ -853,7 +856,7 @@ async function studioWelcome(_arg, context) {
           h(
             'button',
             { class: 'primary', onclick: () => attempt(() => finish()) },
-            'Create project and open library',
+            'Create project and import world',
           ),
           h(
             'button',
