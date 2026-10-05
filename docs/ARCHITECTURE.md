@@ -56,6 +56,7 @@ flowchart LR
 | `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                             |
 | `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                              |
 | `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                    |
+| `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                           |
 | `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                            |
 | `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                   |
 | `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation              |
@@ -117,13 +118,14 @@ the shapes of the records in its lists (a map key's areas, an area's journal ent
 records with `Shape.new`, and the browser builds them with `blank(kind, fields)` from `GET /api/shapes`.
 Links and provenance such as `map`, `area`, `workflow` or `request` are optional extra fields.
 
-| Document                   | Shape     | Records in its lists                               |
-| -------------------------- | --------- | -------------------------------------------------- |
-| `data/codex.json`          | `codex`   | codex entries                                      |
-| `data/threads.json`        | `threads` | threads                                            |
-| `data/art.json`            | `art`     | art items                                          |
-| `data/prep/<session>.json` | `prep`    | scenes, handouts, checklist items, loot            |
-| `maps/<slug>/key.json`     | `map_key` | areas (with journal entries, events, loot), events |
+| Document                   | Shape        | Records in its lists                                                 |
+| -------------------------- | ------------ | -------------------------------------------------------------------- |
+| `data/codex.json`          | `codex`      | codex entries                                                        |
+| `data/threads.json`        | `threads`    | threads                                                              |
+| `data/art.json`            | `art`        | art items                                                            |
+| `data/world-maps.json`     | `world_maps` | world maps and their pins (positions are 0-1 fractions of the image) |
+| `data/prep/<session>.json` | `prep`       | scenes, handouts, checklist items, loot                              |
+| `maps/<slug>/key.json`     | `map_key`    | areas (with journal entries, events, loot), events                   |
 
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,

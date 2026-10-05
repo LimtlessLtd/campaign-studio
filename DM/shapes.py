@@ -153,6 +153,10 @@ MAP_KEY = Shape(
     {'areas': AREA, 'events': EVENT},
 )
 
+WORLD_PIN = Shape('world_pin', ['id'], dict(label='', map='', x=0.5, y=0.5, note=''))
+WORLD_MAP = Shape('world_map', ['id', 'name'], dict(image='', pins=[]), {'pins': WORLD_PIN})
+WORLD_MAPS = Shape('world_maps', [], dict(maps=[]), {'maps': WORLD_MAP})
+
 SHAPES = {
     shape.name: shape
     for shape in (
@@ -171,6 +175,9 @@ SHAPES = {
         ART,
         PREP,
         MAP_KEY,
+        WORLD_PIN,
+        WORLD_MAP,
+        WORLD_MAPS,
     )
 }
 

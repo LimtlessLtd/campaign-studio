@@ -21,6 +21,10 @@ AXE = ROOT / 'node_modules' / 'axe-core' / 'axe.min.js'
 REQUIRED = os.environ.get('CAMPAIGN_STUDIO_BROWSER_TESTS') == 'required'
 DESKTOP = {'width': 1280, 'height': 800}
 NARROW = {'width': 430, 'height': 900}
+PNG = bytes.fromhex(
+    '89504e470d0a1a0a0000000d4948445200000001000000010806000000'
+    '1f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082'
+)
 # axe impact levels that fail the build. Minor and moderate findings are not gated yet.
 BLOCKING = ('serious', 'critical')
 
@@ -167,6 +171,31 @@ class BrowserSmoke(unittest.TestCase):
         self.page.get_by_role('link', name='Campaign codex').click()
         expect(self.page.get_by_text('The Watcher').first).to_be_visible()
         self.assert_accessible('codex')
+
+    def test_world_map_pin_links_a_battle_map(self):
+        slug, _brief = self.studio.import_map()
+        self.open('#/world')
+        self.page.get_by_role('button', name='Add a world map').click()
+        self.page.get_by_label('Name', exact=True).fill('The Realm')
+        self.page.locator('dialog input[type=file]').set_input_files(
+            {'name': 'realm.png', 'mimeType': 'image/png', 'buffer': PNG}
+        )
+        expect(self.page.get_by_text('Image uploaded.')).to_be_visible()
+        self.page.get_by_role('button', name='Add world map').click()
+        expect(self.page.get_by_role('heading', name='The Realm', level=1)).to_be_visible()
+
+        self.page.get_by_role('button', name='Add pin').click()
+        expect(self.page.locator('.map-stage img')).to_be_visible()
+        self.page.locator('.map-stage img').click(position={'x': 3, 'y': 3})
+        self.page.get_by_label('Place name').fill('Lantern Quay')
+        self.page.get_by_label('Battle map').select_option(slug)
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        self.assert_accessible('world map with a selected pin')
+
+        pin = self.stored('world-maps')['maps'][0]['pins'][0]
+        self.assertEqual((pin['label'], pin['map']), ('Lantern Quay', slug))
+        self.page.get_by_role('link', name='Open battle map').click()
+        expect(self.page).to_have_url(re.compile('#/maps/' + slug))
 
     def test_narrow_navigation_reaches_every_page(self):
         self.page.set_viewport_size(NARROW)

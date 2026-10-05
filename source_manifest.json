@@ -21,6 +21,7 @@
   "DM/app/campaign-pages.js",
   "DM/app/controls.js",
   "DM/app/foundry-pages.js",
+  "DM/app/world-pages.js",
   "DM/app/index.html",
   "DM/app/map-pages.js",
   "DM/app/merge.js",
