@@ -6,12 +6,14 @@ never takes Foundry's lock and works while Foundry is running (it sees data as l
 Checksums are not verified: callers treat the result as untrusted and validate every document.
 """
 
+import re
 import struct
 from pathlib import Path
 
 TABLE_MAGIC = bytes.fromhex('57fb808b247547db')
 MAX_FILE_BYTES = 256 * 1024 * 1024
 MAX_BLOCK_BYTES = 64 * 1024 * 1024
+MAX_MANIFEST_BYTES = 64 * 1024 * 1024
 PUT = 1
 LOG_BLOCK = 32768
 
@@ -142,9 +144,10 @@ def _table(data, prefixes):
             yield key[:-8], tag >> 8, tag & 0xFF, value
 
 
-def _log(data):
+def _records(data):
+    """Yield complete logical records from a LevelDB log or MANIFEST file."""
     pos = 0
-    pending = b''
+    pending = None
     while pos + 7 <= len(data):
         left = LOG_BLOCK - pos % LOG_BLOCK
         if left < 7:
@@ -153,16 +156,31 @@ def _log(data):
         size = int.from_bytes(data[pos + 4 : pos + 6], 'little')
         kind = data[pos + 6]
         pos += 7
-        if kind == 0:
+        if kind == 0 and size == 0:
+            pos += left - 7
             continue
         chunk = data[pos : pos + size]
         pos += size
-        if len(chunk) < size:
+        if size > left - 7 or len(chunk) < size:
             return  # Foundry was mid-write; the unfinished record is not committed yet.
-        pending = chunk if kind in (1, 2) else pending + chunk
-        if kind not in (1, 4):
-            continue
-        batch, pending = pending, b''
+        if kind == 1:
+            pending = None
+            yield chunk
+        elif kind == 2:
+            pending = chunk
+        elif kind in (3, 4) and pending is not None:
+            pending += chunk
+            if kind == 4:
+                yield pending
+                pending = None
+        else:
+            raise LevelDBError('The Foundry database is damaged.')
+
+
+def _log(data):
+    for batch in _records(data):
+        if len(batch) < 12:
+            raise LevelDBError('The Foundry database is damaged.')
         sequence = int.from_bytes(batch[:8], 'little')
         at = 12
         for index in range(int.from_bytes(batch[8:12], 'little')):
@@ -178,11 +196,78 @@ def _log(data):
             yield key, sequence + index, action, value
 
 
+def _slice(data, pos):
+    size, pos = _varint(data, pos)
+    if pos + size > len(data):
+        raise LevelDBError('The Foundry database is damaged.')
+    return data[pos : pos + size], pos + size
+
+
+def _manifest(folder):
+    """Return live table numbers and log numbers from CURRENT's VersionEdits."""
+    current = folder / 'CURRENT'
+    if current.is_symlink():
+        raise LevelDBError('The Foundry database is damaged.')
+    name = current.read_text(encoding='ascii').strip()
+    if not re.fullmatch(r'MANIFEST-[0-9]+', name):
+        raise LevelDBError('The Foundry database is damaged.')
+    descriptor = folder / name
+    if descriptor.is_symlink() or descriptor.stat().st_size > MAX_MANIFEST_BYTES:
+        raise LevelDBError('The Foundry database manifest is unavailable or too large.')
+    tables = set()
+    min_log = None
+    previous_log = 0
+    for edit in _records(descriptor.read_bytes()):
+        pos = 0
+        while pos < len(edit):
+            tag, pos = _varint(edit, pos)
+            if tag == 1:  # comparator name
+                _, pos = _slice(edit, pos)
+            elif tag in (2, 3, 4, 9):  # log, next file, sequence, previous log
+                value, pos = _varint(edit, pos)
+                if tag == 2:
+                    min_log = value
+                elif tag == 9:
+                    previous_log = value
+            elif tag == 5:  # compaction pointer
+                _, pos = _varint(edit, pos)
+                _, pos = _slice(edit, pos)
+            elif tag == 6:  # removed table
+                _, pos = _varint(edit, pos)
+                number, pos = _varint(edit, pos)
+                tables.discard(number)
+            elif tag == 7:  # new table
+                _, pos = _varint(edit, pos)
+                number, pos = _varint(edit, pos)
+                _, pos = _varint(edit, pos)
+                _, pos = _slice(edit, pos)
+                _, pos = _slice(edit, pos)
+                tables.add(number)
+            else:
+                raise LevelDBError('This Foundry database uses an unsupported manifest entry.')
+    if min_log is None:
+        raise LevelDBError('The Foundry database manifest is incomplete.')
+    return tables, min_log, previous_log
+
+
 def _scan(folder, prefixes):
+    folder = Path(folder)
+    tables, min_log, previous_log = _manifest(folder)
     best = {}
-    for file in sorted(Path(folder).iterdir()):
-        if file.is_symlink() or file.suffix not in ('.ldb', '.sst', '.log'):
+    files = []
+    for number in sorted(tables):
+        file = folder / f'{number:06d}.ldb'
+        if not file.is_file():
+            file = folder / f'{number:06d}.sst'
+        if not file.is_file() or file.is_symlink():
+            raise FileNotFoundError(f'Foundry table {number} disappeared during reading.')
+        files.append(file)
+    for file in folder.iterdir():
+        if file.suffix != '.log' or not file.stem.isdecimal() or file.is_symlink():
             continue
+        if int(file.stem) >= min_log or int(file.stem) == previous_log:
+            files.append(file)
+    for file in sorted(files):
         if file.stat().st_size > MAX_FILE_BYTES:
             raise LevelDBError('A Foundry database file is unexpectedly large.')
         data = file.read_bytes()

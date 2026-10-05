@@ -15,12 +15,14 @@ would miss shared media. See [Foundry User Data](https://foundryvtt.com/article/
 Foundry scenes, journals, actors and items live in the world's own database files. Opening the World
 Library reads them straight from `Data/worlds/<world>/data`, with no macro. Foundry 11 and later keep each
 collection in a LevelDB folder, which Studio reads with its own standard-library reader
-(`DM/foundry_leveldb.py`). Foundry 10 and earlier keep one JSON document per line in `<collection>.db`,
+(`DM/foundry_leveldb.py`). It follows LevelDB's `CURRENT` and `MANIFEST` files to read only active tables
+and logs; files retired by compaction are ignored even if they are still on disk. Foundry 10 and earlier
+keep one JSON document per line in `<collection>.db`,
 which is also supported. The reader only opens files for reading: it does not open the database, take
 Foundry's lock or write anything, so it cannot corrupt the world.
 
 The page reads when no documents have been read yet, and again when the files have changed since the last
-read (Studio compares a fingerprint of the file names, sizes and modification times). **Read again now**
+read (Studio compares a fingerprint of the database and manifest file names, sizes and modification times). **Read again now**
 forces a re-read. A read takes a few seconds for a large world; one with hundreds of actors and over a
 thousand items took about two seconds on a development machine. Foundry writes changes to disk as you play, so a change made a
 moment ago may not appear until you reopen the page. This has been tested against a real v12 world while

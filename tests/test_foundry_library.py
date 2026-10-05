@@ -219,6 +219,16 @@ class FoundryLibraryTests(unittest.TestCase):
             (macro['snapshot']['source'], macro['snapshot']['stale']), ('macro', False)
         )
 
+    def test_manifest_change_marks_folder_snapshot_stale(self):
+        self.world_folder()
+        world = foundry_library.selected_world()
+        snapshot = foundry_library.read_world(world)
+        manifest = self.world / 'data' / 'journal' / 'MANIFEST-000001'
+        manifest.write_bytes(
+            manifest.read_bytes() + writer.physical_records([writer.manifest_edit()])
+        )
+        self.assertTrue(foundry_library.library(snapshot)['snapshot']['stale'])
+
     def test_reads_older_worlds_that_keep_one_document_per_line(self):
         lines = [
             {'_id': 'i1', 'name': 'Key', 'system': {'description': {'value': 'Old'}}},
@@ -241,9 +251,13 @@ class FoundryLibraryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'export macro'):
             foundry_library.read_world(foundry_library.selected_world())
 
-    def test_damaged_database_is_reported_not_partly_read(self):
+    def test_damaged_referenced_database_is_reported_not_partly_read(self):
         self.world_folder()
+        # A corrupt unreferenced file is left behind by compaction and must not
+        # block a read; damage to a referenced file must not yield partial data.
         (self.world / 'data' / 'journal' / '000009.ldb').write_bytes(b'\x07' * 200)
+        foundry_library.read_world(foundry_library.selected_world())
+        (self.world / 'data' / 'journal' / '000001.log').write_bytes(b'\0\0\0\0\x01\0\x09x')
         with self.assertRaisesRegex(ValueError, 'damaged'):
             foundry_library.read_world(foundry_library.selected_world())
 

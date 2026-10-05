@@ -38,7 +38,7 @@ flowchart LR
 | `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |
 | `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
-| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the LevelDB folders of a v11+ world         |
+| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world    |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
 | `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
@@ -183,7 +183,8 @@ exported prompt packs permit other assistants. Old `/api/claude` calls use the s
 
 The world picker reads `world.json` for identity and system information. The World Library reads selected
 local media under `Data` and the world's scenes, journals, actors and items, read from its database files
-(`foundry_leveldb` for v11+ worlds, one JSON document per line for v10 and earlier) or from a GM-exported
+(`foundry_leveldb` for v11+ worlds, following `CURRENT` and `MANIFEST` to exclude retired files; one JSON
+document per line for v10 and earlier) or from a GM-exported
 snapshot. Both routes pass `normalize_snapshot`, which validates the chosen world and stores only bounded
 summaries under Studio's private `DM/data`. A folder-read snapshot records a fingerprint of the database
 files, so the page re-reads when they change. The reader opens no database, takes no lock and writes

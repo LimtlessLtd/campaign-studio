@@ -319,7 +319,11 @@ def source_stamp(world):
         try:
             files = [source] if source.is_file() else sorted(source.iterdir())
             for file in files:
-                if file.suffix in ('.ldb', '.sst', '.log', '.db') and not file.is_symlink():
+                if (
+                    file.suffix in ('.ldb', '.sst', '.log', '.db')
+                    or file.name == 'CURRENT'
+                    or file.name.startswith('MANIFEST-')
+                ) and not file.is_symlink():
                     info = file.stat()
                     digest.update(
                         f'{name}/{file.name}:{info.st_size}:{info.st_mtime_ns}\n'.encode()
