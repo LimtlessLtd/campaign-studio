@@ -6,13 +6,17 @@
   and other devices sign in once with the code (session cookie `HttpOnly`, `SameSite=Strict`; wrong codes lock
   an address for a minute). Without a code the site still answers only on localhost, and it refuses to listen
   on another address without one. The connection is plain HTTP; the README says how to add TLS.
+  The login failure table is capped; when every slot is active, new addresses wait until a slot expires.
 - **World map** page: upload a world map image, drop pins on it and link each pin to a battle map, then open
   the battle map from the pin. Pins are stored as fractions of the image in `data/world-maps.json`
   (data schema 3), and the document holds a list of world maps, so several can be added later.
 - **Import world into Studio** (World Library, and the end of first-run setup) is one action: it reads the
   world folder and adds its actors, items and scenes to the codex with their Foundry UUIDs, reports how many
   were added, refreshed or kept, and counts the media available. Later imports refresh only entries you have
-  not edited in Studio. Foundry's files are only read.
+  not edited in Studio. The first-run result now stays visible, and an unreadable folder reports the macro
+  fallback. Importing the macro snapshot also fills the codex. Imported entries are scoped to their source
+  world, supported local Foundry images display through the read-only asset route, and skipped documents or
+  media limits are reported. Foundry's files are only read.
 - The World Library's LevelDB reader now follows `CURRENT` and `MANIFEST` to read only live tables and
   logs. A retired file left on disk during compaction can no longer make a deleted document reappear;
   manifest changes also trigger a fresh read when the page is reopened.
@@ -43,7 +47,7 @@
   battle-map form left over from the old studio is removed.
 - Split the browser into document state/autosave, reusable controls and page controllers without a build
   step. Navigation now aborts stale page reads and keeps each page's view private until it is current.
-- The generic document save (`PUT /api/doc/<name>`) now refuses `settings`, `workflows/*` and `jobs/*`
+- The generic document save (`PUT /api/doc/<name>`) now refuses `settings`, `foundry-library`, `workflows/*` and `jobs/*`
   with 403. Those change only through their own routes, which validate them; the browser never saved
   them through this route.
 - `foundry_upgrade` is now the upgrade workflow module itself instead of a facade over it. The facade

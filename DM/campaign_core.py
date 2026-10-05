@@ -11,6 +11,7 @@ import threading
 import campaign
 import commits
 import config
+import foundry_library
 import request_workflow
 import workflow
 import revisions
@@ -41,7 +42,7 @@ FILE_ROOTS = (
 DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 # Documents the application owns: only their own routes and services change them.
-APP_OWNED_DOC = re.compile(r'^(?:settings|(?:workflows|jobs)/.+)$')
+APP_OWNED_DOC = re.compile(r'^(?:settings|foundry-library|(?:workflows|jobs)/.+)$')
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
     'image/png': ('.png', lambda b: b.startswith(b'\x89PNG\r\n\x1a\n')),
@@ -179,6 +180,15 @@ JOURNAL = commits.Journal(
 def commit_docs(label, changes, after=()):
     """Write several documents so an interruption is completed rather than left half applied."""
     return JOURNAL.commit(label, changes, after)
+
+
+def import_foundry_snapshot(snapshot):
+    """Commit a World Library snapshot and its codex changes as one recoverable operation."""
+    with LOCK:
+        codex = read_json(doc_path('codex'), {'entries': []})
+        report = foundry_library.import_into_codex(snapshot, codex)
+        commit_docs('Import Foundry world', [('foundry-library', snapshot), ('codex', codex)])
+        return report
 
 
 def recover_commits():

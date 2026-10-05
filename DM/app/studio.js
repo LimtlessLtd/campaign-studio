@@ -209,7 +209,10 @@ async function studioDashboard(_arg, context) {
 function importSummary(report) {
   const parts = [`${report.added} added`, `${report.updated} refreshed`];
   if (report.kept) parts.push(`${report.kept} kept because you edited them in Studio`);
-  return `Imported the world's NPCs, items and scenes into the codex: ${parts.join(', ')}. ${report.media} media files are available in Media.`;
+  const omitted = Object.values(report.omitted || {}).reduce((sum, count) => sum + count, 0);
+  if (omitted) parts.push(`${omitted} omitted by the document limit`);
+  const media = report.media_truncated ? `At least ${report.media}` : report.media;
+  return `Imported the world's NPCs, items and scenes into the codex: ${parts.join(', ')}. ${media} media files are available in Media${report.media_truncated ? ' (listing limit reached)' : ''}.`;
 }
 
 async function studioLibrary(_arg, context) {
@@ -226,6 +229,8 @@ async function studioLibrary(_arg, context) {
   let source = 'macro';
   let autoRead = false;
   let readError = '';
+  let importNotice = S.worldImportNotice || null;
+  S.worldImportNotice = null;
   const readFolder = async () => {
     render(status, h('p', { class: 'muted' }, 'Reading documents from the Foundry world folder…'));
     try {
@@ -247,9 +252,8 @@ async function studioLibrary(_arg, context) {
         if (file.size > 20 * 1024 * 1024) throw new Error('The snapshot must be under 20 MB.');
         const snapshot = JSON.parse(await file.text());
         const result = await post('/api/foundry/library/import', snapshot);
-        toast(
-          `Imported ${Object.values(result.counts).reduce((a, b) => a + b, 0)} document summaries.`,
-        );
+        importNotice = null;
+        toast(importSummary(result));
         await refresh();
       });
       upload.value = '';
@@ -357,6 +361,13 @@ async function studioLibrary(_arg, context) {
       readError
         ? h('small', { class: 'error-text' }, 'Could not read the world folder: ' + readError)
         : null,
+      importNotice
+        ? h(
+            'small',
+            { class: importNotice.error ? 'error-text' : 'small-note' },
+            importNotice.message,
+          )
+        : null,
     );
     render(
       importCard,
@@ -392,6 +403,7 @@ async function studioLibrary(_arg, context) {
           onclick: () =>
             attempt(async () => {
               const report = await post('/api/foundry/world/import');
+              importNotice = null;
               toast(importSummary(report));
               await refresh();
             }),

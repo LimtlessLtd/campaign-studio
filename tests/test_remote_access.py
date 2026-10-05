@@ -45,6 +45,18 @@ class GateTests(unittest.TestCase):
         gate.try_code('192.168.0.9', 'wrong')
         self.assertEqual(list(gate._failures), ['192.168.0.9'])
 
+    def test_full_table_blocks_new_addresses_without_losing_active_lockouts(self):
+        now = [0.0]
+        gate = remote_access.AccessGate(CODE, clock=lambda: now[0])
+        for n in range(remote_access.MAX_TRACKED):
+            gate.try_code(f'10.0.{n // 250}.{n % 250}', 'wrong')
+        self.assertEqual(gate.locked_for('192.168.0.9'), remote_access.LOCKOUT_SECONDS)
+        self.assertFalse(gate.try_code('192.168.0.9', CODE))
+        self.assertEqual(len(gate._failures), remote_access.MAX_TRACKED)
+        self.assertTrue(gate.try_code('10.0.0.0', CODE))
+        now[0] = remote_access.LOCKOUT_SECONDS + 1
+        self.assertTrue(gate.try_code('192.168.0.9', CODE))
+
     def test_a_short_code_never_enables_the_gate(self):
         self.assertFalse(remote_access.AccessGate('abc').enabled)
         self.assertFalse(remote_access.AccessGate('abc').has_session('dm_session=x'))

@@ -37,10 +37,16 @@ left out. If a database is damaged or unreadable, the page says so and offers th
 **Import world into Studio** (World Library; first-run setup runs it after connecting a world) reads the
 world folder, refreshes the snapshot and adds each actor (player characters as `pc`, others as `npc`), item
 and scene (as `place`) to the codex. Descriptions go in the entry's `notes`, never `public`, because Foundry
-text can include GM secrets. Each entry records its Foundry UUID and the values last imported. A later
-import refreshes an entry only while it still holds those values, so anything edited in Studio is kept and
-counted as kept. Journals stay browsable in the World Library. Media is not copied: the result reports how many
-files can be browsed. Foundry's files are only read. If the folder cannot be read, the page offers the macro.
+text can include GM secrets. Each entry records its source world, Foundry UUID and the values last imported.
+A later import refreshes an entry only while it still holds those values, so anything edited in Studio is
+kept and counted as kept. Foundry IDs can be reused in another world; importing that world creates separate
+entries. Entries imported by the earlier unscoped importer are preserved and may appear a second time on the
+first reimport because their source world cannot be established safely. Journals stay browsable in the World
+Library. Media is not copied: the result reports how many files can be browsed. Supported local image paths
+on codex entries display through the read-only Foundry asset route while their world is selected; remote,
+missing and unsupported images are left blank. Foundry's files are only read. If the folder cannot be read,
+first-run setup shows the error and the page offers the macro. The result also reports documents omitted by
+the 5,000-per-kind limit and when the media listing reached its limit.
 
 ## Fallback: the export macro
 
@@ -48,7 +54,8 @@ If the folder cannot be read, use the macro instead:
 
 1. Download the **World Library export macro** in Campaign Studio (under "Use the export macro instead").
 2. In the connected world, create a Foundry Script macro with that code and run it as GM.
-3. Import the downloaded JSON snapshot on the World Library page.
+3. Import the downloaded JSON snapshot on the World Library page. Its actors, items and scenes enter the
+   codex by the same rules as a folder import.
 
 The macro reads world documents through Foundry's client API and downloads a summary snapshot. It does not
 change Foundry. A snapshot you import is never replaced automatically; **Read again now** replaces it with
@@ -56,9 +63,10 @@ a folder read.
 
 ## What is stored
 
-Either route saves a snapshot only under `DM/data` in the local Studio installation. Journal text, including
-GM-visible secrets, can appear in this local snapshot; protect Studio's runtime folder as you would the
-Foundry world. The page shows when the documents were read or exported and which route produced them.
+Either route saves a snapshot and imported codex entries under `DM/data` in the local Studio installation.
+Journal text, including GM-visible secrets, can appear in this local snapshot; protect Studio's runtime
+folder as you would the Foundry world. The page shows when the documents were read or exported and which
+route produced them.
 The import checks world ID, title and game system against the selected local world. Switching the linked world
 hides the previous world's snapshot.
 

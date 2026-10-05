@@ -287,9 +287,9 @@ function picker(docName, arr, choices, { placeholder = 'Add…', cls = '' } = {}
 
 /* ---------- lookups ---------- */
 
-function lightbox(path) {
+function lightbox(path, url = fileUrl(path)) {
   const lb = $('#lightbox');
-  $('img', lb).src = fileUrl(path);
+  $('img', lb).src = url;
   $('p', lb).textContent = path;
   lb.hidden = false;
 }
