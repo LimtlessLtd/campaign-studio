@@ -6,6 +6,7 @@ build never rewrites documents it does not understand. Each migration is idempot
 interrupted, the version is unchanged and the next start runs it again from a fresh backup.
 """
 
+import contextlib
 import datetime
 import glob
 import json
@@ -18,6 +19,7 @@ import storage
 FORMAT = 'campaign-studio-data'
 CURRENT = 2
 MARKER = '.schema.json'
+PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
 
 
@@ -132,8 +134,27 @@ def planned_changes(data, maps, start):
 
 
 # ---------- backups ----------
-def backup(data, maps, backups, label):
-    """Copy every document a migration may rewrite, then verify each copy by SHA-256."""
+def pending_path(backups):
+    return os.path.join(backups, PENDING)
+
+
+def interrupted_attempt(backups):
+    """The complete backup of the first attempt of a migration that never finished, or None."""
+    try:
+        with open(pending_path(backups), encoding='utf-8') as file:
+            record = json.load(file)
+        first = record.get('first') or record.get('backup')
+    except (FileNotFoundError, ValueError, AttributeError):
+        return None
+    return first if isinstance(first, str) and first else None
+
+
+def backup(data, maps, backups, label, first_attempt=None):
+    """Copy every document a migration may rewrite, then verify each copy by SHA-256.
+
+    first_attempt names the complete backup of an earlier, interrupted attempt. This copy was taken
+    from documents that attempt may have partly migrated, so its manifest says so.
+    """
     root = os.path.dirname(os.path.abspath(data))
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + os.urandom(3).hex()
     target = os.path.join(backups, label + '-' + stamp)
@@ -160,6 +181,9 @@ def backup(data, maps, backups, label):
             'version': version(data, maps),
             'files': files,
         }
+        if first_attempt:
+            manifest['partly_migrated'] = True
+            manifest['first_attempt_backup'] = first_attempt
         storage.atomic_json(os.path.join(target, 'backup.json'), manifest, durable=True)
     except BaseException:
         shutil.rmtree(target, ignore_errors=True)  # an incomplete backup must not look restorable
@@ -239,11 +263,20 @@ def migrate(data, maps, backups, dry_run=False):
         return dict(result, status='needs migration')
     result['backup'] = None
     if changes:
-        result['backup'] = backup(data, maps, backups, f'schema-{found}-to-{CURRENT}')
+        first = interrupted_attempt(backups)
+        result['backup'] = backup(data, maps, backups, f'schema-{found}-to-{CURRENT}', first)
+        # Left in place until the version is recorded, so a retry knows its documents may be partly migrated.
+        storage.atomic_json(
+            pending_path(backups),
+            {'backup': os.path.basename(result['backup']), 'first': first},
+            durable=True,
+        )
     for path, value in changes:
         with storage.file_lock(path):
             # Flushed before the marker below, so a recorded version implies migrated documents.
             storage.atomic_json(path, value, durable=True)
     note = os.path.basename(result['backup']) if result['backup'] else 'no changes'
     write_marker(data, CURRENT, f'Migrated from schema {found}; backup {note}')
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(pending_path(backups))
     return result
