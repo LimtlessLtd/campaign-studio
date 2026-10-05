@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- HTTP requests now dispatch through a route table with small handlers. Invalid, missing and conflicting
+  requests have distinct typed 400/404/409 responses; stale document saves still include the latest
+  revision and document so the browser can merge edits. Existing workflow HTTP tests remain unchanged.
 - `DM_HOME` runs Campaign Studio on a campaign folder outside the app folder. One `Campaign` object now
   locates every campaign file, and renders, generators and image jobs work on the campaign that queued
   them. Uploaded images, map imports, previews and checkpoints store paths relative to the campaign's

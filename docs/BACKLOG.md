@@ -13,7 +13,6 @@ Next ID: W16
 
 | ID  | Priority | Work                                                                | Acceptance criteria                                                                                                                                            |
 | --- | -------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W2  | 2        | Route table and typed HTTP errors                                   | No handler over ~60 lines; 400/404/409 come from exception types; the existing HTTP tests are unchanged                                                        |
 | W3  | 2        | Split `foundry_upgrade` into catalogue, solver and workflow modules | Same public functions and fixtures pass; no module imports another's private names                                                                             |
 | W4  | 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus                                                                                 |
 | W5  | 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                                                                                       |
