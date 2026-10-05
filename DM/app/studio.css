@@ -1464,6 +1464,16 @@ hr {
 .library-import p {
   max-width: 670px;
 }
+.library-fallback {
+  flex: 1 0 100%;
+}
+.library-fallback summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.library-fallback .row {
+  margin-top: 10px;
+}
 .library-tabs {
   display: flex;
   gap: 8px;

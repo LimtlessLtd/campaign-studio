@@ -1,14 +1,34 @@
-"""Read-only discovery of local Foundry worlds, media and GM-exported document snapshots."""
+"""Read-only discovery of local Foundry worlds, media and document snapshots.
 
+Documents come from the world's own database files (`read_world`) or from a snapshot the GM exports
+with a macro. Both produce the same validated snapshot, which is stored under `DM/data` and browsed.
+"""
+
+import hashlib
+import json
 import os
+import re
 import sys
+from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 
 import config
+import foundry_leveldb
 import storage
 
 SNAPSHOT_FORMAT = 'campaign-studio-foundry-library'
 KINDS = ('scenes', 'journals', 'actors', 'items')
+# snapshot kind -> (database name in the world's data folder, Foundry document type)
+COLLECTIONS = {
+    'scenes': ('scenes', 'Scene'),
+    'journals': ('journal', 'JournalEntry'),
+    'actors': ('actors', 'Actor'),
+    'items': ('items', 'Item'),
+}
+EMBEDDED = {'journal': ('pages',)}
+MAX_DOCUMENTS = 5000
+MAX_NEDB_BYTES = 256 * 1024 * 1024
 MEDIA = {
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
@@ -164,7 +184,7 @@ def _short(value, limit):
     return str(value or '')[:limit]
 
 
-def normalize_snapshot(payload, world):
+def normalize_snapshot(payload, world, origin='macro', stamp='', omitted=None):
     if not isinstance(payload, dict) or payload.get('format') != SNAPSHOT_FORMAT:
         raise ValueError('Choose a Campaign Studio Foundry library snapshot.')
     if payload.get('schema') != 1 or not isinstance(payload.get('documents'), dict):
@@ -224,8 +244,228 @@ def normalize_snapshot(payload, world):
             'core_version': _short(source.get('coreVersion'), 80),
         },
         'exported_at': _short(payload.get('exportedAt'), 80),
+        'source': origin,
+        'stamp': stamp,
+        'omitted': omitted or {},
         'documents': documents,
     }
+
+
+class _PlainText(HTMLParser):
+    BLOCKS = frozenset(('p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'))
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style'):
+            self.hidden += 1
+        elif tag == 'br':
+            self.parts.append('\n')
+
+    def handle_endtag(self, tag):
+        if tag in ('script', 'style'):
+            self.hidden = max(0, self.hidden - 1)
+        elif tag in self.BLOCKS:
+            self.parts.append('\n')
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def _plain_text(html, limit):
+    if not isinstance(html, str):
+        return ''
+    parser = _PlainText()
+    parser.feed(html[: limit * 4])
+    parser.close()
+    return re.sub(r'\n{3,}', '\n\n', ''.join(parser.parts)).strip()[:limit]
+
+
+def _dig(document, *paths):
+    """The first value present along any of the key paths, like chained `?.` and `??` in the macro."""
+    for path in paths:
+        value = document
+        for key in path:
+            value = value.get(key) if isinstance(value, dict) else None
+        if value is not None:
+            return value
+    return None
+
+
+def _database_files(world, name):
+    base = Path(world['path']) / 'data'
+    folder = base / name
+    legacy = base / (name + '.db')
+    if folder.is_dir() and not folder.is_symlink():
+        return folder
+    if legacy.is_file() and not legacy.is_symlink():
+        return legacy
+    return None
+
+
+def source_stamp(world):
+    """A fingerprint of the world's document databases, or None when it has none to read."""
+    digest = hashlib.sha256()
+    found = False
+    for name in ('folders', *(database for database, _ in COLLECTIONS.values())):
+        source = _database_files(world, name)
+        if not source:
+            continue
+        found = found or name != 'folders'
+        try:
+            files = [source] if source.is_file() else sorted(source.iterdir())
+            for file in files:
+                if file.suffix in ('.ldb', '.sst', '.log', '.db') and not file.is_symlink():
+                    info = file.stat()
+                    digest.update(
+                        f'{name}/{file.name}:{info.st_size}:{info.st_mtime_ns}\n'.encode()
+                    )
+        except FileNotFoundError:
+            digest.update(f'{name}:changing\n'.encode())  # Foundry replaced a file as we looked
+    return digest.hexdigest() if found else None
+
+
+def _documents(world, name):
+    """Top-level documents by ID and their embedded documents by parent ID, or None if absent."""
+    source = _database_files(world, name)
+    if not source:
+        return None
+    documents = {}
+    children = {}
+    if source.is_dir():
+        prefixes = [f'!{name}!'] + [f'!{name}.{sub}!' for sub in EMBEDDED.get(name, ())]
+        rows = foundry_leveldb.read(source, tuple(prefix.encode() for prefix in prefixes))
+        for key, value in rows.items():
+            try:
+                document = json.loads(value.decode('utf-8'))
+            except ValueError:
+                continue
+            _, scope, identity = key.decode('utf-8', 'replace').split('!', 2)
+            if not isinstance(document, dict):
+                continue
+            if scope == name:
+                documents[identity] = {**document, '_id': identity}
+            else:
+                parent, _, child = identity.partition('.')
+                children.setdefault(parent, {})[child] = {**document, '_id': child}
+        return documents, children
+    # Foundry 10 and earlier keep one JSON document per line; a later line replaces an earlier one.
+    if source.stat().st_size > MAX_NEDB_BYTES:
+        raise ValueError('A Foundry database file is unexpectedly large.')
+    for line in source.read_text(encoding='utf-8', errors='replace').splitlines():
+        try:
+            document = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(document, dict) or not isinstance(document.get('_id'), str):
+            continue
+        if document.get('$$deleted'):
+            documents.pop(document['_id'], None)
+        else:
+            documents[document['_id']] = document
+    return documents, children
+
+
+def _journal_pages(document, children):
+    pages = document.get('pages')
+    if not isinstance(pages, list):
+        pages = []
+    found = [children.get(page) if isinstance(page, str) else page for page in pages]
+    found = [page for page in found if isinstance(page, dict)]
+    found.sort(key=lambda page: page.get('sort') if isinstance(page.get('sort'), int) else 0)
+    result = []
+    for page in found:
+        text = page.get('text') if isinstance(page.get('text'), dict) else {}
+        result.append(
+            {
+                'id': page.get('_id'),
+                'name': page.get('name'),
+                'text': _plain_text(text.get('content') or text.get('markdown'), 100000),
+                'image': page.get('src') or '',
+            }
+        )
+    return result
+
+
+def _record(kind, document, children, folders):
+    identity = document.get('_id')
+    folder = folders.get(document.get('folder'))
+    record = {
+        'id': identity,
+        'uuid': f'{COLLECTIONS[kind][1]}.{identity}',
+        'name': document.get('name'),
+        'folder': folder if isinstance(folder, str) else '',
+        'type': document.get('type') if isinstance(document.get('type'), str) else '',
+        'image': document.get('img') or '',
+        'summary': '',
+    }
+    if kind == 'scenes':
+        record['image'] = _dig(document, ('background', 'src'), ('thumb',)) or ''
+        record['summary'] = _plain_text(document.get('description'), 20000)
+    elif kind == 'journals':
+        record['pages'] = _journal_pages(document, children.get(identity, {}))
+    elif kind == 'actors':
+        record['summary'] = _plain_text(
+            _dig(
+                document,
+                ('system', 'details', 'biography', 'value'),
+                ('system', 'description', 'value'),
+                ('system', 'details', 'description'),
+            ),
+            20000,
+        )
+    else:
+        record['summary'] = _plain_text(_dig(document, ('system', 'description', 'value')), 20000)
+    return record
+
+
+def read_world(world):
+    """Read scenes, journals, actors and items from the world's own database files."""
+    stamp = source_stamp(world)
+    if stamp is None:
+        raise ValueError(
+            'This world has no readable document databases. Use the export macro instead.'
+        )
+    try:
+        folders = {
+            identity: document.get('name')
+            for identity, document in (_documents(world, 'folders') or ({}, {}))[0].items()
+        }
+        documents = {}
+        omitted = {}
+        for kind, (name, _) in COLLECTIONS.items():
+            found, children = _documents(world, name) or ({}, {})
+            records = [
+                _record(kind, document, children, folders)
+                for document in found.values()
+                if isinstance(document.get('name'), str)
+            ]
+            records.sort(key=lambda record: (record['name'].casefold(), record['id']))
+            if len(records) > MAX_DOCUMENTS:
+                omitted[kind] = len(records) - MAX_DOCUMENTS
+            documents[kind] = records[:MAX_DOCUMENTS]
+    except OSError as error:
+        raise ValueError(
+            'The world files could not be read. Close Foundry and try again, or use the '
+            'export macro instead.'
+        ) from error
+    payload = {
+        'format': SNAPSHOT_FORMAT,
+        'schema': 1,
+        'world': {
+            'id': world['id'],
+            'title': world['title'],
+            'system': world['system'],
+            'coreVersion': world['foundry_version'],
+        },
+        'exportedAt': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'documents': documents,
+    }
+    return normalize_snapshot(payload, world, origin='folder', stamp=stamp, omitted=omitted)
 
 
 def current_snapshot(saved, world):
@@ -259,11 +499,16 @@ def library(saved, kind='scenes', query='', offset=0, limit=60):
             in (item['name'] + ' ' + item['folder'] + ' ' + item['summary']).casefold()
         ]
         listing = {'items': matches[offset : offset + limit], 'total': len(matches)}
+    stamp = source_stamp(world)
     return {
         'world': world,
+        'readable': stamp is not None,
         'snapshot': {
             'exported_at': snapshot['exported_at'],
             'core_version': snapshot['world']['core_version'],
+            'source': snapshot.get('source', 'macro'),
+            'stale': snapshot.get('source') == 'folder' and snapshot.get('stamp') != stamp,
+            'omitted': snapshot.get('omitted', {}),
         }
         if snapshot
         else None,
