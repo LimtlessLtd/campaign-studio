@@ -6,6 +6,7 @@ import time
 from http.server import ThreadingHTTPServer
 
 import campaign
+import remote_access
 import schema
 from campaign_core import (
     JOBS_SERVICE,
@@ -14,12 +15,17 @@ from campaign_core import (
     recover_commits,
     worker,
 )
-from http_routes import Handler
+from http_routes import GATE, Handler
 
 
 def main():
     started = time.time()
-    server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
+    bind = os.environ.get('DM_BIND', '127.0.0.1')
+    try:
+        remote_access.check_bind(bind, GATE.code)
+    except remote_access.AccessError as error:
+        raise SystemExit(str(error))
+    server = ThreadingHTTPServer((bind, PORT), Handler)
     here = campaign.active()
     os.makedirs(here.data, exist_ok=True)
     os.makedirs(here.jobs, exist_ok=True)
@@ -46,6 +52,8 @@ def main():
     for lane in LANES:
         threading.Thread(target=worker, args=(lane,), daemon=True).start()
     print(f'DM site: http://127.0.0.1:{PORT}  (Ctrl+C to stop)', flush=True)
+    if GATE.enabled:
+        print(f'Other devices: http://{bind}:{PORT} with the access code (plain HTTP).', flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
