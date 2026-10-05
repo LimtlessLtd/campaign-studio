@@ -78,6 +78,7 @@
   "tests/test_foundry_backup.py",
   "tests/test_foundry_library.py",
   "tests/test_foundry_upgrade.py",
+  "tests/test_http_routes.py",
   "tests/test_jobs_storage.py",
   "tests/test_release.py",
   "tests/test_schema.py",

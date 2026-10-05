@@ -74,15 +74,15 @@ defect by itself. The problems below are the ones object-oriented principles exi
    `handouts`, map events lacked `title`. `DM/shapes.py` now defines each stored record once; apply paths,
    migrations and the browser (through `GET /api/shapes`) build records from it, and tests fail when a
    writer or a stored shape diverges.
-3. **God functions (single responsibility).** `http_routes.do_POST` is a 410-line `if` chain and
-   `do_GET` is 176 lines. `render2d.prop` is 424 lines, and `foundry_upgrade` has 220- and 190-line
-   workflows inside a 1,300-line module. `studio.js` has `mapStudio` at 1,064 lines and
-   `foundryUpgradeCard` at 524. Use a route table (path pattern → handler), a prop-painter registry,
-   separate `foundry_catalog`, `package_solver` and `upgrade_workflow` modules, and page controllers for
-   the map studio.
-4. **Errors are untyped.** Nearly every failure is a `ValueError`, mapped to 403 in `do_GET` and 400 in
-   `do_POST`, so "not found", "conflict" and "invalid input" are indistinguishable. Add a small exception
-   hierarchy (`NotFound`, `Conflict`, `Invalid`) mapped to status codes in one place.
+3. **God functions (single responsibility). Partly resolved.** HTTP methods now dispatch from a route
+   table to handlers under 60 lines. `render2d.prop` is 424 lines, and `foundry_upgrade` has 220- and
+   190-line workflows inside a 1,300-line module. `studio.js` has `mapStudio` at 1,064 lines and
+   `foundryUpgradeCard` at 524. The remaining work calls for a prop-painter registry, separate
+   `foundry_catalog`, `package_solver` and `upgrade_workflow` modules, and page controllers for the map
+   studio.
+4. **HTTP errors are untyped. Resolved at the transport boundary.** Route handlers raise `Invalid`,
+   `NotFound` and `Conflict`; one dispatcher maps them to 400, 404 and 409. Domain `ValueError`s become
+   `Invalid` at that boundary. A stale document save still carries its merge payload with the conflict.
 5. **The generic document API bypasses domain rules.** `PUT /api/doc/<name>` can write `settings`,
    `workflows/*` or `jobs/*` without the validation of their dedicated routes. That is acceptable for a
    single-user local app, but restrict writable document prefixes.

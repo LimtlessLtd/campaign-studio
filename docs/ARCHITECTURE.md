@@ -51,6 +51,11 @@ flowchart LR
 | `DM/app/studio.js`                    | Studio navigation, first run, World Library, maps, settings and image queue        |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
 
+`http_routes.ROUTES` maps methods and paths to focused handlers. The dispatcher converts typed
+`Invalid`, `NotFound` and `Conflict` errors into JSON responses with 400, 404 and 409 statuses. Domain
+validation errors are normalized at this boundary; document revision conflicts retain the latest document
+and revision in their response.
+
 The `DM` directory name and `wotg-maps`/`wotgForge` export identifiers are compatibility names. They do not
 require the original campaign. Change export identifiers only with a migration for existing scenes.
 
