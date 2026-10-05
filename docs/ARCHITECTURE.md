@@ -187,9 +187,11 @@ Foundry synchronization. Assets and JSON are copied to
 carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
 and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
 
-The scene schema targets v12. D&D 5e NPC/item mechanics remain descriptive notes; other systems get journal
-content. Live two-way world synchronization, mechanical stat block adapters and broad version
-compatibility are future work.
+The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12 or v13
+scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while other systems get journal
+content. Fixture contracts cover these combinations and tagged reimport ownership. The live GM checks in
+`docs/FOUNDRY_IMPORT.md` remain necessary. Live two-way world synchronization, mechanical stat block
+adapters and v14 support are future work.
 
 The Foundry backup service reads the selected world manifest to locate its User Data folder. It copies that
 whole folder only while Foundry is closed, records and verifies every file checksum, and can materialize a

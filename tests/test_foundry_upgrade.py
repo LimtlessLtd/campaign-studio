@@ -503,6 +503,24 @@ class PinnedDownloadTests(unittest.TestCase):
                 foundry_catalog.fetch('https://mixed.example.org/module.json')
         self.assertEqual(self.FakeSocket.connected, [])
 
+    def test_environment_proxy_cannot_resolve_the_target_again(self):
+        lookups = []
+        self.FakeSocket.connected = []
+
+        def resolve(host, *args, **kwargs):
+            lookups.append(host)
+            return [self.PUBLIC]
+
+        with (
+            patch.dict('os.environ', {'HTTPS_PROXY': 'http://127.0.0.1:8888'}),
+            patch.object(foundry_catalog.socket, 'getaddrinfo', side_effect=resolve),
+            patch.object(foundry_catalog.socket, 'socket', self.FakeSocket),
+        ):
+            with self.assertRaises(OSError):
+                foundry_catalog.fetch('https://public.example.org/module.json')
+        self.assertEqual(lookups, ['public.example.org'])
+        self.assertEqual(self.FakeSocket.connected, [('93.184.216.34', 443)])
+
 
 if __name__ == '__main__':
     unittest.main()

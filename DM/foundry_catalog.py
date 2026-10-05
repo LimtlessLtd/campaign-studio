@@ -42,6 +42,8 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
     """
 
     def connect(self):
+        if self._tunnel_host:
+            raise ValueError('Package metadata downloads do not support HTTPS proxies.')
         family, kind, proto, _name, address = _public_address(self.host, self.port)
         sock = socket.socket(family, kind, proto)
         try:
@@ -66,7 +68,10 @@ class _SafeRedirect(urllib.request.HTTPRedirectHandler):
 
 def fetch(url, limit=MAX_PAGE, official=False):
     _validate_url(url, official=official)
-    opener = urllib.request.build_opener(_PinnedHTTPSHandler, _SafeRedirect)
+    # A proxy may resolve the target a second time. Connect directly to the approved address.
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _PinnedHTTPSHandler, _SafeRedirect
+    )
     request = urllib.request.Request(url, headers={'User-Agent': 'CampaignStudio/upgrade-report'})
     with opener.open(request, timeout=12) as response:
         body = response.read(limit + 1)

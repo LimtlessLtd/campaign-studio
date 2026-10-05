@@ -72,6 +72,7 @@
   "docs/CODE_REVIEW.md",
   "docs/DEVELOPMENT.md",
   "docs/FOUNDRY_BACKUP.md",
+  "docs/FOUNDRY_IMPORT.md",
   "docs/FOUNDRY_LIBRARY.md",
   "docs/RELEASE_NOTES.md",
   "package-lock.json",
@@ -93,6 +94,7 @@
   "tests/test_schema.py",
   "tests/test_shapes.py",
   "tools/check_macro.cjs",
+  "tools/check_foundry_import.cjs",
   "tools/check_merge.cjs",
   "tools/check_routes.cjs",
   "tools/check_source.py"

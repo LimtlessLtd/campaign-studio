@@ -76,8 +76,11 @@ and location pins are GM-only. Reimports update generated parts and preserve cus
 
 The macro also creates/updates D&D 5e NPC and loot item sheets by stable studio IDs. Stat blocks and item
 mechanics are notes: they need GM review and are not automatically converted into attacks or activities.
-Other game systems receive linked character/item information in the journal; sheet adapters are future work.
-The scene format targets Foundry v12. Live compatibility with each Foundry/system version needs verification.
+Other game systems receive linked character/item information in the journal. The export uses a v12 scene
+shape; the GM macro adapts it to Foundry v11, v12 or v13 and stops before making changes on other versions.
+These combinations have synthetic fixture coverage, but still need live GM verification before use in a
+campaign. See [Foundry import compatibility](docs/FOUNDRY_IMPORT.md) for the version/system matrix and
+the import/reimport checks. D&D 5e sheet mechanics remain descriptive notes.
 
 **Foundry backup and restore test** in Settings can create a verified offline copy of a local Foundry User Data folder
 and an isolated restore test copy. Close Foundry first and test opening the restored world in its original

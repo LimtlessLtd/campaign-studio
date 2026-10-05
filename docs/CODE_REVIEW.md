@@ -88,8 +88,9 @@ defect by itself. The problems below are the ones object-oriented principles exi
    lists them, so a new runtime document is protected by adding it there.
 6. **The SSRF guard was time-of-check. Resolved.** `foundry_catalog` resolves the host once inside the
    connection, rejects any non-public answer and connects to that address (the hostname still drives SNI and
-   certificate checks). Redirects open new connections, so each hop is checked and pinned. Behind an HTTP proxy
-   the proxy's own address must be public, or the download fails closed.
+   certificate checks). Redirects open new connections, so each hop is checked and pinned. The downloader
+   bypasses environment proxies because a proxy could resolve the target again; networks requiring a proxy
+   cannot fetch package metadata through this path.
 7. Minor: `_media_path` repeats the manifest path rules, and `forge.forge` rereads `key.json` three times.
 
 ## Prioritized development work
@@ -107,9 +108,12 @@ The work these findings call for, with the owner's feature requests, is tracked 
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.
 - The World Library reads selected media and a GM-exported snapshot of top-level world documents. It does
   not include compendium contents, edit existing documents or provide live two-way synchronization.
-- NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12.
+- NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
+  macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
+  rejected before import.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
-- Browser syntax checks and manual UI checks are present; browser automation remains on the roadmap.
+- Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
+  WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
 - Foundry backup, isolated restore-copy verification and v12 clone preparation are available for local User
   Data. Opening the restored world in v12, changing modules in the clone, migration, cutover and live rollback
   remain manual.
