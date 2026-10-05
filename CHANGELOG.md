@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The migrated-clone audit now shows each selected module and dependency release alongside its installed
+  version and saved/active state for package-by-package GM review.
 - Foundry media paths and backup manifests now share one relative-path rule (`storage.posix_parts`), and
   `forge.forge` reads a map's `key.json` once per run instead of three times.
 - The GM import macro now selects explicit Foundry v11 or v12/v13 scene and roof adapters, and a D&D 5e
