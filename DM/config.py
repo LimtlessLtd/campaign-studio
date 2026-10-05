@@ -4,8 +4,8 @@ import json
 import os
 from copy import deepcopy
 
-HOME = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(HOME, 'data', 'settings.json')
+import campaign
+
 DEFAULTS = {
     'campaign_name': 'Campaign Studio',
     'world_path': '',
@@ -16,8 +16,9 @@ DEFAULTS = {
 
 def settings():
     result = deepcopy(DEFAULTS)
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, encoding='utf-8') as f:
+    path = campaign.active().settings
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
             saved = json.load(f)
         for k, v in saved.items():
             if isinstance(v, dict) and isinstance(result.get(k), dict):

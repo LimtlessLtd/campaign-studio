@@ -63,11 +63,12 @@ defect by itself. The problems below are the ones object-oriented principles exi
 
 ### Design findings
 
-1. **Global paths instead of a campaign object (dependency inversion, encapsulation).** Twelve modules
-   derive campaign paths from `__file__`. The integration test patches 18 module globals across seven
-   modules to relocate one campaign. Introduce a `Campaign` object (root, data, maps, uploads, backups,
-   history, jobs, settings) created once at startup and passed to services. This also enables more than one
-   campaign and simpler tests.
+1. **Global paths instead of a campaign object (dependency inversion, encapsulation). Resolved.** Twelve
+   modules derived campaign paths from `__file__`, and the integration test patched 18 module globals across
+   seven modules to relocate one campaign. `DM/campaign.py` now defines a `Campaign` (data, maps, uploads,
+   backups, history, jobs, settings and stored relative paths) once. Modules ask `campaign.active()` at
+   use, the job service and journal are given it, and child processes inherit it through `DM_HOME`. Tests
+   activate one `Campaign`. One process still serves one campaign at a time (W15).
 2. **Document shapes were implicit (DRY). Resolved.** A codex entry was written out field by field in four
    places, and the copies had drifted: layout areas lacked `rooms` and `threads`, new preps lacked
    `handouts`, map events lacked `title`. `DM/shapes.py` now defines each stored record once; apply paths,

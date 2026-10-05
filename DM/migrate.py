@@ -12,6 +12,7 @@ import argparse
 import socket
 import sys
 
+import campaign
 import campaign_core
 import schema
 
@@ -30,7 +31,8 @@ def main(argv=None):
     action.add_argument('--apply', action='store_true', help='back up and migrate')
     action.add_argument('--restore', metavar='BACKUP', help='restore a migration backup folder')
     args = parser.parse_args(argv)
-    data, maps = campaign_core.DATA, campaign_core.MAPS
+    here = campaign.active()
+    data, maps = here.data, here.maps
     if (args.apply or args.restore) and server_running():
         print(f'Stop Campaign Studio on port {campaign_core.PORT} first.', file=sys.stderr)
         return 1
@@ -49,7 +51,7 @@ def main(argv=None):
                 print(message, file=sys.stderr)
                 return 1
             print(message)
-        result = schema.migrate(data, maps, campaign_core.BACKUPS, dry_run=not args.apply)
+        result = schema.migrate(data, maps, here.backups, dry_run=not args.apply)
     except (schema.SchemaError, OSError) as error:
         print('Error: ' + str(error), file=sys.stderr)
         return 1

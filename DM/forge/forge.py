@@ -24,12 +24,11 @@ from copy import deepcopy
 from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DM = os.path.dirname(HERE)
-sys.path.insert(0, DM)
+sys.path.insert(0, os.path.dirname(HERE))  # the application's modules
+import campaign
 import config
 import storage
 
-FOUNDRY_DATA = config.foundry_data()
 FOUNDRY_DIR = 'wotg-maps'
 
 
@@ -38,28 +37,29 @@ def key_for_foundry(slug, key, copy_art=True):
     if not key:
         return None
     result = deepcopy(key)
-    codex_path = os.path.join(DM, 'data', 'codex.json')
+    codex_path = os.path.join(campaign.active().data, 'codex.json')
     if os.path.exists(codex_path):
         with open(codex_path, encoding='utf-8') as f:
             codex = json.load(f)
     else:
         codex = {'entries': []}
     entries = {e['id']: e for e in codex.get('entries', [])}
-    campaign = os.path.realpath(os.path.dirname(DM))
-    art_dir = os.path.join(FOUNDRY_DATA, FOUNDRY_DIR, slug, 'art')
+    files = os.path.realpath(campaign.active().files)
+    foundry_data = config.foundry_data()
+    art_dir = os.path.join(foundry_data, FOUNDRY_DIR, slug, 'art')
 
     def art_path(path):
         if not path or not isinstance(path, str):
             return ''
-        source = os.path.realpath(os.path.join(campaign, path.replace('/', os.sep)))
-        if os.path.commonpath((campaign, source)) != campaign or not os.path.isfile(source):
+        source = os.path.realpath(os.path.join(files, path.replace('/', os.sep)))
+        if os.path.commonpath((files, source)) != files or not os.path.isfile(source):
             return ''
         if os.path.splitext(source)[1].lower() not in ('.png', '.jpg', '.jpeg', '.webp', '.gif'):
             return ''
         name = (
             hashlib.sha256(path.encode('utf-8')).hexdigest()[:12] + '-' + os.path.basename(source)
         )
-        if copy_art and os.path.isdir(FOUNDRY_DATA):
+        if copy_art and os.path.isdir(foundry_data):
             os.makedirs(art_dir, exist_ok=True)
             shutil.copy2(source, os.path.join(art_dir, name))
         return f'{FOUNDRY_DIR}/{slug}/art/{name}'
@@ -563,7 +563,7 @@ def write_foundry_index(target):
 
 
 def update_index(entry):
-    path = os.path.join(DM, 'data', 'maps', 'index.json')
+    path = campaign.active().map_index
 
     def upsert(index):
         index['items'] = [e for e in index['items'] if e['slug'] != entry['slug']] + [entry]
@@ -613,8 +613,9 @@ def forge(plan_path, foundry_copy=True, jobs=None):
     storage.atomic_json(out('.foundry.json'), v12)
     storage.atomic_json(out('.da.json'), da)
     copied = False
-    if foundry_copy and os.path.isdir(FOUNDRY_DATA):
-        target = os.path.join(FOUNDRY_DATA, FOUNDRY_DIR)
+    foundry_data = config.foundry_data()
+    if foundry_copy and os.path.isdir(foundry_data):
+        target = os.path.join(foundry_data, FOUNDRY_DIR)
         os.makedirs(target, exist_ok=True)
         for old in (
             '.webp',
@@ -631,7 +632,7 @@ def forge(plan_path, foundry_copy=True, jobs=None):
             shutil.copytree(out('.roofs'), roof_dir)
         write_foundry_index(target)
         copied = True
-    rel = lambda p: os.path.relpath(p, os.path.dirname(DM)).replace('\\', '/')
+    rel = lambda p: os.path.relpath(p, campaign.active().files).replace('\\', '/')
     counts = dict(
         walls=sum(1 for s in segments if s['kind'] in ('wall', 'hedge')),
         doors=sum(1 for s in segments if 'door' in s['kind']),
@@ -689,10 +690,11 @@ def key_only(plan_path):
     )
     scene['flags']['world']['wotgForge']['key'] = key_for_foundry(slug, key)
     storage.atomic_json(scene_path, scene)
-    target = os.path.join(FOUNDRY_DATA, FOUNDRY_DIR)
-    if os.path.isdir(target):
+    foundry_data = config.foundry_data()
+    target = os.path.join(foundry_data, FOUNDRY_DIR)
+    if foundry_data and os.path.isdir(target):
         shutil.copy2(scene_path, os.path.join(target, slug + '.json'))
-    index = os.path.join(DM, 'data', 'maps', 'index.json')
+    index = campaign.active().map_index
     if os.path.exists(index) and key:
 
         def annotate(data):

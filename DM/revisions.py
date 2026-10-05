@@ -7,14 +7,13 @@ import re
 import shutil
 from pathlib import Path
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-MAPS = os.path.join(ROOT, 'maps')
+import campaign
 
 
 def folder(slug):
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', slug):
         raise ValueError('Invalid map id.')
-    path = os.path.join(MAPS, slug)
+    path = campaign.active().map_folder(slug)
     if not os.path.isdir(path):
         raise ValueError('Map not found.')
     return path
@@ -30,7 +29,7 @@ def checkpoint(slug, label='Before edit'):
         if os.path.isfile(os.path.join(source, name)):
             shutil.copy2(os.path.join(source, name), os.path.join(target, name))
             files.append(name)
-    brief = os.path.join(ROOT, 'data', 'mapbrief', slug + '.json')
+    brief = campaign.active().map_brief(slug)
     if os.path.isfile(brief):
         shutil.copy2(brief, os.path.join(target, 'brief.json'))
     preview = ''
@@ -38,7 +37,7 @@ def checkpoint(slug, label='Before edit'):
         if os.path.isfile(os.path.join(source, name)):
             dest = 'preview' + os.path.splitext(name)[1]
             shutil.copy2(os.path.join(source, name), os.path.join(target, dest))
-            preview = f'DM/maps/{slug}/revisions/{rid}/{dest}'
+            preview = campaign.active().relative(os.path.join(target, dest))
             break
     value = {
         'id': rid,
@@ -75,7 +74,7 @@ def restore(slug, rid, commit):
         raise ValueError('Revision has no saved plan or area key.')
     import sys
 
-    sys.path.insert(0, os.path.join(ROOT, 'forge'))
+    sys.path.insert(0, os.path.join(campaign.INSTALL, 'forge'))
     import forge
 
     text = Path(plan).read_text(encoding='utf-8') if os.path.isfile(plan) else None

@@ -10,6 +10,7 @@ import urllib.parse
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 
+import campaign
 import config
 import foundry_backup
 import foundry_library
@@ -22,15 +23,11 @@ import shapes
 import workflow
 from campaign_core import (
     APP,
-    DATA,
     FORGE,
-    HERE,
     IMAGE_SIGNATURES,
     JOURNAL,
     LOCK,
-    MAPS,
     SLUG,
-    UPLOADS,
     apply_content,
     apply_layout,
     campaign_path,
@@ -105,7 +102,7 @@ class Handler(SimpleHTTPRequestHandler):
         query = urllib.parse.parse_qs(url.query)
         try:
             if path == '/api/state':
-                notes = os.path.join(DATA, 'notes.txt')
+                notes = os.path.join(campaign.active().data, 'notes.txt')
                 sys.path.insert(0, FORGE)
                 import generate
 
@@ -114,7 +111,7 @@ class Handler(SimpleHTTPRequestHandler):
                         public=public_content(),
                         claude=bool(shutil.which('claude')),
                         campaign=config.settings()['campaign_name'],
-                        onboarding_needed=not os.path.isfile(config.CONFIG_PATH),
+                        onboarding_needed=not os.path.isfile(campaign.active().settings),
                         generators={k: v['title'] for k, v in generate.GENERATORS.items()},
                         notes=Path(notes).read_text(encoding='utf-8', errors='replace')
                         if os.path.exists(notes)
@@ -190,13 +187,13 @@ class Handler(SimpleHTTPRequestHandler):
                     raise ValueError('Invalid workflow route.')
                 value = workflow.get(parts[3])
                 if len(parts) == 5 and parts[4] == 'pack':
-                    campaign = {'name': config.settings()['campaign_name']}
+                    campaign_info = {'name': config.settings()['campaign_name']}
                     if config.settings().get('world_path'):
-                        campaign['world'] = config.world_info(config.settings()['world_path'])
+                        campaign_info['world'] = config.world_info(config.settings()['world_path'])
                     return self.send_json(
                         {
                             'workflow': value['id'],
-                            'prompt': workflow.prompt(value, campaign),
+                            'prompt': workflow.prompt(value, campaign_info),
                             'schema': workflow.schema(value['kind']),
                         }
                     )
@@ -218,9 +215,11 @@ class Handler(SimpleHTTPRequestHandler):
                     {
                         'brief': read_json(doc_path('mapbrief/' + slug), {}),
                         'workflows': workflow.for_map(slug),
-                        'has_plan': os.path.isfile(os.path.join(MAPS, slug, 'plan.txt')),
+                        'has_plan': os.path.isfile(
+                            os.path.join(campaign.active().map_folder(slug), 'plan.txt')
+                        ),
                         'revisions': revisions.listing(slug)
-                        if os.path.isdir(os.path.join(MAPS, slug))
+                        if os.path.isdir(campaign.active().map_folder(slug))
                         else [],
                     }
                 )
@@ -238,7 +237,7 @@ class Handler(SimpleHTTPRequestHandler):
                 slug = path[10:]
                 if not SLUG.match(slug):
                     return self.fail(400, 'bad map name')
-                p = os.path.join(MAPS, slug, 'plan.txt')
+                p = os.path.join(campaign.active().map_folder(slug), 'plan.txt')
                 if not os.path.exists(p):
                     return self.fail(404, 'no such plan')
                 return self.send_json({'text': Path(p).read_text(encoding='utf-8')})
@@ -312,7 +311,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({'ok': True, 'rev': rev})
             if path.startswith('/api/plan/'):
                 slug = path[10:]
-                if not SLUG.match(slug) or not os.path.isdir(os.path.join(MAPS, slug)):
+                if not SLUG.match(slug) or not os.path.isdir(campaign.active().map_folder(slug)):
                     return self.fail(400, 'bad map name')
                 text = json.loads(self.body(2 * 1024 * 1024).decode('utf-8'))['text']
                 if map_busy(slug):
@@ -350,11 +349,11 @@ class Handler(SimpleHTTPRequestHandler):
                     or 'image'
                 )
                 filename = f'{stem}-{os.urandom(6).hex()}{ext}'
-                os.makedirs(UPLOADS, exist_ok=True)
-                full = os.path.join(UPLOADS, filename)
+                os.makedirs(campaign.active().uploads, exist_ok=True)
+                full = os.path.join(campaign.active().uploads, filename)
                 with open(full, 'xb') as f:
                     f.write(data)
-                return self.send_json({'path': 'DM/uploads/' + filename})
+                return self.send_json({'path': campaign.active().relative(full)})
             body_limit = (
                 20 * 1024 * 1024 if path == '/api/foundry/library/import' else 2 * 1024 * 1024
             )
@@ -519,7 +518,12 @@ class Handler(SimpleHTTPRequestHandler):
                         'art',
                         'image',
                         'Image: ' + item['title'],
-                        [sys.executable, '-u', os.path.join(HERE, 'tools', 'image_worker.py'), rid],
+                        [
+                            sys.executable,
+                            '-u',
+                            os.path.join(campaign.INSTALL, 'tools', 'image_worker.py'),
+                            rid,
+                        ],
                         slug=item.get('map', ''),
                         art=rid,
                     )
@@ -532,7 +536,7 @@ class Handler(SimpleHTTPRequestHandler):
                 slug = generate.slugify(brief['name'])
                 base = slug
                 number = 2
-                while os.path.exists(os.path.join(MAPS, slug)) or os.path.exists(
+                while os.path.exists(campaign.active().map_folder(slug)) or os.path.exists(
                     doc_path('mapbrief/' + slug)
                 ):
                     slug = base + '-' + str(number)
@@ -584,7 +588,7 @@ class Handler(SimpleHTTPRequestHandler):
                         )
                         write_doc('mapbrief/' + slug, brief)
                     if action == 'revise' and not os.path.isfile(
-                        os.path.join(MAPS, slug, 'plan.txt')
+                        os.path.join(campaign.active().map_folder(slug), 'plan.txt')
                     ):
                         raise ValueError(
                             'Imported images have no editable grid plan. Add locations and generate content on this image instead.'
@@ -709,12 +713,14 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             if path.startswith('/api/forge/'):
                 slug = path[11:]
-                plan = os.path.join(MAPS, slug, 'plan.txt')
+                plan = os.path.join(campaign.active().map_folder(slug), 'plan.txt')
                 if not SLUG.match(slug) or (
                     not os.path.exists(plan)
                     and not (
                         p.get('key_only')
-                        and os.path.isfile(os.path.join(MAPS, slug, slug + '.foundry.json'))
+                        and os.path.isfile(
+                            os.path.join(campaign.active().map_folder(slug), slug + '.foundry.json')
+                        )
                     )
                 ):
                     return self.fail(400, 'no such map')

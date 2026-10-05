@@ -22,6 +22,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
+import campaign
 import campaign_core
 import foundry_backup
 import foundry_upgrade
@@ -58,44 +59,14 @@ class StudioIntegration(unittest.TestCase):
                 }
             )
         )
-        self.patches = []
         settings = {
             **config.DEFAULTS,
             'campaign_name': 'Fixture campaign',
             'world_path': str(self.world),
         }
         (self.dm / 'data' / 'settings.json').write_text(json.dumps(settings))
-        assignments = {
-            campaign_core: {
-                'HERE': str(self.dm),
-                'CAMPAIGN': str(self.root),
-                'DATA': str(self.dm / 'data'),
-                'MAPS': str(self.dm / 'maps'),
-                'HISTORY': str(self.dm / 'data/.history'),
-                'JOBS': str(self.dm / 'data/jobs'),
-                'UPLOADS': str(self.dm / 'uploads'),
-            },
-            http_routes: {
-                'HERE': str(self.dm),
-                'DATA': str(self.dm / 'data'),
-                'MAPS': str(self.dm / 'maps'),
-                'UPLOADS': str(self.dm / 'uploads'),
-            },
-            config: {'HOME': str(self.dm), 'CONFIG_PATH': str(self.dm / 'data/settings.json')},
-            workflow: {
-                'HERE': str(self.dm),
-                'DATA': str(self.dm / 'data'),
-                'MAPS': str(self.dm / 'maps'),
-            },
-            revisions: {'ROOT': str(self.dm), 'MAPS': str(self.dm / 'maps')},
-            maps_io: {'ROOT': str(self.dm)},
-            forge: {'DM': str(self.dm), 'FOUNDRY_DATA': str(self.root / 'FoundryData')},
-        }
-        for module, values in assignments.items():
-            for key, value in values.items():
-                p = patch.object(module, key, value)
-                p.start()
-                self.patches.append(p)
+        previous = campaign.activate(campaign.Campaign(self.dm))
+        self.addCleanup(campaign.activate, previous)
         self.http = ThreadingHTTPServer(('127.0.0.1', 0), http_routes.Handler)
         self.http_thread = threading.Thread(target=self.http.serve_forever, daemon=True)
         self.http_thread.start()
@@ -108,8 +79,6 @@ class StudioIntegration(unittest.TestCase):
     def tearDown(self):
         self.http.shutdown()
         self.http.server_close()
-        for p in reversed(self.patches):
-            p.stop()
         # TemporaryDirectory checks and owns its absolute test-only path.
         self.temp.cleanup()
 
@@ -874,7 +843,7 @@ class StudioIntegration(unittest.TestCase):
         (world / 'world.json').write_text((self.world / 'world.json').read_text())
         (world / 'maps').mkdir()
         (world / 'maps' / 'bridge.png').write_bytes(self.png)
-        Path(config.CONFIG_PATH).unlink()
+        Path(campaign.active().settings).unlink()
         self.assertTrue(self.request('/api/state')['onboarding_needed'])
         found = self.request('/api/foundry/worlds?root=' + urllib.parse.quote(str(user_data)))
         self.assertEqual(found['worlds'][0]['title'], 'Fixture')

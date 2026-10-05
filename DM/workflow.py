@@ -9,14 +9,12 @@ import re
 import sys
 from copy import deepcopy
 from pathlib import Path
+import campaign
 import shapes
 import storage
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, 'data')
-MAPS = os.path.join(HERE, 'maps')
 ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
-sys.path.insert(0, os.path.join(HERE, 'forge'))
+sys.path.insert(0, os.path.join(campaign.INSTALL, 'forge'))
 
 
 def read(path, fallback=None):
@@ -51,9 +49,9 @@ def create(slug, brief, kind='content', instruction=''):
 
 
 def map_base(slug):
-    path = os.path.join(MAPS, slug, 'plan.txt')
+    path = os.path.join(campaign.active().maps, slug, 'plan.txt')
     plan = Path(path).read_bytes() if os.path.isfile(path) else b''
-    key = read(os.path.join(MAPS, slug, 'key.json'), {'areas': []})
+    key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
     locations = [(a['n'], a.get('name'), a.get('kind'), a.get('at')) for a in key.get('areas', [])]
     return hashlib.sha256(plan + json.dumps(locations, sort_keys=True).encode()).hexdigest()
 
@@ -66,20 +64,20 @@ def check_base(value):
 
 
 def save(value):
-    write(os.path.join(DATA, 'workflows', value['id'] + '.json'), value)
+    write(os.path.join(campaign.active().data, 'workflows', value['id'] + '.json'), value)
 
 
 def get(wid):
     if not ID.fullmatch(wid):
         raise ValueError('Invalid workflow id.')
-    value = read(os.path.join(DATA, 'workflows', wid + '.json'))
+    value = read(os.path.join(campaign.active().data, 'workflows', wid + '.json'))
     if not value:
         raise ValueError('Workflow not found.')
     return value
 
 
 def for_map(slug):
-    folder = os.path.join(DATA, 'workflows')
+    folder = os.path.join(campaign.active().data, 'workflows')
     if not os.path.isdir(folder):
         return []
     return sorted(
@@ -222,14 +220,14 @@ def schema(kind):
     return CONTENT_SCHEMA if kind == 'content' else LAYOUT_SCHEMA
 
 
-def prompt(value, campaign):
+def prompt(value, campaign_info):
     slug = value['map']
-    key = read(os.path.join(MAPS, slug, 'key.json'), {'areas': []})
-    codex = read(os.path.join(DATA, 'codex.json'), {'entries': []})
-    threads = read(os.path.join(DATA, 'threads.json'), {'threads': []})
+    key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
+    codex = read(os.path.join(campaign.active().data, 'codex.json'), {'entries': []})
+    threads = read(os.path.join(campaign.active().data, 'threads.json'), {'threads': []})
     brief = value['brief']
     context = {
-        'campaign': campaign,
+        'campaign': campaign_info,
         'brief': brief,
         'key': key,
         'codex': codex['entries'],
@@ -274,7 +272,7 @@ For revisions, only apply the requested changes on the current grid; preserve ex
 their locations unless the request explicitly moves them. Additional areas can have new numbers. Do not
 change map dimensions. Make purposeful detail, sight lines, cover, landmarks and encounter spaces.
 """
-        path = os.path.join(MAPS, slug, 'plan.txt')
+        path = os.path.join(campaign.active().maps, slug, 'plan.txt')
         if os.path.exists(path):
             context['current_plan'] = Path(path).read_text(encoding='utf-8')
     return instruction + '\nREFERENCE DATA:\n' + json.dumps(context, ensure_ascii=False)
@@ -285,7 +283,7 @@ def compile_layout(value, draft):
 
     brief = value['brief']
     w, h = int(brief['width']), int(brief['height'])
-    path = os.path.join(MAPS, value['map'], 'plan.txt')
+    path = os.path.join(campaign.active().maps, value['map'], 'plan.txt')
     if value['kind'] == 'revision':
         raw = Path(path).read_text(encoding='utf-8')
         head, _, body = raw.partition('\n---\n')
@@ -405,7 +403,7 @@ def validate(value, draft):
         if value['kind'] == 'layout' and not draft['areas']:
             raise ValueError('A new map needs at least one keyed area.')
         return draft
-    key = read(os.path.join(MAPS, value['map'], 'key.json'), {'areas': []})
+    key = read(os.path.join(campaign.active().maps, value['map'], 'key.json'), {'areas': []})
     numbers = {
         a['n']
         for a in key['areas']
@@ -529,10 +527,10 @@ def stage(value, draft):
             y, x = area['at'][0] * 8 + 4, area['at'][1] * 8 + 4
             painter.ellipse((x - 8, y - 8, x + 8, y + 8), fill='#d7e8b7', outline='#1b3424')
             painter.text((x, y), str(area['n']), fill='#1b3424', anchor='mm')
-        folder = os.path.join(MAPS, value['map'], 'drafts')
+        folder = os.path.join(campaign.active().maps, value['map'], 'drafts')
         os.makedirs(folder, exist_ok=True)
         image.save(os.path.join(folder, value['id'] + '.png'))
-        value['preview'] = f'DM/maps/{value["map"]}/drafts/{value["id"]}.png'
+        value['preview'] = campaign.active().relative(os.path.join(folder, value['id'] + '.png'))
     save(value)
     return value
 
@@ -555,10 +553,10 @@ def apply_content(value, commit):
         raise ValueError('This workflow has no content draft awaiting review.')
     draft = validate(value, deepcopy(value['draft']))
     slug = value['map']
-    key = read(os.path.join(MAPS, slug, 'key.json'), {'areas': []})
-    codex = read(os.path.join(DATA, 'codex.json'), {'entries': []})
-    threads = read(os.path.join(DATA, 'threads.json'), {'threads': []})
-    art = read(os.path.join(DATA, 'art.json'), {'items': []})
+    key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
+    codex = read(os.path.join(campaign.active().data, 'codex.json'), {'entries': []})
+    threads = read(os.path.join(campaign.active().data, 'threads.json'), {'threads': []})
+    art = read(os.path.join(campaign.active().data, 'art.json'), {'items': []})
     areas = {a['n']: a for a in key['areas']}
     prefix = value['id'] + '-'
     counts = {}

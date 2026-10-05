@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 import threading
+import campaign
 import commits
 import config
 import request_workflow
@@ -18,15 +19,8 @@ import shapes
 import storage
 from job_service import JobService
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CAMPAIGN = os.path.dirname(HERE)
-APP = os.path.join(HERE, 'app')
-DATA = os.path.join(HERE, 'data')
-MAPS = os.path.join(HERE, 'maps')
-FORGE = os.path.join(HERE, 'forge')
-HISTORY = os.path.join(DATA, '.history')
-JOBS = os.path.join(DATA, 'jobs')
-BACKUPS = os.path.join(HERE, 'backups')  # verified copies made before a schema migration
+APP = os.path.join(campaign.INSTALL, 'app')
+FORGE = os.path.join(campaign.INSTALL, 'forge')
 PORT = int(os.environ.get('DM_PORT', 8766))
 
 # campaign folders the site may show files from (read-only)
@@ -47,7 +41,6 @@ FILE_ROOTS = (
 DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
-UPLOADS = os.path.join(HERE, 'uploads')
 IMAGE_SIGNATURES = {
     'image/png': ('.png', lambda b: b.startswith(b'\x89PNG\r\n\x1a\n')),
     'image/jpeg': ('.jpg', lambda b: b.startswith(b'\xff\xd8\xff')),
@@ -64,8 +57,8 @@ def doc_path(name):
         raise ValueError('bad document name')
     if name.startswith('mapkey/'):  # a map's DM key lives beside its plan
         slug = name.split('/', 1)[1]
-        return os.path.join(MAPS, slug, 'key.json')
-    return os.path.join(DATA, *name.split('/')) + '.json'
+        return os.path.join(campaign.active().map_folder(slug), 'key.json')
+    return os.path.join(campaign.active().data, *name.split('/')) + '.json'
 
 
 def rev_of(path):
@@ -77,10 +70,12 @@ def rev_of(path):
 
 def campaign_path(rel):
     rel = rel.replace('\\', '/').lstrip('/')
-    if rel.split('/', 1)[0] not in FILE_ROOTS:
+    here = campaign.active()
+    if rel.split('/', 1)[0] not in FILE_ROOTS + (os.path.basename(here.home),):
         raise PermissionError(rel)
-    full = os.path.realpath(os.path.join(CAMPAIGN, rel))
-    if not full.startswith(os.path.realpath(CAMPAIGN) + os.sep):
+    files = here.files
+    full = os.path.realpath(os.path.join(files, rel))
+    if not full.startswith(os.path.realpath(files) + os.sep):
         raise PermissionError(rel)
     return full
 
@@ -98,8 +93,9 @@ def stamp_new_campaign():
 
     Startup leaves an empty campaign unstamped, so data copied in before first use is still migrated.
     """
-    if not os.path.isfile(schema.marker_path(DATA)) and schema.version(DATA, MAPS) is None:
-        schema.write_marker(DATA, schema.CURRENT, 'New campaign')
+    data, maps = campaign.active().data, campaign.active().maps
+    if not os.path.isfile(schema.marker_path(data)) and schema.version(data, maps) is None:
+        schema.write_marker(data, schema.CURRENT, 'New campaign')
 
 
 def write_doc(name, value, durable=False):
@@ -108,7 +104,7 @@ def write_doc(name, value, durable=False):
     with storage.file_lock(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         if os.path.exists(path):
-            keep = os.path.join(HISTORY, *name.split('/'))
+            keep = os.path.join(campaign.active().history, *name.split('/'))
             os.makedirs(keep, exist_ok=True)
             shutil.copy2(
                 path,
@@ -125,7 +121,7 @@ def target_path(name):
     if name.startswith('plan/'):
         if not SLUG.fullmatch(name[5:]):
             raise ValueError('bad map name')
-        return os.path.join(MAPS, name[5:], 'plan.txt')
+        return os.path.join(campaign.active().map_folder(name[5:]), 'plan.txt')
     return doc_path(name)
 
 
@@ -166,7 +162,7 @@ def run_follow_ups(actions):
 
 
 JOURNAL = commits.Journal(
-    lambda: os.path.join(DATA, '.commits'), target_path, write_target, run_follow_ups
+    lambda: campaign.active().commits, target_path, write_target, run_follow_ups
 )
 
 
@@ -182,7 +178,7 @@ def recover_commits():
 
 
 def queue_forge(slug, label, populate=False):
-    plan = os.path.join(MAPS, slug, 'plan.txt')
+    plan = os.path.join(campaign.active().map_folder(slug), 'plan.txt')
     cmd = [sys.executable, '-u', os.path.join(FORGE, 'forge.py'), plan]
     if not os.path.isfile(plan):
         cmd.append('--key-only')  # imported artwork has a scene and key but no grid plan
@@ -208,7 +204,7 @@ def mark_stocked(slug):
 
 
 def list_docs(prefix):
-    folder = os.path.join(DATA, prefix)
+    folder = os.path.join(campaign.active().data, prefix)
     if not os.path.isdir(folder):
         return []
     return sorted(f[:-5] for f in os.listdir(folder) if f.endswith('.json'))
@@ -224,7 +220,7 @@ def list_images(rel):
                 p = os.path.join(dirpath, f)
                 out.append(
                     dict(
-                        path=os.path.relpath(p, CAMPAIGN).replace('\\', '/'),
+                        path=os.path.relpath(p, campaign.active().files).replace('\\', '/'),
                         size=os.path.getsize(p),
                         mtime=int(os.path.getmtime(p)),
                     )
@@ -236,7 +232,7 @@ def public_content():
     """What the players can already see, from the public site's content files."""
     if not config.settings().get('legacy_references', False):
         return dict(sessions=[], heroes=[], locations=[])
-    c = lambda *p: os.path.join(CAMPAIGN, 'Website', 'content', *p)
+    c = lambda *p: os.path.join(campaign.active().files, 'Website', 'content', *p)
     sessions = read_json(c('sessions.json'), {'chapters': []})
     flat = [dict(s, chapter=ch['title']) for ch in sessions['chapters'] for s in ch['sessions']]
     return dict(
@@ -391,9 +387,7 @@ def finish_request(job, code, tail):
         job.update(status='failed', note=str(error))
 
 
-JOBS_SERVICE = JobService(
-    lambda: JOBS, lambda: CAMPAIGN, LOCK, finish_job, fail_job, recover_interrupted_job
-)
+JOBS_SERVICE = JobService(campaign.active, LOCK, finish_job, fail_job, recover_interrupted_job)
 LANES = JOBS_SERVICE.lanes
 RUNNING = JOBS_SERVICE.running
 job_file = JOBS_SERVICE.job_file
@@ -470,10 +464,10 @@ def structured_claude_cmd(schema):
 
 def request_pack(item):
     cfg = config.settings()
-    campaign = {'name': cfg['campaign_name']}
+    campaign_info = {'name': cfg['campaign_name']}
     if cfg.get('world_path'):
-        campaign['world'] = config.world_info(cfg['world_path'])
-    return request_workflow.prompt_pack(item, request_read, campaign)
+        campaign_info['world'] = config.world_info(cfg['world_path'])
+    return request_workflow.prompt_pack(item, request_read, campaign_info)
 
 
 def start_request(rid):
@@ -514,15 +508,15 @@ def start_workflow(value):
         workflow.check_base(value)
         cmd = structured_claude_cmd(workflow.schema(value['kind']))
         cfg = config.settings()
-        campaign = {'name': cfg['campaign_name']}
+        campaign_info = {'name': cfg['campaign_name']}
         if cfg.get('world_path'):
-            campaign['world'] = config.world_info(cfg['world_path'])
+            campaign_info['world'] = config.world_info(cfg['world_path'])
         job = new_job(
             'claude',
             'ai-workflow',
             'AI: ' + value['kind'] + ' · ' + value['brief']['name'],
             cmd,
-            workflow.prompt(value, campaign),
+            workflow.prompt(value, campaign_info),
             workflow=value['id'],
             slug=value['map'],
         )
@@ -612,7 +606,7 @@ def apply_layout(wid):
         if value['status'] != 'review' or map_busy(slug):
             raise ValueError('There is no available layout draft awaiting review.')
         draft = workflow.validate(value, value['draft'])
-        folder = os.path.join(MAPS, slug)
+        folder = campaign.active().map_folder(slug)
         if os.path.exists(os.path.join(folder, 'plan.txt')):
             revisions.checkpoint(slug, 'Before AI revision')
         os.makedirs(folder, exist_ok=True)
