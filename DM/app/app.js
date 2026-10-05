@@ -39,6 +39,7 @@ async function route(soft) {
         threads: threadsPage,
         codex: codexPage,
         maps: studioMaps,
+        world: worldPage,
         art: studioArt,
         settings: studioSettings,
         handouts: handoutsPage,

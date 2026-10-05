@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Phone and network access** (opt-in): start the server with `DM_BIND` and an `DM_ACCESS_CODE` (8+ characters)
+  and other devices sign in once with the code (session cookie `HttpOnly`, `SameSite=Strict`; wrong codes lock
+  an address for a minute). Without a code the site still answers only on localhost, and it refuses to listen
+  on another address without one. The connection is plain HTTP; the README says how to add TLS.
+- **World map** page: upload a world map image, drop pins on it and link each pin to a battle map, then open
+  the battle map from the pin. Pins are stored as fractions of the image in `data/world-maps.json`
+  (data schema 3), and the document holds a list of world maps, so several can be added later.
 - **Import world into Studio** (World Library, and the end of first-run setup) is one action: it reads the
   world folder and adds its actors, items and scenes to the codex with their Foundry UUIDs, reports how many
   were added, refreshed or kept, and counts the media available. Later imports refresh only entries you have

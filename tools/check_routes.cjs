@@ -36,6 +36,7 @@ const context = {
   threadsPage: emptyPage,
   codexPage: emptyPage,
   studioMaps: emptyPage,
+  worldPage: emptyPage,
   studioArt: emptyPage,
   handoutsPage: emptyPage,
   inboxPage: emptyPage,

@@ -18,7 +18,7 @@ import shapes
 import storage
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 2
+CURRENT = 3
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -80,7 +80,7 @@ def check(data, maps):
 # ---------- migrations ----------
 # Fields of every stored record at CURRENT (shapes.fields_digest()). When a shape changes, add a version
 # whose migration is fill_campaign, so stored records gain the new fields, then update this digest.
-SHAPES_DIGEST = 'bab7aea01dd3a047073eab09a3435c2410c5ccf32c4369d4aaafb3fa3e1b0c90'
+SHAPES_DIGEST = 'c7fd7fce0392debb41cf151cef9f1129f1d6b1969efde1a6db6333f052f496e1'
 
 
 def shaped_documents(data, maps):
@@ -88,6 +88,7 @@ def shaped_documents(data, maps):
     yield os.path.join(data, 'codex.json'), shapes.CODEX
     yield os.path.join(data, 'threads.json'), shapes.THREADS
     yield os.path.join(data, 'art.json'), shapes.ART
+    yield os.path.join(data, 'world-maps.json'), shapes.WORLD_MAPS
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'prep', '*.json'))):
         yield path, shapes.PREP
     for path in sorted(glob.glob(os.path.join(glob.escape(maps), '*', 'key.json'))):
@@ -108,8 +109,9 @@ def fill_campaign(data, maps):
 
 
 # From version -> (path, normalize) pairs reaching version + 1. Version 1 completed codex, thread, prep and
-# map key records; version 2 completed art, handout, checklist, loot, journal and event records too.
-MIGRATIONS = {0: fill_campaign, 1: fill_campaign}
+# map key records; version 2 completed art, handout, checklist, loot, journal and event records too;
+# version 3 added world maps (a campaign without world-maps.json has nothing to fill).
+MIGRATIONS = {0: fill_campaign, 1: fill_campaign, 2: fill_campaign}
 
 
 def planned_changes(data, maps, start):

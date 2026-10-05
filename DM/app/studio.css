@@ -1779,3 +1779,21 @@ hr {
     min-height: 200px;
   }
 }
+.world-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+.world-layout .studio-canvas {
+  position: static;
+}
+.world-inspector {
+  display: grid;
+  gap: 12px;
+}
+@media (max-width: 800px) {
+  .world-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
