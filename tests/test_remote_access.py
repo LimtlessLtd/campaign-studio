@@ -36,6 +36,15 @@ class GateTests(unittest.TestCase):
         now[0] += remote_access.LOCKOUT_SECONDS + 1
         self.assertTrue(gate.try_code('phone', CODE))
 
+    def test_expired_lockouts_are_forgotten_once_the_table_is_full(self):
+        now = [0]
+        gate = remote_access.AccessGate(CODE, clock=lambda: now[0])
+        for n in range(remote_access.MAX_TRACKED):
+            gate.try_code(f'10.0.{n // 250}.{n % 250}', 'wrong')
+        now[0] = remote_access.LOCKOUT_SECONDS + 1
+        gate.try_code('192.168.0.9', 'wrong')
+        self.assertEqual(list(gate._failures), ['192.168.0.9'])
+
     def test_a_short_code_never_enables_the_gate(self):
         self.assertFalse(remote_access.AccessGate('abc').enabled)
         self.assertFalse(remote_access.AccessGate('abc').has_session('dm_session=x'))
@@ -108,6 +117,16 @@ class RemoteRouteTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, _, _ = self.send('/api/state', headers={'Cookie': 'dm_session=forged'})
         self.assertEqual(status, 401)
+
+    def test_an_oversized_login_body_gets_a_page_not_a_dropped_connection(self):
+        status, body, _ = self.send(
+            '/login',
+            'POST',
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
+            body=b'code=' + b'x' * 5000,
+        )
+        self.assertEqual(status, 400)
+        self.assertIn(b'Access code', body)
 
     def test_a_local_page_cannot_be_reached_through_a_rebound_name(self):
         status, _, _ = self.send('/api/state', host='evil.example')

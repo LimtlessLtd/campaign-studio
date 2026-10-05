@@ -201,7 +201,10 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _post_login(self):
         peer = self.client_address[0]
-        form = urllib.parse.parse_qs(self.body(4096).decode('utf-8', 'replace'))
+        try:
+            form = urllib.parse.parse_qs(self.body(4096).decode('utf-8', 'replace'))
+        except (Invalid, ValueError):
+            return self.send_login(400, 'That request could not be read.')
         wait = GATE.locked_for(peer)
         if wait:
             return self.send_login(429, f'Too many attempts. Try again in {wait} seconds.')
