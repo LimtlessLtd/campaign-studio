@@ -199,6 +199,23 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(self.migrate()['status'], 'current')
         self.assertEqual(len(list(Path(self.backups).iterdir())), 1)
 
+    def test_version_two_campaign_keeps_world_maps_and_gains_their_new_fields(self):
+        self.migrate()
+        schema.write_marker(self.data, 2, 'Synthetic version 2 campaign')
+        (self.dm / 'data/world-maps.json').write_text(
+            json.dumps({'maps': [{'id': 'w1', 'name': 'Realm', 'pins': [{'id': 'p1'}]}]})
+        )
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (2, schema.CURRENT))
+        self.assertEqual(result['changes'], ['data/world-maps.json'])
+        world = self.read('data/world-maps.json')['maps'][0]
+        self.assertEqual((world['name'], world['image']), ('Realm', ''))
+        self.assertEqual(
+            world['pins'][0], {'id': 'p1', 'label': '', 'map': '', 'x': 0.5, 'y': 0.5, 'note': ''}
+        )
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')
