@@ -13,7 +13,6 @@ Next ID: W18
 
 | ID  | Priority | Work                                                              | Acceptance criteria                                                                                                                                            |
 | --- | -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W17 | 1        | Read only active LevelDB files in the World Library               | Honor CURRENT and MANIFEST so retired tables or logs cannot revive a deleted document; refresh snapshots when the manifest changes                             |
 | W7  | 2        | Complete the local Foundry upgrade wizard                         | Backup, inventory, report and isolated v12 clone preparation are implemented; confirm clone module state, migrate it and validate cutover                      |
 | W8  | 2        | Extend snapshot browsing into a live Foundry-side connection      | Stable provenance, read permissions and conflict policy; no raw DB editing                                                                                     |
 | W9  | 3        | Provider adapters, job cancellation, progress and resumable queue | Fake-provider failure/cancel/retry tests; settings avoid secret storage                                                                                        |
