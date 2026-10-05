@@ -11,10 +11,11 @@ import re
 import sys
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import config
 import foundry_leveldb
+import storage
 
 SNAPSHOT_FORMAT = 'campaign-studio-foundry-library'
 KINDS = ('scenes', 'journals', 'actors', 'items')
@@ -110,11 +111,7 @@ def selected_world():
 
 
 def _media_path(relative, world):
-    if not isinstance(relative, str) or not relative or '\\' in relative or ':' in relative:
-        raise ValueError('Invalid Foundry asset path.')
-    parts = PurePosixPath(relative).parts
-    if not parts or any(part in ('', '.', '..') for part in parts) or relative.startswith('/'):
-        raise ValueError('Invalid Foundry asset path.')
+    parts = storage.posix_parts(relative, 'Invalid Foundry asset path.')
     if parts[0].lower() in ('systems', 'modules'):
         raise ValueError('System and module files are outside this world library.')
     if parts[0].lower() == 'worlds' and (len(parts) < 3 or parts[1] != world['id']):
