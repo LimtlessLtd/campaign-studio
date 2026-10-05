@@ -5,6 +5,8 @@
 - The World Library's LevelDB reader now follows `CURRENT` and `MANIFEST` to read only live tables and
   logs. A retired file left on disk during compaction can no longer make a deleted document reappear;
   manifest changes also trigger a fresh read when the page is reopened.
+- The migrated-clone audit now shows each selected module and dependency release alongside its installed
+  version and saved/active state for package-by-package GM review.
 - The World Library now reads a world's scenes, journals (with their pages), actors and items straight from
   its database files when you open the page, so the export macro is no longer needed. It reads Foundry 11+
   LevelDB folders with a new standard-library reader and Foundry 10-and-earlier `.db` files, opens nothing

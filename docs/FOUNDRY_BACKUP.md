@@ -164,6 +164,8 @@ assets, journals, actors/items and retained module behavior. The audit compares 
 manifest, installed system/module versions, and both configured and active module states with the saved
 plan. It records blockers and keeps the audit beside the backup. An unknown or extra active module,
 including Plutonium, blocks the audit.
+The audit screen shows every selected module and dependency version beside its installed version and both
+saved and active states, so the GM can inspect the package evidence before relying on the saved audit.
 
 An audit marked **reviewed** records metadata agreement and the GM's checks; it does not certify every
 document or module feature and does not perform live cutover. Keep the verified v12 backup, restore test

@@ -563,7 +563,20 @@ function foundryUpgradeCard(hasWorld) {
                 {},
                 `System ${audit.selected_system.id} ${audit.installed_system_version || 'missing'} · selected ${audit.selected_system.version}.`,
               ),
-              h('p', {}, `Enabled modules: ${audit.configured_enabled.join(', ') || 'none'}.`),
+              h('h5', {}, 'Selected module and dependency releases'),
+              h(
+                'ul',
+                {},
+                ...Object.entries(audit.selected_modules)
+                  .sort(([left], [right]) => left.localeCompare(right))
+                  .map(([id, selected]) =>
+                    h(
+                      'li',
+                      {},
+                      `${id}: selected ${selected}; installed ${audit.installed_module_versions[id] || 'missing'}; saved ${audit.configured_enabled.includes(id) ? 'on' : 'off'}; active ${audit.runtime_active.includes(id) ? 'on' : 'off'}.`,
+                    ),
+                  ),
+              ),
               ...audit.blockers.map((blocker) => h('p', { class: 'error-text' }, blocker)),
               h('p', { class: 'backup-path' }, `Saved audit: ${audit.audit_path}`),
               h(
