@@ -99,6 +99,7 @@ ROUTES = {
             '_post_dismiss_commit',
         ),
         (lambda path: path == '/api/foundry/library/import', '_post_import_library'),
+        (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
         (lambda path: path == '/api/foundry/backup/verify', '_post_backup_verify'),
         (lambda path: path == '/api/foundry/backup/rehearse', '_post_backup_rehearse'),
@@ -491,14 +492,24 @@ class Handler(SimpleHTTPRequestHandler):
         snapshot = foundry_library.normalize_snapshot(p, world)
         with LOCK:
             write_doc('foundry-library', snapshot)
-        return self.send_json(
-            {
-                'ok': True,
-                'counts': {
-                    kind: len(snapshot['documents'][kind]) for kind in foundry_library.KINDS
-                },
-            }
-        )
+        return self.send_json(self._library_counts(snapshot))
+
+    def _post_read_library(self, path, query, p):
+        world = foundry_library.selected_world()
+        if not world:
+            raise Invalid('Connect a Foundry world before reading its documents.')
+        snapshot = foundry_library.read_world(world)
+        with LOCK:
+            write_doc('foundry-library', snapshot)
+        return self.send_json(self._library_counts(snapshot))
+
+    @staticmethod
+    def _library_counts(snapshot):
+        return {
+            'ok': True,
+            'counts': {kind: len(snapshot['documents'][kind]) for kind in foundry_library.KINDS},
+            'omitted': snapshot['omitted'],
+        }
 
     def _post_backup_create(self, path, query, p):
         return self.send_json(

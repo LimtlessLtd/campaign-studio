@@ -64,10 +64,11 @@ Images are generated individually when you press **Generate image**. Different p
 
 ## Foundry
 
-**World Library** browses media in the connected Foundry User Data folder. To browse existing scenes,
-journals, actors and items, download its export Script macro, run it as GM in Foundry, and import the JSON
-snapshot. It is read-only and shows when the snapshot was made; later Foundry changes require another export.
-See [first run and World Library](docs/FOUNDRY_LIBRARY.md).
+**World Library** browses media in the connected Foundry User Data folder. It also reads the world's scenes,
+journals, actors and items straight from the world's database files when you open the page, with no macro
+and without changing Foundry; it shows when they were read and re-reads after Foundry saves changes. If a
+world's files cannot be read, download the export Script macro, run it as GM in Foundry, and import the JSON
+snapshot instead. See [first run and World Library](docs/FOUNDRY_LIBRARY.md).
 
 **Prepare for Foundry → Update Foundry export** copies assets and scene JSON to the selected world's
 `Data/wotg-maps` folder. Download the Script macro and run it as GM in Foundry. The server does not write the
@@ -119,7 +120,7 @@ to `DM/exports`. This does not publish a repository.
 
 ## Status and development
 
-This initial alpha supports the map-driven preparation workflow and a read-only snapshot of selected world
+This initial alpha supports the map-driven preparation workflow and a read-only view of selected world
 documents. It does not yet live-sync or edit existing Foundry documents from Studio.
 The [code review](docs/CODE_REVIEW.md) and [backlog](docs/BACKLOG.md) describe the remaining work toward
 managing an entire campaign. Live AI availability depends on your provider; live Foundry compatibility
