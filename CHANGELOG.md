@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Split the browser into document state/autosave, reusable controls and page controllers without a build
+  step. Navigation now aborts stale page reads and keeps each page's view private until it is current.
 - The generic document save (`PUT /api/doc/<name>`) now refuses `settings`, `workflows/*` and `jobs/*`
   with 403. Those change only through their own routes, which validate them; the browser never saved
   them through this route.

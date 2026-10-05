@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / 'DM'))
 import schema
 import shapes
 
-BROWSER = [ROOT / 'DM/app' / name for name in ('app.js', 'studio.js')]
+BROWSER = sorted((ROOT / 'DM/app').glob('*.js'))
 
 
 class ShapeTests(unittest.TestCase):

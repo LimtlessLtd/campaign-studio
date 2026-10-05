@@ -30,9 +30,9 @@ The filesystem model is understandable and suitable for a local prototype. Separ
 revisions, map I/O, rendering and configuration already gives useful boundaries. A no-build frontend makes
 installation straightforward. The renderer is independent of AI: walls and image geometry share one plan.
 
-The HTTP transport, campaign operations, job lifecycle and startup now have separate modules. Complex
-route bodies and shared global frontend state are the main remaining structure pressure points. Further
-route decomposition should follow tested business boundaries as features grow.
+The HTTP transport, campaign operations, job lifecycle and startup have separate modules. The browser now
+separates document state, controls and page controllers, and route loads get abortable view contexts. The
+large map editor and shared in-memory browser state still need care as features grow.
 
 ## Design and pattern review (2026-10-04)
 
@@ -77,9 +77,9 @@ defect by itself. The problems below are the ones object-oriented principles exi
 3. **God functions (single responsibility). Partly resolved.** HTTP methods now dispatch from a route
    table to handlers under 60 lines. Foundry upgrade catalogue collection, compatibility solving and
    inventory/clone workflows now live in separate modules; its long clone workflows
-   still need care when extended. `render2d.prop` is 424 lines. `studio.js` has `mapStudio` at 1,064 lines and
-   `foundryUpgradeCard` at 524. The remaining work calls for a prop-painter registry and page controllers
-   for the map studio.
+   still need care when extended. `render2d.prop` is 424 lines. `map-pages.js` has `mapStudio` at over 1,000
+   lines and `foundry-pages.js` has `foundryUpgradeCard` at over 500. Page controllers are separate from
+   shared controls and autosave; those two complex page functions still need careful decomposition when extended.
 4. **HTTP errors are untyped. Resolved at the transport boundary.** Route handlers raise `Invalid`,
    `NotFound` and `Conflict`; one dispatcher maps them to 400, 404 and 409. Domain `ValueError`s become
    `Invalid` at that boundary. A stale document save still carries its merge payload with the conflict.
