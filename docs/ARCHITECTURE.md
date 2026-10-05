@@ -37,7 +37,7 @@ flowchart LR
 | `DM/foundry_compat.py`                | Shared build, version and package relationship rules                               |
 | `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |
-| `DM/foundry_library.py`               | Local world discovery, media browsing and validated document snapshots             |
+| `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion       |
 | `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world    |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
@@ -96,6 +96,12 @@ entry is set aside and shown on the dashboard for GM review. A damaged journal r
 way, so it never blocks later changes. Stable workflow-derived IDs and retry checks remain a second
 guard against duplicates. Map import/export are not journaled: they create files that later steps tolerate.
 Back up `DM/data`, `DM/maps` and `DM/uploads` together before upgrades.
+
+Foundry world import reads and normalizes a snapshot in `foundry_library`, then `campaign_core` commits the
+snapshot and codex changes together. Codex provenance uses an opaque source-world key with a canonical
+Foundry document UUID; an identical document ID in another world cannot update it. The browser loads
+supported local images through the read-only Foundry asset route only while that world is selected. Macro
+snapshots use the same conversion and commit path as direct folder reads.
 
 ## Data schema and migrations
 

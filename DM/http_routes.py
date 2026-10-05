@@ -36,6 +36,7 @@ from campaign_core import (
     doc_path,
     editable_doc_path,
     generate_cmd,
+    import_foundry_snapshot,
     job_file,
     list_docs,
     list_images,
@@ -203,7 +204,12 @@ class Handler(SimpleHTTPRequestHandler):
     def _post_login(self):
         peer = self.client_address[0]
         try:
-            form = urllib.parse.parse_qs(self.body(4096).decode('utf-8', 'replace'))
+            # Consume a modest oversized form before replying; unread request bytes can reset the
+            # response connection on Windows.
+            raw = self.body(64 * 1024)
+            if len(raw) > 4096:
+                raise Invalid('too large')
+            form = urllib.parse.parse_qs(raw.decode('utf-8', 'replace'))
         except (Invalid, ValueError):
             return self.send_login(400, 'That request could not be read.')
         wait = GATE.locked_for(peer)
@@ -287,6 +293,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _get_state(self, path, query, p):
         notes = os.path.join(campaign.active().data, 'notes.txt')
+        cfg = config.settings()
+        try:
+            world = foundry_library.selected_world() if cfg.get('world_path') else None
+        except (OSError, ValueError):
+            world = None
         sys.path.insert(0, FORGE)
         import generate
 
@@ -294,7 +305,8 @@ class Handler(SimpleHTTPRequestHandler):
             dict(
                 public=public_content(),
                 claude=bool(shutil.which('claude')),
-                campaign=config.settings()['campaign_name'],
+                campaign=cfg['campaign_name'],
+                world_key=foundry_library.world_key(world) if world else '',
                 onboarding_needed=not os.path.isfile(campaign.active().settings),
                 generators={k: v['title'] for k, v in generate.GENERATORS.items()},
                 notes=Path(notes).read_text(encoding='utf-8', errors='replace')
@@ -345,7 +357,9 @@ class Handler(SimpleHTTPRequestHandler):
         )
 
     def _get_asset(self, path, query, p):
-        file, mime = foundry_library.media_file(query.get('path', [''])[0])
+        file, mime = foundry_library.media_file(
+            query.get('path', [''])[0], query.get('world_key', [''])[0]
+        )
         self.send_response(200)
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(file.stat().st_size))
@@ -535,9 +549,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not world:
             raise Invalid('Connect a Foundry world before importing its library snapshot.')
         snapshot = foundry_library.normalize_snapshot(p, world)
-        with LOCK:
-            write_doc('foundry-library', snapshot)
-        return self.send_json(self._library_counts(snapshot))
+        return self._save_foundry_import(snapshot, world)
 
     def _post_read_library(self, path, query, p):
         world = foundry_library.selected_world()
@@ -554,12 +566,14 @@ class Handler(SimpleHTTPRequestHandler):
         if not world:
             raise Invalid('Connect a Foundry world before importing it.')
         snapshot = foundry_library.read_world(world)
-        with LOCK:
-            codex = read_json(doc_path('codex'), {'entries': []})
-            report = foundry_library.import_into_codex(snapshot, codex)
-            commit_docs('Import Foundry world', [('foundry-library', snapshot), ('codex', codex)])
+        return self._save_foundry_import(snapshot, world)
+
+    def _save_foundry_import(self, snapshot, world):
+        media = foundry_library.assets(world, '', 0, 1)
+        report = import_foundry_snapshot(snapshot)
         report.update(self._library_counts(snapshot))
-        report['media'] = foundry_library.assets(world, '', 0, 1)['total']
+        report['media'] = media['total']
+        report['media_truncated'] = media['truncated']
         return self.send_json(report)
 
     @staticmethod

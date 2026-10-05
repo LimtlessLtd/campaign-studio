@@ -11,10 +11,14 @@ import sys
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM' / 'tools'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 import test_workflows as fixtures  # noqa: E402
+import leveldb_writer as writer  # noqa: E402
 from test_workflows import campaign_core, workflow  # noqa: E402
 
 AXE = ROOT / 'node_modules' / 'axe-core' / 'axe.min.js'
@@ -125,9 +129,51 @@ class BrowserSmoke(unittest.TestCase):
 
         expect(self.page).to_have_url(self.studio.url + '/#/library')
         expect(self.page.locator('.campaign-switch')).to_contain_text('Synthetic campaign')
+        expect(self.page.locator('.library-status')).to_contain_text(
+            'World connected, but import failed'
+        )
+        expect(self.page.get_by_text('Use the export macro instead', exact=True)).to_be_visible()
         settings = self.stored('settings')
         self.assertEqual(settings['campaign_name'], 'Synthetic campaign')
         self.assertEqual(Path(settings['world_path']).resolve(), world.resolve())
+
+    def test_first_run_imports_codex_and_displays_a_foundry_image(self):
+        (self.studio.dm / 'data' / 'settings.json').unlink()
+        user_data = self.studio.root / 'User Data'
+        world = user_data / 'Data' / 'worlds' / 'wizard-world'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text(
+            json.dumps({'id': 'wizard-world', 'title': 'Wizard world', 'system': 'dnd5e'}),
+            encoding='utf-8',
+        )
+        Image.new('RGB', (1, 1), 'red').save(world / 'portrait.png')
+        actor = {
+            '_id': 'a1',
+            'name': 'Mira',
+            'type': 'npc',
+            'img': 'worlds/wizard-world/portrait.png',
+        }
+        writer.database(
+            world / 'data' / 'actors',
+            logs=[writer.log([[(b'!actors!a1', json.dumps(actor).encode())]])],
+        )
+        self.page.goto(self.studio.url + '/')
+        self.page.get_by_label('Campaign name').fill('Synthetic campaign')
+        self.page.get_by_label('Foundry User Data folder').fill(str(user_data))
+        self.page.get_by_role('button', name='Scan for worlds').click()
+        self.page.get_by_label('Wizard world').check()
+        self.page.get_by_role('button', name='Create project and import world').click()
+
+        expect(self.page).to_have_url(self.studio.url + '/#/library')
+        expect(self.page.locator('.library-status')).to_contain_text('1 added')
+        self.page.get_by_role('link', name='Campaign codex').click()
+        expect(self.page.get_by_text('Mira').first).to_be_visible()
+        image = self.page.locator('.codex .thumb[src]')
+        expect(image).to_have_count(1)
+        self.assertIn('/api/foundry/asset?', image.get_attribute('src'))
+        self.assertEqual(
+            self.context.request.get(self.studio.url + image.get_attribute('src')).status, 200
+        )
 
     def test_pin_editor_persists_across_navigation(self):
         slug, _brief = self.studio.import_map()

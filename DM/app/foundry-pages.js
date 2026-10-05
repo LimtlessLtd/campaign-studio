@@ -873,7 +873,7 @@ async function studioWelcome(_arg, context) {
         : h(
             'p',
             { class: 'muted' },
-            'Select your existing Foundry world. This step only connects the Studio project; it does not change that world.',
+            'Select your existing Foundry world. Studio will read its documents into the codex without changing that world.',
           ),
     );
   };
@@ -882,11 +882,18 @@ async function studioWelcome(_arg, context) {
     if (!withoutWorld && !settings.world_path) throw new Error('Select a Foundry world first.');
     if (withoutWorld) settings.world_path = '';
     await post('/api/settings', settings);
-    S.state.campaign = settings.campaign_name.trim();
-    S.state.onboarding_needed = false;
-    if (!withoutWorld)
-      // One action connects and imports; a world Studio cannot read yet is handled in the library.
-      await post('/api/foundry/world/import').catch(() => null);
+    if (!withoutWorld) {
+      try {
+        const report = await post('/api/foundry/world/import');
+        S.worldImportNotice = { message: importSummary(report), error: false };
+      } catch (error) {
+        S.worldImportNotice = {
+          message: `World connected, but import failed: ${error.message} Use the export macro below if the folder cannot be read.`,
+          error: true,
+        };
+      }
+    }
+    S.state = await api('/api/state');
     initStudio();
     go(withoutWorld ? '#/' : '#/library');
   };

@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import html
 import ipaddress
+import math
 import secrets
 import threading
 import time
@@ -84,28 +85,36 @@ class AccessGate:
                 return True
         return False
 
+    def _wait_locked(self, peer, now):
+        count, until = self._failures.get(peer, (0, 0))
+        if count >= MAX_FAILURES and until > now:
+            return math.ceil(until - now)
+        if peer not in self._failures and len(self._failures) >= MAX_TRACKED:
+            self._failures = {key: value for key, value in self._failures.items() if value[1] > now}
+            if len(self._failures) >= MAX_TRACKED:
+                return math.ceil(min(value[1] for value in self._failures.values()) - now)
+        return 0
+
     def locked_for(self, peer):
         with self._lock:
-            count, until = self._failures.get(peer, (0, 0))
-            return max(0, int(until - self.clock())) if count >= MAX_FAILURES else 0
+            return self._wait_locked(peer, self.clock())
 
     def try_code(self, peer, attempt):
         """True when the code is right. Repeated misses from one address lock it out for a minute."""
-        if not self.enabled or self.locked_for(peer):
+        if not self.enabled:
             return False
-        ok = hmac.compare_digest(attempt.encode('utf-8'), self.code.encode('utf-8'))
         with self._lock:
+            now = self.clock()
+            if self._wait_locked(peer, now):
+                return False
+            ok = hmac.compare_digest(attempt.encode('utf-8'), self.code.encode('utf-8'))
             if ok:
                 self._failures.pop(peer, None)
             else:
                 count, until = self._failures.get(peer, (0, 0))
-                if until and until <= self.clock():
+                if until and until <= now:
                     count = 0
-                count += 1
-                now = self.clock()
-                if len(self._failures) >= MAX_TRACKED:  # forget lockouts that have already ended
-                    self._failures = {k: v for k, v in self._failures.items() if v[1] > now}
-                self._failures[peer] = (count, now + LOCKOUT_SECONDS)
+                self._failures[peer] = (count + 1, now + LOCKOUT_SECONDS)
         return ok
 
 

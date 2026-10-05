@@ -74,7 +74,10 @@ Images are generated individually when you press **Generate image**. Different p
 journals, actors and items straight from the world's database files when you open the page, with no macro
 and without changing Foundry; it shows when they were read and re-reads after Foundry saves changes. If a
 world's files cannot be read, download the export Script macro, run it as GM in Foundry, and import the JSON
-snapshot instead. See [first run and World Library](docs/FOUNDRY_LIBRARY.md).
+snapshot instead. **Import world into Studio** adds actors, items and scenes to the codex in one action;
+first-run setup also runs it and reports failures. Importing a macro snapshot uses the same rules. Studio
+edits are kept on reimport, source worlds remain separate, and supported local Foundry images display while
+their world is connected. See [first run and World Library](docs/FOUNDRY_LIBRARY.md).
 
 **Prepare for Foundry → Update Foundry export** copies assets and scene JSON to the selected world's
 `Data/wotg-maps` folder. Download the Script macro and run it as GM in Foundry. The server does not write the

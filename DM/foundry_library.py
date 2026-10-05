@@ -131,10 +131,18 @@ def _media_path(relative, world):
     return candidate
 
 
-def media_file(relative):
+def world_key(world):
+    """Stable, opaque identity for one selected world folder (not just its reusable Foundry UUIDs)."""
+    source = f'{os.path.normcase(str(Path(world["path"]).resolve()))}\n{world["id"]}'
+    return hashlib.sha256(source.encode('utf-8')).hexdigest()[:24]
+
+
+def media_file(relative, expected_world_key=''):
     world = selected_world()
     if not world:
         raise ValueError('Connect a Foundry world first.')
+    if expected_world_key and expected_world_key != world_key(world):
+        raise ValueError('This image belongs to a different connected world.')
     path = _media_path(relative, world)
     return path, MEDIA[path.suffix.lower()]
 
@@ -537,26 +545,36 @@ IMPORTED_FIELDS = ('name', 'group', 'notes', 'image')
 def import_into_codex(snapshot, codex):
     """Add or refresh codex entries for the snapshot's actors, items and scenes.
 
-    Each entry remembers its Foundry UUID and the values last imported. A later import refreshes an entry
-    only while it still holds those values, so anything edited in Studio is kept. Returns the counts.
+    Each entry remembers its source world, canonical Foundry UUID and last imported values. A later import
+    refreshes an entry only while it still holds those values, so anything edited in Studio is kept.
+    Legacy entries without a source world are left alone rather than guessed from a reusable UUID.
     """
     entries = codex.setdefault('entries', [])
+    source_key = world_key(snapshot['world'])
     known = {
         entry['foundry']['uuid']: entry
         for entry in entries
-        if isinstance(entry.get('foundry'), dict) and 'uuid' in entry['foundry']
+        if isinstance(entry.get('foundry'), dict)
+        and entry['foundry'].get('world_key') == source_key
+        and isinstance(entry['foundry'].get('uuid'), str)
     }
     taken = {entry.get('id') for entry in entries}
     report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0}
     for kind, entry_type in CODEX_IMPORTS:
         for document in snapshot['documents'].get(kind, []):
+            image = document['image']
+            if image:
+                try:
+                    _media_path(image, snapshot['world'])
+                except (OSError, ValueError):
+                    image = ''  # Remote, missing and unsupported Foundry assets cannot be served.
             values = {
                 'name': document['name'],
                 'group': document['folder'],
                 'notes': document['summary'],
-                'image': document['image'],
+                'image': image,
             }
-            uuid = document['uuid'] or f'{COLLECTIONS[kind][1]}.{document["id"]}'
+            uuid = f'{COLLECTIONS[kind][1]}.{document["id"]}'
             entry = known.get(uuid)
             if entry is None:
                 base = re.sub(r'[^a-z0-9]+', '-', ('fvtt-' + document['id']).lower()).strip('-')
@@ -564,14 +582,14 @@ def import_into_codex(snapshot, codex):
                 while identity in taken:
                     identity += '-x'
                 taken.add(identity)
-                entries.append(
-                    shapes.CODEX_ENTRY.new(
-                        id=identity,
-                        type=entry_type(document),
-                        **values,
-                        foundry={'uuid': uuid, 'imported': values},
-                    )
+                entry = shapes.CODEX_ENTRY.new(
+                    id=identity,
+                    type=entry_type(document),
+                    **values,
+                    foundry={'uuid': uuid, 'world_key': source_key, 'imported': values},
                 )
+                entries.append(entry)
+                known[uuid] = entry
                 report['added'] += 1
                 continue
             last = entry['foundry'].get('imported') or {}
