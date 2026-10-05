@@ -105,9 +105,12 @@ The work these findings call for, with the owner's feature requests, is tracked 
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.
 - The World Library reads selected media and a GM-exported snapshot of top-level world documents. It does
   not include compendium contents, edit existing documents or provide live two-way synchronization.
-- NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12.
+- NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
+  macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
+  rejected before import.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
-- Browser syntax checks and manual UI checks are present; browser automation remains on the roadmap.
+- Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
+  WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
 - Foundry backup, isolated restore-copy verification and v12 clone preparation are available for local User
   Data. Opening the restored world in v12, changing modules in the clone, migration, cutover and live rollback
   remain manual.

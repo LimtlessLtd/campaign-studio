@@ -13,7 +13,6 @@ Next ID: W16
 
 | ID  | Priority | Work                                                               | Acceptance criteria                                                                                                                                            |
 | --- | -------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W6  | 2        | Build supported Foundry version/system adapters                    | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport                                                                          |
 | W7  | 2        | Complete the local Foundry upgrade wizard                          | Backup, inventory, report and isolated v12 clone preparation are implemented; confirm clone module state, migrate it and validate cutover                      |
 | W8  | 2        | Extend snapshot browsing into a live Foundry-side connection       | Stable provenance, read permissions and conflict policy; no raw DB editing                                                                                     |
 | W12 | 2        | Pin the validated address for package downloads                    | The connection uses the address the SSRF check approved; a DNS rebinding test reaches no private address                                                       |

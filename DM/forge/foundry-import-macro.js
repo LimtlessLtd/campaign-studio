@@ -8,22 +8,98 @@
 // Run it again for a map that is already a scene to replace the forged parts; tokens and your own notes stay.
 const TAG = 'wotgForge';
 const esc = (s) => foundry.utils.escapeHTML(String(s ?? ''));
-const gen = game.release.generation;
 if (!game.user.isGM) return ui.notifications.warn('Run Campaign Studio imports as the GM.');
+
+// The exported scene uses the v12 shape. Keep version and system differences here so the import
+// workflow below only manages document ownership and stable Studio IDs.
+const modernCore = {
+  scene: (source) => source,
+  changes: (source) => ({
+    background: source.background,
+    width: source.width,
+    height: source.height,
+    grid: source.grid,
+    flags: source.flags,
+    ...(source.environment ? { environment: source.environment } : {}),
+  }),
+  roof: (base, above) => ({
+    ...base,
+    elevation: above,
+    restrictions: { light: false, weather: true },
+  }),
+};
+const CORE_ADAPTERS = {
+  11: {
+    scene: (source) => {
+      const { environment, fog, ...legacy } = source;
+      return {
+        ...legacy,
+        darkness: environment?.darknessLevel ?? 0,
+        globalLight: environment?.globalLight?.enabled ?? true,
+        fogExploration: fog?.exploration ?? true,
+      };
+    },
+    changes: (source) => ({
+      background: source.background,
+      width: source.width,
+      height: source.height,
+      grid: source.grid,
+      flags: source.flags,
+      darkness: source.darkness,
+      globalLight: source.globalLight,
+      fogExploration: source.fogExploration,
+    }),
+    roof: (base) => ({ ...base, overhead: true, roof: true }),
+  },
+  12: modernCore,
+  13: modernCore,
+};
+const core = CORE_ADAPTERS[game.release?.generation];
+if (!core)
+  return ui.notifications.warn(
+    `Campaign Studio import supports Foundry v11–v13; this world runs v${game.release?.generation ?? '?'}.`,
+  );
+
+const paragraph = (text) => `<p>${esc(text).replace(/\n/g, '<br>')}</p>`;
+const SYSTEM_ADAPTERS = {
+  dnd5e: {
+    entityOption:
+      '<p><label><input type="checkbox" name="entities" checked> Create / update linked NPCs and items</label></p><p>NPC stat blocks and item mechanics are added as notes. Review their sheets before play.</p>',
+    entityDoc: (entry, type) => {
+      const notes =
+        paragraph(entry.public || '') +
+        '<h3>GM notes</h3>' +
+        paragraph(entry.notes || '') +
+        (entry.secrets ? '<h3>Secrets</h3>' + paragraph(entry.secrets) : '');
+      return {
+        name: entry.name,
+        type,
+        system:
+          type === 'npc'
+            ? { details: { biography: { public: paragraph(entry.public || ''), value: notes } } }
+            : { description: { value: notes, chat: paragraph(entry.public || '') } },
+      };
+    },
+  },
+};
+const systemAdapter = SYSTEM_ADAPTERS[game.system.id] ?? {
+  entityOption:
+    '<p>Linked characters and items are included in the GM journal. Actor and item sheets currently support D&D 5e.</p>',
+};
 
 const index = await fetch('wotg-maps/index.json', { cache: 'no-store' })
   .then((r) => r.json())
   .catch(() => []);
 if (!index.length) return ui.notifications.warn('No forged maps in Data/wotg-maps yet.');
 
-const options = index.map((m) => `<option value="${m.slug}">${esc(m.name)}</option>`).join('');
+const options = index.map((m) => `<option value="${esc(m.slug)}">${esc(m.name)}</option>`).join('');
 const choice = await Dialog.prompt({
   title: 'Map Forge: import a map',
   content: `<p>Creates the scene with walls, doors, windows, lights, roofs and the DM's journal with map pins.</p>
             <p><select name="slug" style="width:100%">${options}</select></p>
             <p><label><input type="checkbox" name="roofs" checked> Roofs</label>
                <label><input type="checkbox" name="journal" checked> Journal and pins</label></p>
-            ${game.system.id === 'dnd5e' ? '<p><label><input type="checkbox" name="entities" checked> Create / update linked NPCs and items</label></p><p>NPC stat blocks and item mechanics are added as notes. Review their sheets before play.</p>' : '<p>Linked characters and items are included in the GM journal. Actor and item sheets currently support D&D 5e.</p>'}`,
+            ${systemAdapter.entityOption}`,
   label: 'Import',
   callback: (html) => ({
     slug: html.find('[name=slug]').val(),
@@ -38,6 +114,15 @@ if (!choice?.slug) return;
 const data = await fetch(`wotg-maps/${choice.slug}.json`, { cache: 'no-store' }).then((r) =>
   r.json(),
 );
+if (
+  !data?.background?.src ||
+  !data?.grid?.size ||
+  !Array.isArray(data?.walls) ||
+  !Array.isArray(data?.lights)
+)
+  return ui.notifications.warn(
+    'This map export has an unsupported scene format. Export it again from Campaign Studio.',
+  );
 const forge = data.flags?.world?.[TAG] ?? {};
 if (forge.targetWorld && forge.targetWorld !== game.world.id)
   return ui.notifications.warn(
@@ -55,6 +140,7 @@ data.lights = (data.lights ?? []).map((l) => ({
   ...l,
   flags: { world: { [TAG]: { generated: true } } },
 }));
+const sceneData = core.scene(data);
 
 let scene = game.scenes.find((s) => s.flags?.world?.[TAG]?.plan === choice.slug);
 if (scene) {
@@ -81,18 +167,11 @@ if (scene) {
     'Note',
     scene.notes.filter(mine).map((n) => n.id),
   );
-  await scene.update({
-    background: data.background,
-    width: data.width,
-    height: data.height,
-    grid: data.grid,
-    flags: data.flags,
-    ...(data.environment ? { environment: data.environment } : {}),
-  });
-  await scene.createEmbeddedDocuments('Wall', data.walls);
-  await scene.createEmbeddedDocuments('AmbientLight', data.lights);
+  await scene.update(core.changes(sceneData));
+  await scene.createEmbeddedDocuments('Wall', sceneData.walls);
+  await scene.createEmbeddedDocuments('AmbientLight', sceneData.lights);
 } else {
-  scene = await Scene.create(data);
+  scene = await Scene.create(sceneData);
   const thumb = await scene.createThumbnail().catch(() => null);
   if (thumb) await scene.update({ thumb: thumb.thumb });
 }
@@ -111,9 +190,7 @@ if (choice.roofs && roofs.length) {
       occlusion: { mode: FADE, alpha: 0 },
       flags: { world: { [TAG]: { roof: true } } },
     };
-    return gen >= 12
-      ? { ...base, elevation: above, restrictions: { light: false, weather: true } }
-      : { ...base, overhead: true, roof: true };
+    return core.roof(base, above);
   });
   await scene.createEmbeddedDocuments('Tile', tiles);
 }
@@ -202,9 +279,7 @@ if (choice.journal && key?.areas?.length) {
     await journal.update({ name: `${data.name} (DM key)` });
     for (const p of pages) {
       const old = journal.pages.find(
-        (old) =>
-          old.flags?.world?.[TAG]?.page === p.flags.world[TAG].page ||
-          (!old.flags?.world?.[TAG] && old.name === p.name),
+        (old) => old.flags?.world?.[TAG]?.page === p.flags.world[TAG].page,
       );
       if (old) await journal.updateEmbeddedDocuments('JournalEntryPage', [{ ...p, _id: old.id }]);
       else await journal.createEmbeddedDocuments('JournalEntryPage', [p]);
@@ -257,8 +332,7 @@ if (choice.journal && key?.areas?.length) {
 }
 
 let entities = 0;
-if (choice.entities && game.system.id === 'dnd5e' && key) {
-  const paragraph = (text) => `<p>${esc(text).replace(/\n/g, '<br>')}</p>`;
+if (choice.entities && systemAdapter.entityDoc && key) {
   for (const [field, collection, DocumentClass, type] of [
     ['npcs_detail', game.actors, Actor, 'npc'],
     ['items_detail', game.items, Item, 'loot'],
@@ -270,19 +344,8 @@ if (choice.entities && game.system.id === 'dnd5e' && key) {
         .map((e) => [e.id, e]),
     );
     for (const e of unique.values()) {
-      const notes =
-        paragraph(e.public || '') +
-        '<h3>GM notes</h3>' +
-        paragraph(e.notes || '') +
-        (e.secrets ? '<h3>Secrets</h3>' + paragraph(e.secrets) : '');
-      const system =
-        type === 'npc'
-          ? { details: { biography: { public: paragraph(e.public || ''), value: notes } } }
-          : { description: { value: notes, chat: paragraph(e.public || '') } };
       const doc = {
-        name: e.name,
-        type,
-        system,
+        ...systemAdapter.entityDoc(e, type),
         flags: { world: { [TAG]: { entry: e.id, sourceMap: choice.slug } } },
       };
       if (e.image) doc.img = e.image;
