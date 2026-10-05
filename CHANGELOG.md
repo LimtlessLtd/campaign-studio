@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Foundry media paths and backup manifests now share one relative-path rule (`storage.posix_parts`), and
+  `forge.forge` reads a map's `key.json` once per run instead of three times.
 - The GM import macro now selects explicit Foundry v11 or v12/v13 scene and roof adapters, and a D&D 5e
   sheet or journal-only system adapter. Fixture contracts exercise import and reimport for each combination;
   untagged GM journal pages are no longer overwritten by a same-named generated page, and pins resolve their
