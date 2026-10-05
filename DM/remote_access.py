@@ -17,6 +17,7 @@ COOKIE = 'dm_session'
 MIN_CODE = 8
 MAX_FAILURES = 5
 LOCKOUT_SECONDS = 60
+MAX_TRACKED = 1024
 LOCAL_HOSTS = ('127.0.0.1', 'localhost')
 
 
@@ -101,7 +102,10 @@ class AccessGate:
                 if until and until <= self.clock():
                     count = 0
                 count += 1
-                self._failures[peer] = (count, self.clock() + LOCKOUT_SECONDS)
+                now = self.clock()
+                if len(self._failures) >= MAX_TRACKED:  # forget lockouts that have already ended
+                    self._failures = {k: v for k, v in self._failures.items() if v[1] > now}
+                self._failures[peer] = (count, now + LOCKOUT_SECONDS)
         return ok
 
 
