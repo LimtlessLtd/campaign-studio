@@ -27,6 +27,7 @@ flowchart LR
 | ------------------------------------- | ---------------------------------------------------------------------------------- |
 | `DM/server.py`                        | Local server startup, interrupted-job recovery and worker threads                  |
 | `DM/http_routes.py`                   | HTTP routes, request validation, response handling and static files                |
+| `DM/campaign.py`                      | Where the active campaign's files live; inherited by job subprocesses (`DM_HOME`)  |
 | `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results        |
 | `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |

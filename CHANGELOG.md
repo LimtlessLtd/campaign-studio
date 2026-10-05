@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `DM_HOME` runs Campaign Studio on a campaign folder outside the app folder. One `Campaign` object now
+  locates every campaign file, and renders, generators and image jobs work on the campaign that queued
+  them. Uploaded images, map imports, previews and checkpoints store paths relative to the campaign's
+  real folder name instead of assuming `DM/`.
 - Coding agents now audit every merged PR for design as well as bugs and fix what they confirm, track work
   in `docs/BACKLOG.md`, and coordinate claims and owner feedback in Slack (`docs/DEVELOPMENT.md`).
 - Fixes from reviewing the journal, migration and autosave work:

@@ -20,15 +20,17 @@ NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
 
 class JobService:
-    def __init__(self, jobs_dir, campaign_root, lock, on_finish, on_failure, on_restart):
-        self.jobs_dir = jobs_dir
-        self.campaign_root = campaign_root
+    def __init__(self, campaign, lock, on_finish, on_failure, on_restart):
+        self.campaign = campaign  # callable returning the Campaign whose jobs this service runs
         self.lock = lock
         self.on_finish = on_finish
         self.on_failure = on_failure
         self.on_restart = on_restart
         self.lanes = {'forge': queue.Queue(), 'claude': queue.Queue(), 'art': queue.Queue()}
         self.running = {}
+
+    def jobs_dir(self):
+        return self.campaign().jobs
 
     def job_file(self, job_id, ext='json'):
         return os.path.join(self.jobs_dir(), f'{job_id}.{ext}')
@@ -56,14 +58,14 @@ class JobService:
         self.lanes[lane].put((job, cmd, stdin_text))
         return job
 
-    @staticmethod
-    def child_env():
+    def child_env(self):
         env = dict(os.environ)
         for key in list(env):
             if key == 'CLAUDECODE' or key.startswith('CLAUDE_CODE_'):
                 env.pop(key)
         env['PYTHONIOENCODING'] = 'utf-8'
         env['FOUNDRY_DATA'] = config.foundry_data()
+        env.update(self.campaign().child_env())  # child processes work on the same campaign
         return env
 
     def worker(self, lane):
@@ -89,7 +91,7 @@ class JobService:
             try:
                 proc = subprocess.Popen(
                     cmd,
-                    cwd=self.campaign_root(),
+                    cwd=self.campaign().files,
                     stdout=log,
                     stderr=subprocess.STDOUT,
                     env=self.child_env(),

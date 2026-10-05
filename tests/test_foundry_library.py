@@ -5,11 +5,10 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 
-import config
+import campaign
 import foundry_library
 
 
@@ -37,11 +36,11 @@ class FoundryLibraryTests(unittest.TestCase):
             json.dumps({'id': 'other-world', 'title': 'Other', 'system': 'dnd5e'}),
             encoding='utf-8',
         )
-        self.settings_file = Path(self.temp.name) / 'settings.json'
+        fixture = campaign.Campaign(Path(self.temp.name) / 'DM')
+        self.settings_file = Path(fixture.settings)
+        self.settings_file.parent.mkdir(parents=True)
         self.settings_file.write_text(json.dumps({'world_path': str(self.world)}), encoding='utf-8')
-        patcher = patch.object(config, 'CONFIG_PATH', str(self.settings_file))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        self.addCleanup(campaign.activate, campaign.activate(fixture))
 
     def snapshot(self):
         return {

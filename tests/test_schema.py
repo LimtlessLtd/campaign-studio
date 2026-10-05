@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
+import campaign
 import campaign_core
 import migrate
 import schema
@@ -278,16 +279,16 @@ class SchemaTests(unittest.TestCase):
 
     def test_a_new_campaign_records_its_schema_with_its_first_document(self):
         new = Path(self.temp.name) / 'new'
-        paths = {'DATA': str(new / 'data'), 'MAPS': str(new / 'maps')}
-        with patch.multiple(campaign_core, HISTORY=str(new / 'data/.history'), **paths):
+        fresh = campaign.Campaign(new)
+        with campaign.using(fresh):
             campaign_core.write_doc('settings', {'campaign_name': 'Fixture'})
             # An older build then refuses it instead of treating it as unversioned 0.1.x data.
-            self.assertEqual(schema.version(paths['DATA'], paths['MAPS']), schema.CURRENT)
+            self.assertEqual(schema.version(fresh.data, fresh.maps), schema.CURRENT)
             campaign_core.write_doc('codex', {'entries': []})
         marker = json.loads((new / 'data' / schema.MARKER).read_text(encoding='utf-8'))
         self.assertEqual(len(marker['history']), 1)
         # Unversioned documents already present are left for the next start to migrate.
-        with patch.multiple(campaign_core, DATA=self.data, MAPS=self.maps, HISTORY=str(new / 'h')):
+        with campaign.using(campaign.Campaign(self.dm)):
             campaign_core.write_doc('threads', {'threads': []})
         self.assertEqual(schema.version(self.data, self.maps), 0)
 
@@ -363,9 +364,8 @@ class SchemaTests(unittest.TestCase):
         self.assertFalse(Path(self.backups).exists())
 
     def test_command_line_reports_then_migrates(self):
-        paths = {'DATA': self.data, 'MAPS': self.maps, 'BACKUPS': self.backups}
         with (
-            patch.multiple(campaign_core, **paths),
+            campaign.using(campaign.Campaign(self.dm)),
             patch.object(migrate, 'server_running', return_value=False),
         ):
             report = io.StringIO()
@@ -393,9 +393,8 @@ class SchemaTests(unittest.TestCase):
         }
         pending.write_text(json.dumps(entry), encoding='utf-8')
         before = self.snapshot()
-        paths = {'DATA': self.data, 'MAPS': self.maps, 'BACKUPS': self.backups}
         with (
-            patch.multiple(campaign_core, **paths),
+            campaign.using(campaign.Campaign(self.dm)),
             patch.object(migrate, 'server_running', return_value=False),
             patch.object(campaign_core, 'queue_forge') as queue_forge,
         ):

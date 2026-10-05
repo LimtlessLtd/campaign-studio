@@ -13,8 +13,10 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
+import campaign
 import campaign_core as core
 import storage
+from campaign import Campaign
 from job_service import JobService
 
 
@@ -23,8 +25,7 @@ class JobsStorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             restarted = []
             service = JobService(
-                lambda: temporary,
-                lambda: temporary,
+                lambda: Campaign(os.path.join(temporary, 'DM')),
                 threading.RLock(),
                 lambda *_: None,
                 lambda *_: None,
@@ -50,8 +51,7 @@ class JobsStorageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             finished = []
             service = JobService(
-                lambda: temporary,
-                lambda: temporary,
+                lambda: Campaign(os.path.join(temporary, 'DM')),
                 threading.RLock(),
                 lambda job, code, tail: finished.append((job['id'], code, tail)),
                 lambda *_: None,
@@ -90,7 +90,7 @@ class JobsStorageTests(unittest.TestCase):
 
         with (
             tempfile.TemporaryDirectory() as temporary,
-            patch.object(core, 'DATA', temporary),  # failure handling also replays the journal
+            campaign.using(Campaign(temporary)),  # failure handling also replays the journal
             patch.dict(core.LANES, fixture=lane),
             patch.object(lane, 'get', take),
             patch.object(core.JOBS_SERVICE, 'execute_job', execute),

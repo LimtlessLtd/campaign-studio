@@ -15,8 +15,9 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DM = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))  # the application's modules
+import campaign
 
 GENERATORS = {
     'city': dict(module='gen_city', theme='city', title='City district', darkness=0.15),
@@ -91,7 +92,7 @@ def main():
     seed = a.seed if a.seed is not None else int.from_bytes(os.urandom(3), 'big')
     name = a.name or f'{spec["title"]} {seed}'
     slug = slugify(a.slug or name)
-    folder = os.path.join(DM, 'maps', slug)
+    folder = campaign.active().map_folder(slug)
     if os.path.exists(folder):
         sys.exit(
             f'DM/maps/{slug} already exists; choose a different name to preserve its plan and DM key'

@@ -31,7 +31,8 @@ activate the environment and rerun the pip install command. Keep only one server
 Open http://127.0.0.1:8766. On first run, name the Studio project and select an existing Foundry world, or
 create a world in Foundry Setup and then select it. The world picker detects common local User Data folders;
 you can also enter a custom path. The server binds to localhost.
-Set `DM_PORT` before launch to use a different port.
+Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder to keep the campaign's
+`data`, `maps`, `uploads` and `backups` there instead of in the app's `DM` folder.
 
 ## Maps and iteration
 

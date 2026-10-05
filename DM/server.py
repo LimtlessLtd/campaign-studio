@@ -5,14 +5,11 @@ import threading
 import time
 from http.server import ThreadingHTTPServer
 
+import campaign
 import schema
 from campaign_core import (
-    BACKUPS,
-    DATA,
-    JOBS,
     JOBS_SERVICE,
     LANES,
-    MAPS,
     PORT,
     recover_commits,
     worker,
@@ -23,16 +20,17 @@ from http_routes import Handler
 def main():
     started = time.time()
     server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
-    os.makedirs(DATA, exist_ok=True)
-    os.makedirs(JOBS, exist_ok=True)
+    here = campaign.active()
+    os.makedirs(here.data, exist_ok=True)
+    os.makedirs(here.jobs, exist_ok=True)
     try:
         # Refuse newer data first; finish interrupted changes before migrating their documents.
-        schema.check(DATA, MAPS)
+        schema.check(here.data, here.maps)
         report = recover_commits()
-        migration = schema.migrate(DATA, MAPS, BACKUPS)
+        migration = schema.migrate(here.data, here.maps, here.backups)
     except (schema.SchemaError, OSError) as error:
         server.server_close()
-        raise SystemExit(f'Campaign Studio could not open the campaign in {DATA}: {error}')
+        raise SystemExit(f'Campaign Studio could not open the campaign in {here.data}: {error}')
     for entry in report['completed']:
         print('Completed interrupted change: ' + entry['label'], flush=True)
     for entry in report['conflicts']:

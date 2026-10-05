@@ -160,3 +160,4 @@ try:
         input('Press Enter to close the disposable preview.\n')
 finally:
     fixture.tearDown()
+    fixture.doCleanups()

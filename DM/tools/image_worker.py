@@ -8,8 +8,8 @@ import sys
 import urllib.parse
 import urllib.request
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # app modules
+import campaign
 import config
 import campaign_core as core
 from PIL import Image
@@ -58,11 +58,11 @@ def generate(rid):
     ext = {'PNG': '.png', 'JPEG': '.jpg', 'WEBP': '.webp'}.get(image.format)
     if not ext:
         raise ValueError('The provider returned an unsupported image format.')
-    os.makedirs(core.UPLOADS, exist_ok=True)
+    os.makedirs(campaign.active().uploads, exist_ok=True)
     name = 'generated-' + os.urandom(8).hex() + ext
-    with open(os.path.join(core.UPLOADS, name), 'xb') as f:
+    with open(os.path.join(campaign.active().uploads, name), 'xb') as f:
         f.write(data)
-    path = 'DM/uploads/' + name
+    path = campaign.active().relative(os.path.join(campaign.active().uploads, name))
     # The parent server applies this result under its document lock.
     print(json.dumps({'path': path}), flush=True)
     return path
