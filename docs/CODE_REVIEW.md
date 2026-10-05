@@ -86,8 +86,10 @@ defect by itself. The problems below are the ones object-oriented principles exi
 5. **The generic document API bypassed domain rules. Resolved.** `PUT /api/doc/<name>` refuses
    application-owned documents (`settings`, `workflows/*`, `jobs/*`) with 403; `campaign_core.APP_OWNED_DOC`
    lists them, so a new runtime document is protected by adding it there.
-6. **The SSRF guard is time-of-check.** `_validate_url` resolves DNS, then `urllib` resolves again when it
-   connects, so DNS rebinding could reach a private address. Pin the validated address for the connection.
+6. **The SSRF guard was time-of-check. Resolved.** `foundry_catalog` resolves the host once inside the
+   connection, rejects any non-public answer and connects to that address (the hostname still drives SNI and
+   certificate checks). Redirects open new connections, so each hop is checked and pinned. Behind an HTTP proxy
+   the proxy's own address must be public, or the download fails closed.
 7. Minor: `_media_path` repeats the manifest path rules, and `forge.forge` rereads `key.json` three times.
 
 ## Prioritized development work
