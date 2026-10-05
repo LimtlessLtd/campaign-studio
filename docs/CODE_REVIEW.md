@@ -120,9 +120,9 @@ The work these findings call for, with the owner's feature requests, is tracked 
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
-- Foundry backup, isolated restore-copy verification and v12 clone preparation are available for local User
-  Data. Opening the restored world in v12, changing modules in the clone, migration, cutover and live rollback
-  remain manual.
+- Foundry backup, isolated restore-copy verification, v12 clone preparation, module review, migrated-clone
+  audit and cutover readiness review are available for local User Data. Opening the clone in Foundry, its
+  migration, the actual User Data switch and live rollback remain manual.
 - The v12 package report reads declared directory and manifest metadata. Package URLs may be unavailable;
   unknown results block automatic retention. No live Foundry migration or package behavior was verified.
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Foundry upgrade cutover review:** after a passing v12 module review, launch only the isolated clone in
+  the selected newer Foundry build to let Foundry migrate it. The migrated-clone audit checks the installed
+  releases and GM inspection. A final review rechecks that audit, the clone, the verified backup and the
+  unchanged original User Data, then saves a manual cutover receipt. Studio does not move User Data or run
+  Foundry; keep the v12 installation and backup for rollback.
 - **Phone and network access** (opt-in): start the server with `DM_BIND` and an `DM_ACCESS_CODE` (8+ characters)
   and other devices sign in once with the code (session cookie `HttpOnly`, `SameSite=Strict`; wrong codes lock
   an address for a minute). Without a code the site still answers only on localhost, and it refuses to listen

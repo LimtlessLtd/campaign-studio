@@ -33,7 +33,7 @@ flowchart LR
 | `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |
 | `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts        |
-| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, compatibility report and isolated clone evidence      |
+| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review    |
 | `DM/foundry_compat.py`                | Shared build, version and package relationship rules                               |
 | `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |

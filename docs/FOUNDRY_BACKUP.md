@@ -171,3 +171,18 @@ An audit marked **reviewed** records metadata agreement and the GM's checks; it 
 document or module feature and does not perform live cutover. Keep the verified v12 backup, restore test
 receipt and v12 installation for rollback. Foundry's [v14 Game API](https://foundryvtt.com/api/v14/classes/foundry.Game.html)
 documents the module collection and running version used by the GM macro.
+
+## Review cutover readiness
+
+After the audit passes, close both Foundry installations. In **Review cutover readiness**, select the saved
+audit and confirm Foundry is closed. Studio repeats the migration audit against the current isolated clone,
+verifies the original User Data still matches the offline backup byte for byte, and checks the backup again.
+It saves a cutover review beside the backup only when all checks pass. A changed original means the clone may
+be missing later edits: take a new backup and repeat the upgrade. A changed clone needs a fresh GM audit.
+
+The cutover review shows the exact isolated User Data path, target build and world ID. Configure the target
+Foundry installation to use that path, then open the world. Studio does not change the target installation or
+move any folders. Keep the original v12 User Data, backup and v12 installer for rollback; do not open the
+migrated clone in v12. Run the cutover review again immediately before switching if time has passed or files
+may have changed. Foundry documents the [`--dataPath` and `--world` launch flags](https://foundryvtt.com/article/configuration/)
+and [automatic migration on first launch in a newer build](https://foundryvtt.com/article/installation/).
