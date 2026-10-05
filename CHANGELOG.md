@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Browser smoke tests (Playwright and axe-core) now cover the first-run wizard, pin editing, proposal
+  review and narrow navigation, and run in CI. They found and fixed low-contrast sidebar captions and
+  workflow steps, and unlabelled prep notes and new-request controls.
+- Job cards stop polling through the page's own signal instead of the router's controller, and an unused
+  battle-map form left over from the old studio is removed.
 - Split the browser into document state/autosave, reusable controls and page controllers without a build
   step. Navigation now aborts stale page reads and keeps each page's view private until it is current.
 - The generic document save (`PUT /api/doc/<name>`) now refuses `settings`, `workflows/*` and `jobs/*`

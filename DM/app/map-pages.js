@@ -135,7 +135,13 @@ async function studioMaps(arg, context) {
         maps.length + ' maps' + (pending.length ? ' · ' + pending.length + ' in progress' : ''),
       ),
     ),
-    active.length ? h('div', { class: 'active-jobs' }, active.map(jobBox)) : null,
+    active.length
+      ? h(
+          'div',
+          { class: 'active-jobs' },
+          active.map((job) => jobBox(job, context.signal)),
+        )
+      : null,
     cards,
   );
   draw();
@@ -602,7 +608,7 @@ async function mapStudio(slugArg, context) {
               : 'Building the first layout',
           ),
           h('p', { class: 'muted' }, brief.prompt),
-          jobs.map(jobBox),
+          jobs.map((job) => jobBox(job, context.signal)),
           workspace.has_plan && jobs.some((j) => j.status === 'failed')
             ? h(
                 'button',
@@ -1593,7 +1599,7 @@ async function mapStudio(slugArg, context) {
     ),
     S.jobs
       .filter((j) => j.slug === slugArg && ['running', 'queued'].includes(j.status))
-      .map(jobBox),
+      .map((job) => jobBox(job, context.signal)),
     h('div', { class: 'studio-map-layout' }, pic, inspector),
   );
 }

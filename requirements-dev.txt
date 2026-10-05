@@ -1,2 +1,3 @@
 -r DM/requirements.txt
 ruff==0.16.10
+playwright==1.63.0

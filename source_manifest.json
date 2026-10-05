@@ -81,6 +81,7 @@
   "source_manifest.json",
   "start.bat",
   "start.sh",
+  "tests/test_browser.py",
   "tests/test_campaign.py",
   "tests/test_commits.py",
   "tests/test_foundry_backup.py",
