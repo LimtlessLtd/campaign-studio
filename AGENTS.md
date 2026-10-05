@@ -8,17 +8,20 @@ user. Follow the same development workflow whether you are a human contributor o
 - `README.md`: supported features, setup and current limitations.
 - `docs/ARCHITECTURE.md`: module boundaries, storage and integration contracts.
 - `docs/DEVELOPMENT.md`: implementation, review and verification workflow.
-- `docs/CODE_REVIEW.md`: known gaps and the order of future structural work.
+- `docs/CODE_REVIEW.md`: design findings and known gaps.
+- `docs/BACKLOG.md`: prioritized work items, including the owner's feature requests.
 - `DM/AI_WORKFLOW.md`: the separate workflow for models generating campaign content.
 
 ## Before changing code
 
-0. Run the review relay first (`docs/DEVELOPMENT.md` → Review relay): review every agent PR merged since
-   the last `Reviewed-PR:` trailer on `main`, and fix what it broke before starting your own task.
+0. Run the review relay first (`docs/DEVELOPMENT.md` → Review relay): audit every merged PR that no
+   `Reviewed-PR:` trailer names yet, for bugs and for design, and fix what it confirms before starting your
+   own task. Claim work and report progress as described under Coordinating agents.
 1. Inspect `git status` and relevant instructions. Preserve other contributors' work.
 2. Trace the requested interaction from route to API, persistence and Foundry export. State assumptions.
 3. Keep the change focused. For substantial changes, record a short plan and acceptance criteria in the
-   task or PR. Use `codex/` for a new coding-agent branch unless the user specifies another name.
+   task or PR. Prefix a new coding-agent branch with the agent's name, such as `codex/` or `claude/`,
+   unless the task names the branch.
 4. Use synthetic fixtures and temporary directories. Do not read a user's private campaign to construct
    public examples, screenshots, tests or commits. User authorization can permit working on their campaign;
    it does not make that material suitable for this repository.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Coding agents now audit every merged PR for design as well as bugs and fix what they confirm, track work
+  in `docs/BACKLOG.md`, and coordinate claims and owner feedback in Slack (`docs/DEVELOPMENT.md`).
 - Fixes from reviewing the journal, migration and autosave work:
   - Typing in a checklist item or loot row while an AI request added items to the same list could be
     lost after showing "Saved". List merges now keep the items being edited and count repeated values, so

@@ -91,18 +91,7 @@ defect by itself. The problems below are the ones object-oriented principles exi
 
 ## Prioritized development work
 
-| Priority | Work                                                                | Acceptance criteria                                                                                                                       |
-| -------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | Introduce a `Campaign` context object and pass it to services       | No module computes campaign paths from `__file__`; the test fixture builds one `Campaign` instead of patching globals                     |
-| 2        | Route table and typed HTTP errors                                   | No handler over ~60 lines; 400/404/409 come from exception types; the existing HTTP tests are unchanged                                   |
-| 2        | Split `foundry_upgrade` into catalogue, solver and workflow modules | Same public functions and fixtures pass; no module imports another's private names                                                        |
-| 2        | Split frontend state/autosave, shared controls and page controllers | Route changes cancel stale work; preserve autosave/conflict behavior and focus                                                            |
-| 2        | Add browser smoke tests and accessibility checks                    | Wizard, pin editor, proposal review and mobile navigation verified in CI                                                                  |
-| 2        | Build supported Foundry version/system adapters                     | Fixture contracts plus explicit live GM checks; preserve custom documents on reimport                                                     |
-| 2        | Complete the local Foundry upgrade wizard                           | Backup, inventory, report and isolated v12 clone preparation are implemented; confirm clone module state, migrate it and validate cutover |
-| 2        | Extend snapshot browsing into a live Foundry-side connection        | Stable provenance, read permissions and conflict policy; no raw DB editing                                                                |
-| 3        | Provider adapters, job cancellation, progress and resumable queue   | Fake-provider failure/cancel/retry tests; settings avoid secret storage                                                                   |
-| 3        | Installer and performance budgets for very large maps               | Clean-machine install test and measured time/memory at documented map sizes                                                               |
+The work these findings call for, with the owner's feature requests, is tracked in `docs/BACKLOG.md`.
 
 ## Remaining limitations
 
