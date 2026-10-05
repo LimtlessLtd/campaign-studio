@@ -160,14 +160,22 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+def posix_parts(value, message):
+    """Split a relative POSIX path on every platform: no drive, backslash, empty or dot parts."""
+    if (
+        not isinstance(value, str)
+        or not value
+        or '\\' in value
+        or ':' in value
+        or any(part in ('', '.', '..') for part in value.split('/'))
+    ):
+        raise ValueError(message)
+    return PurePosixPath(value).parts
+
+
 def manifest_path(value):
-    """Validate a manifest's relative POSIX path on every platform: no drive, backslash or dots."""
-    if not isinstance(value, str) or not value or '\\' in value or ':' in value:
-        raise ValueError('Invalid backup manifest path.')
-    path = PurePosixPath(value)
-    if path.is_absolute() or any(part in ('', '.', '..') for part in value.split('/')):
-        raise ValueError('Invalid backup manifest path.')
-    return Path(*path.parts)
+    """Validate a manifest's relative POSIX path and return it as a native path."""
+    return Path(*posix_parts(value, 'Invalid backup manifest path.'))
 
 
 def copy_and_hash(source, target):

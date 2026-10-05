@@ -604,12 +604,9 @@ def forge(plan_path, foundry_copy=True, jobs=None):
         for r in roofs
     ]
     key = os.path.join(folder, 'key.json')
-    if os.path.exists(
-        key
-    ):  # the DM key: numbered areas, loot and events, for the journal and map pins
-        v12['flags']['world']['wotgForge']['key'] = key_for_foundry(
-            slug, json.loads(Path(key).read_text(encoding='utf-8')), foundry_copy
-        )
+    key_data = json.loads(Path(key).read_text(encoding='utf-8')) if os.path.exists(key) else None
+    if key_data:  # the DM key: numbered areas, loot and events, for the journal and map pins
+        v12['flags']['world']['wotgForge']['key'] = key_for_foundry(slug, key_data, foundry_copy)
     storage.atomic_json(out('.foundry.json'), v12)
     storage.atomic_json(out('.da.json'), da)
     copied = False
@@ -655,16 +652,9 @@ def forge(plan_path, foundry_copy=True, jobs=None):
             plan=rel(plan_path),
             in_foundry=copied,
             roofs_preview=rel(out('.roofs.jpg')) if roofs else '',
-            key=rel(key) if os.path.exists(key) else '',
-            session=(
-                json.loads(Path(key).read_text(encoding='utf-8')).get('session', '')
-                if os.path.exists(key)
-                else ''
-            ),
-            stocked=bool(
-                os.path.exists(key)
-                and json.loads(Path(key).read_text(encoding='utf-8')).get('stocked')
-            ),
+            key=rel(key) if key_data is not None else '',
+            session=(key_data or {}).get('session', ''),
+            stocked=bool((key_data or {}).get('stocked')),
             updated=datetime.datetime.now().isoformat(timespec='seconds'),
             **counts,
         )

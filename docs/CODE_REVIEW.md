@@ -91,7 +91,6 @@ defect by itself. The problems below are the ones object-oriented principles exi
    certificate checks). Redirects open new connections, so each hop is checked and pinned. The downloader
    bypasses environment proxies because a proxy could resolve the target again; networks requiring a proxy
    cannot fetch package metadata through this path.
-7. Minor: `_media_path` repeats the manifest path rules, and `forge.forge` rereads `key.json` three times.
 
 ## Prioritized development work
 
