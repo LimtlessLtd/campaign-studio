@@ -3,7 +3,8 @@
 Campaign Studio exports a v12-shaped scene JSON under `Data/wotg-maps`. The standalone Script macro
 selects a Foundry core adapter at runtime and applies the export through Foundry's client document API.
 The application never edits a Foundry world database. Reimport updates tagged Studio documents by stable
-IDs and keeps GM-created tokens, notes, tiles, walls, lights, journal pages, actors and items. An older scene
+IDs and keeps GM-created tokens, notes, tiles, walls, lights, journal pages, actors and items. Pins link to
+generated pages by Studio ownership tag, even when a GM page has the same title. An older scene
 without `managed` ownership tags still replaces all walls and lights after the GM confirms that warning.
 
 | Foundry core           | Scene and roof adapter                                          | D&D 5e system                   | Other systems   | Evidence                          |

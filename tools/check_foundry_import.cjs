@@ -230,6 +230,12 @@ async function check(generation, systemId) {
     flags: {},
   };
   game.journal[0].pages.push(customPage);
+  game.journal[0].pages.push({
+    id: 'custom-renamed',
+    name: '1. Landing revised',
+    text: { content: 'Another GM-only page' },
+    flags: {},
+  });
   game.actors.push({ id: 'custom', name: 'GM actor', flags: {} });
   game.items.push({ id: 'custom', name: 'GM item', flags: {} });
   data.flags.world.wotgForge.key.areas.push({ n: 2, name: 'Gallery', kind: 'shop', at: [1, 1] });
@@ -254,6 +260,12 @@ async function check(generation, systemId) {
     'GM-only addition',
   );
   assert.ok(game.journal[0].pages.find((page) => tag(page)?.page === 'area-2'));
+  const areaOnePage = game.journal[0].pages.find((page) => tag(page)?.page === 'area-1');
+  assert.equal(scene.notes.find((note) => tag(note)?.area === 1).pageId, areaOnePage.id);
+  assert.equal(
+    game.journal[0].pages.find((page) => page.id === 'custom-renamed').text.content,
+    'Another GM-only page',
+  );
   assert.equal(game.actors.find((actor) => actor.id === 'custom').name, 'GM actor');
   assert.equal(game.items.find((item) => item.id === 'custom').name, 'GM item');
   if (systemId === 'dnd5e') {

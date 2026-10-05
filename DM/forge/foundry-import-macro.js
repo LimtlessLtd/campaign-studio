@@ -313,12 +313,16 @@ if (choice.journal && key?.areas?.length) {
   };
   const size = scene.grid.size;
   const worthAPin = (a) => a.kind !== 'house' || a.text || (a.events ?? []).length;
-  const byName = new Map(journal.pages.map((p) => [p.name, p.id]));
+  const byArea = new Map(
+    journal.pages
+      .filter((p) => p.flags?.world?.[TAG]?.page?.startsWith('area-'))
+      .map((p) => [p.flags.world[TAG].page, p.id]),
+  );
   const notes = key.areas
     .filter((a) => worthAPin(a) && a.at?.length === 2)
     .map((a) => ({
       entryId: journal.id,
-      pageId: byName.get(`${a.n}. ${a.name}`),
+      pageId: byArea.get(`area-${a.n}`),
       x: Math.round((a.at[1] + 0.5) * size),
       y: Math.round((a.at[0] + 0.5) * size),
       text: `${a.n}. ${a.name}`,

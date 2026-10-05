@@ -4,7 +4,8 @@
 
 - The GM import macro now selects explicit Foundry v11 or v12/v13 scene and roof adapters, and a D&D 5e
   sheet or journal-only system adapter. Fixture contracts exercise import and reimport for each combination;
-  untagged GM journal pages are no longer overwritten by a same-named generated page. A live GM checklist
+  untagged GM journal pages are no longer overwritten by a same-named generated page, and pins resolve their
+  generated pages by ownership tag. A live GM checklist
   and the v14 limitation are documented.
 - Package metadata downloads now connect to the public address the safety check approved, so DNS rebinding
   between the check and the connection cannot reach a private address. Each redirect is pinned the same way;
