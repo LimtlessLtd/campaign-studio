@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Split Foundry upgrade metadata collection, compatibility solving and inventory/clone workflows into
+  focused modules. The existing upgrade API and saved evidence formats are unchanged.
 - HTTP requests now dispatch through a route table with small handlers. Invalid, missing and conflicting
   requests have distinct typed 400/404/409 responses; stale document saves still include the latest
   revision and document so the browser can merge edits. Existing workflow HTTP tests remain unchanged.
