@@ -333,7 +333,7 @@ class SchemaTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.migrate()
         self.assertEqual(schema.version(self.data, self.maps), 0)
-        first = next(Path(self.backups).iterdir())
+        first = next(p for p in Path(self.backups).iterdir() if p.is_dir())
         self.assertEqual(
             (first / 'data/threads.json').read_bytes(), self.original['data/threads.json']
         )
@@ -344,6 +344,37 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(schema.version(self.data, self.maps), schema.CURRENT)
         self.assertEqual(self.read('data/codex.json')['entries'][1]['tags'], [])
         self.assertEqual(self.read('maps/harbour/key.json')['areas'][0]['rooms'], [])
+
+    def test_a_retried_migration_backup_names_the_first_attempt_as_partly_migrated(self):
+        real = schema.storage.atomic_json
+
+        def interrupt_after_documents_change(path, value, durable=False):
+            if str(path).endswith('.json') and 'backups' not in Path(path).parts:
+                real(path, value, durable)
+                raise OSError('Synthetic interruption')
+            real(path, value, durable)
+
+        def backup_manifests():
+            folders = sorted(Path(self.backups).iterdir(), key=lambda p: p.stat().st_mtime_ns)
+            return [
+                json.loads((f / 'backup.json').read_text(encoding='utf-8'))
+                for f in folders
+                if f.is_dir()
+            ], [f.name for f in folders if f.is_dir()]
+
+        for _ in range(2):
+            with patch.object(schema.storage, 'atomic_json', interrupt_after_documents_change):
+                with self.assertRaises(OSError):
+                    self.migrate()
+        manifests, names = backup_manifests()
+        self.assertNotIn('partly_migrated', manifests[0])
+        self.assertTrue(manifests[1]['partly_migrated'])
+        self.assertEqual(manifests[1]['first_attempt_backup'], names[0])
+
+        self.migrate()
+        manifests, names = backup_manifests()
+        self.assertEqual(manifests[2]['first_attempt_backup'], names[0])  # not the second attempt
+        self.assertFalse((Path(self.backups) / schema.PENDING).exists())
 
     def test_a_document_that_cannot_be_backed_up_blocks_migration_cleanly(self):
         linked = self.dm / 'data/prep/linked.json'
