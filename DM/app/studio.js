@@ -206,6 +206,12 @@ async function studioDashboard(_arg, context) {
   );
 }
 
+function importSummary(report) {
+  const parts = [`${report.added} added`, `${report.updated} refreshed`];
+  if (report.kept) parts.push(`${report.kept} kept because you edited them in Studio`);
+  return `Imported the world's NPCs, items and scenes into the codex: ${parts.join(', ')}. ${report.media} media files are available in Media.`;
+}
+
 async function studioLibrary(_arg, context) {
   let kind = S.libraryKind || 'scenes';
   let query = '';
@@ -362,7 +368,7 @@ async function studioLibrary(_arg, context) {
           'p',
           { class: 'muted' },
           result.readable
-            ? "Campaign Studio reads scenes, journals, actors and items straight from this world's database files, and never changes them. It checks for changes each time you open this page."
+            ? "Campaign Studio reads scenes, journals, actors and items straight from this world's database files, and never changes them. Import adds its actors, items and scenes to the codex and keeps anything you edit in Studio."
             : 'This world has no readable document databases, so use the export macro below instead.',
         ),
       ),
@@ -377,6 +383,20 @@ async function studioLibrary(_arg, context) {
             }),
         },
         'Read again now',
+      ),
+      h(
+        'button',
+        {
+          class: 'primary',
+          disabled: !result.readable,
+          onclick: () =>
+            attempt(async () => {
+              const report = await post('/api/foundry/world/import');
+              toast(importSummary(report));
+              await refresh();
+            }),
+        },
+        'Import world into Studio',
       ),
       h(
         'details',

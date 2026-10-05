@@ -177,6 +177,28 @@ class FoundryLibraryTests(unittest.TestCase):
             },
         )
 
+    def test_import_into_codex_keeps_studio_edits(self):
+        world = foundry_library.selected_world()
+        snapshot = foundry_library.normalize_snapshot(self.snapshot(), world)
+        codex = {'entries': [{'id': 'mine', 'type': 'npc', 'name': 'Mine'}]}
+        report = foundry_library.import_into_codex(snapshot, codex)
+        self.assertEqual(report, {'added': 3, 'updated': 0, 'kept': 0, 'unchanged': 0})
+        self.assertEqual(
+            {entry['name']: entry['type'] for entry in codex['entries'][1:]},
+            {'Mira': 'npc', 'Key': 'item', 'Keep': 'place'},
+        )
+        self.assertEqual(foundry_library.import_into_codex(snapshot, codex)['unchanged'], 3)
+        mira = next(entry for entry in codex['entries'] if entry['name'] == 'Mira')
+        key = next(entry for entry in codex['entries'] if entry['name'] == 'Key')
+        mira['notes'] = 'Rewritten in Studio'
+        for document in snapshot['documents']['actors'] + snapshot['documents']['items']:
+            document['summary'] = 'Changed in Foundry'
+        report = foundry_library.import_into_codex(snapshot, codex)
+        self.assertEqual((report['updated'], report['kept'], report['unchanged']), (1, 1, 1))
+        self.assertEqual(mira['notes'], 'Rewritten in Studio')
+        self.assertEqual(key['notes'], 'Changed in Foundry')
+        self.assertEqual(len({entry['id'] for entry in codex['entries']}), 4)
+
     def test_reads_documents_from_the_world_folder(self):
         self.world_folder()
         world = foundry_library.selected_world()

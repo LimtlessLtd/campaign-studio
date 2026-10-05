@@ -32,6 +32,16 @@ has not been verified, so if a read fails then, close Foundry or use the macro b
 A world with more than 5,000 documents of one kind shows the first 5,000 by name and says how many were
 left out. If a database is damaged or unreadable, the page says so and offers the macro.
 
+## Importing the world into Studio
+
+**Import world into Studio** (World Library; first-run setup runs it after connecting a world) reads the
+world folder, refreshes the snapshot and adds each actor (player characters as `pc`, others as `npc`), item
+and scene (as `place`) to the codex. Descriptions go in the entry's `notes`, never `public`, because Foundry
+text can include GM secrets. Each entry records its Foundry UUID and the values last imported. A later
+import refreshes an entry only while it still holds those values, so anything edited in Studio is kept and
+counted as kept. Journals stay browsable in the World Library. Media is not copied: the result reports how many
+files can be browsed. Foundry's files are only read. If the folder cannot be read, the page offers the macro.
+
 ## Fallback: the export macro
 
 If the folder cannot be read, use the macro instead:

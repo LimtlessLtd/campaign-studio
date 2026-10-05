@@ -100,6 +100,7 @@ ROUTES = {
         ),
         (lambda path: path == '/api/foundry/library/import', '_post_import_library'),
         (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
+        (lambda path: path == '/api/foundry/world/import', '_post_import_world'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
         (lambda path: path == '/api/foundry/backup/verify', '_post_backup_verify'),
         (lambda path: path == '/api/foundry/backup/rehearse', '_post_backup_rehearse'),
@@ -502,6 +503,20 @@ class Handler(SimpleHTTPRequestHandler):
         with LOCK:
             write_doc('foundry-library', snapshot)
         return self.send_json(self._library_counts(snapshot))
+
+    def _post_import_world(self, path, query, p):
+        """One action: read the world folder, refresh the snapshot and bring its documents into the codex."""
+        world = foundry_library.selected_world()
+        if not world:
+            raise Invalid('Connect a Foundry world before importing it.')
+        snapshot = foundry_library.read_world(world)
+        with LOCK:
+            codex = read_json(doc_path('codex'), {'entries': []})
+            report = foundry_library.import_into_codex(snapshot, codex)
+            commit_docs('Import Foundry world', [('foundry-library', snapshot), ('codex', codex)])
+        report.update(self._library_counts(snapshot))
+        report['media'] = foundry_library.assets(world, '', 0, 1)['total']
+        return self.send_json(report)
 
     @staticmethod
     def _library_counts(snapshot):

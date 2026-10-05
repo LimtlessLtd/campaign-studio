@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Import world into Studio** (World Library, and the end of first-run setup) is one action: it reads the
+  world folder and adds its actors, items and scenes to the codex with their Foundry UUIDs, reports how many
+  were added, refreshed or kept, and counts the media available. Later imports refresh only entries you have
+  not edited in Studio. Foundry's files are only read.
 - The World Library's LevelDB reader now follows `CURRENT` and `MANIFEST` to read only live tables and
   logs. A retired file left on disk during compaction can no longer make a deleted document reappear;
   manifest changes also trigger a fresh read when the page is reopened.
