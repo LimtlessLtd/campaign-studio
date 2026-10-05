@@ -649,7 +649,7 @@ async function prepPage(name, context) {
         'div',
         {},
         h('h2', {}, 'Loose notes'),
-        field(docName, p, 'notes', { type: 'textarea', rows: 10 }),
+        field(docName, p, 'notes', { type: 'textarea', rows: 10, ariaLabel: 'Loose notes' }),
       ),
     ),
   );
@@ -1202,6 +1202,7 @@ async function inboxPage(_arg, context) {
     'select',
     {
       style: 'width:auto',
+      'aria-label': 'New request',
       onchange: async (e) => {
         if (!e.target.value) return;
         await addRequest({ kind: e.target.value });

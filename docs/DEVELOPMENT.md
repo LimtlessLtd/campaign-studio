@@ -7,6 +7,7 @@ python -m venv .venv
 # Activate it: Windows .venv\Scripts\activate; macOS/Linux source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 npm ci
+python -m playwright install chromium   # browser smoke tests; add --with-deps on a fresh Linux machine
 python DM/server.py
 ```
 
@@ -53,6 +54,12 @@ files plus non-ignored untracked files in a Git checkout); extracted archives ar
 manifest. Private runtime directories may exist locally but are excluded from source.
 
 ## UI verification
+
+`tests/test_browser.py` drives Chromium through the first-run wizard, pin editing across navigation,
+proposal review and apply, and every navigation page at 430px wide. It runs axe-core (WCAG 2 A/AA) on
+each and fails on serious or critical findings. It skips locally when Playwright, Chromium or
+`node_modules/axe-core` is missing; CI sets `CAMPAIGN_STUDIO_BROWSER_TESTS=required` so it cannot skip
+there. Add a flow to it when you change one of these interactions. It does not replace looking at the page.
 
 Start with an empty campaign or run `python DM/tools/preview_fixture.py` for a disposable synthetic review
 fixture on the port printed by the script. Press Enter to close and remove the fixture.
@@ -106,7 +113,8 @@ git diff <merge>^1 <merge>   # one merged PR's changes
    extend. Leave correct, clear and extensible code alone; do not restyle it. A fix too large to finish
    alongside becomes this run's task: add it to the top of `docs/BACKLOG.md` and claim it instead of a new
    item.
-4. Record the result as a trailer in that commit (or an empty commit if nothing changed), and repeat it in
+4. Record the result as a trailer in that commit (or an empty commit if nothing changed), in the final
+   paragraph with `Co-Authored-By` (git ignores trailer lines in any earlier paragraph), and repeat it in
    the PR description's **Previous PR review** section, one line per PR:
 
    ```text

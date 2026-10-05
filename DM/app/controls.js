@@ -84,6 +84,7 @@ function field(docName, obj, key, opts = {}) {
       value: obj[key] || '',
       oninput: (e) => commit(e.target.value),
     });
+  if (!label && opts.ariaLabel) el.setAttribute('aria-label', opts.ariaLabel);
   if (label) {
     el.id = uid('field');
     return h('div', { class: opts.class }, h('label', { for: el.id }, label), el);
