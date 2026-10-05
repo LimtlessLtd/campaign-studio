@@ -17,6 +17,7 @@ import foundry_library
 import foundry_upgrade
 import maps_io
 import packaging_source
+import remote_access
 import request_workflow
 import revisions
 import shapes
@@ -122,6 +123,9 @@ ROUTES = {
 }
 
 
+GATE = remote_access.AccessGate(os.environ.get('DM_ACCESS_CODE', ''))
+
+
 class RouteError(Exception):
     status = 400
 
@@ -170,11 +174,45 @@ class Handler(SimpleHTTPRequestHandler):
 
     def local_host(self):
         # a web page that re-points its own domain at 127.0.0.1 still sends its own Host
-        host = (self.headers.get('Host') or '').rsplit(':', 1)[0]
-        if host in ('127.0.0.1', 'localhost'):
+        if self.admitted():
             return True
-        self.fail(403, 'the DM site only answers on 127.0.0.1')
+        if GATE.enabled:
+            self.send_login(401, 'Enter the access code to continue.')
+        else:
+            self.fail(403, 'the DM site only answers on 127.0.0.1')
         return False
+
+    def admitted(self):
+        peer = self.client_address[0]
+        return GATE.local_request(peer, self.headers.get('Host')) or GATE.has_session(
+            self.headers.get('Cookie')
+        )
+
+    def send_login(self, status, message=''):
+        if self.path.startswith('/api/'):
+            return self.fail(status, message)
+        body = remote_access.login_page(message)
+        self.send_response(status)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _post_login(self):
+        peer = self.client_address[0]
+        form = urllib.parse.parse_qs(self.body(4096).decode('utf-8', 'replace'))
+        wait = GATE.locked_for(peer)
+        if wait:
+            return self.send_login(429, f'Too many attempts. Try again in {wait} seconds.')
+        if not GATE.try_code(peer, form.get('code', [''])[0]):
+            return self.send_login(401, 'That code is not right.')
+        secure = self.headers.get('X-Forwarded-Proto') == 'https'
+        self.send_response(303)
+        self.send_header('Location', '/')
+        self.send_header('Set-Cookie', GATE.session_cookie(secure))
+        self.send_header('Content-Length', '0')
+        self.end_headers()
 
     def body(self, limit=20 * 1024 * 1024):
         length = int(self.headers.get('Content-Length', 0))
@@ -198,6 +236,8 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     def _dispatch(self, method):
+        if method == 'POST' and GATE.enabled and self.path == '/login':
+            return self._post_login()
         if method == 'GET':
             if not self.local_host():
                 return

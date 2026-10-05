@@ -174,7 +174,7 @@ is rendering that map.
 - `GET /api/state` lists interrupted changes awaiting review; POST `/api/commits/<id>/dismiss` hides one
   and keeps its saved values on disk.
 
-Writes require `X-DM-Site: 1`. Only localhost Host values are accepted. File routes enforce canonical path
+Writes require `X-DM-Site: 1`. Only localhost Host values are accepted from this computer; `remote_access.AccessGate` (opt-in through `DM_BIND` and `DM_ACCESS_CODE`) admits any other request only with its session cookie, issued by `POST /login` (five wrong codes lock an address for a minute). File routes enforce canonical path
 containment. The legacy file roots support older installations; normal image selection uses studio uploads.
 Read-only `Website/content` references are disabled by default; enable `legacy_references` in local settings
 for an existing compatible site. Local reference notes can be added as `DM/data/notes.txt`.

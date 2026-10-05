@@ -31,6 +31,12 @@ activate the environment and rerun the pip install command. Keep only one server
 Open http://127.0.0.1:8766. On first run, name the Studio project and select an existing Foundry world, or
 create a world in Foundry Setup and then select it. The world picker detects common local User Data folders;
 you can also enter a custom path. The server binds to localhost.
+
+To use Studio from a phone, set `DM_BIND` to the computer's address (or `0.0.0.0`) and `DM_ACCESS_CODE` to a
+code of at least 8 characters before starting it, then open `http://<that address>:8766` on the phone and enter
+the code once. The server refuses to listen beyond localhost without a code. The connection is plain HTTP,
+so use it on a network you trust or through a private network such as Tailscale, or put an HTTPS proxy in front
+(it sets the cookie `Secure` when it sends `X-Forwarded-Proto: https`).
 Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder to keep the campaign's
 `data`, `maps`, `uploads` and `backups` there instead of in the app's `DM` folder.
 
