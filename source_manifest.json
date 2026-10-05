@@ -33,7 +33,6 @@
   "DM/foundry_library.py",
   "DM/foundry_solver.py",
   "DM/foundry_upgrade.py",
-  "DM/foundry_upgrade_workflow.py",
   "DM/forge/README.md",
   "DM/forge/forge.py",
   "DM/forge/foundry-import-macro.js",

@@ -76,7 +76,7 @@ defect by itself. The problems below are the ones object-oriented principles exi
    writer or a stored shape diverges.
 3. **God functions (single responsibility). Partly resolved.** HTTP methods now dispatch from a route
    table to handlers under 60 lines. Foundry upgrade catalogue collection, compatibility solving and
-   inventory/clone workflows now live in separate modules behind the existing API; its long clone workflows
+   inventory/clone workflows now live in separate modules; its long clone workflows
    still need care when extended. `render2d.prop` is 424 lines. `studio.js` has `mapStudio` at 1,064 lines and
    `foundryUpgradeCard` at 524. The remaining work calls for a prop-painter registry and page controllers
    for the map studio.

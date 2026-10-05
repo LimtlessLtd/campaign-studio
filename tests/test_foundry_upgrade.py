@@ -9,8 +9,11 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 
-import foundry_upgrade as upgrade
 import foundry_backup
+import foundry_catalog
+import foundry_compat
+import foundry_solver
+import foundry_upgrade as upgrade
 
 
 def release(package_id, version, minimum, maximum, verified, requires=(), systems=()):
@@ -59,7 +62,7 @@ def inventory():
 
 def catalog():
     return {
-        'source': upgrade.RELEASES_URL,
+        'source': foundry_compat.RELEASES_URL,
         'builds': ['14.368', '13.351', '12.343', '12.331'],
         'packages': {
             'dnd5e': {
@@ -100,7 +103,7 @@ def catalog():
 
 class UpgradeTests(unittest.TestCase):
     def test_choose_newest_full_match_and_keep_disabled_modules_off(self):
-        result = upgrade.analyze(inventory(), catalog())
+        result = foundry_solver.analyze(inventory(), catalog())
         self.assertEqual(result['recommended_build'], '12.343')
         self.assertEqual(result['system']['selected_version'], '3.0.0')
         self.assertTrue(result['candidates'][0]['blockers'])
@@ -116,11 +119,11 @@ class UpgradeTests(unittest.TestCase):
         data = inventory()
         data['enabledModuleIds'].remove('gamma')
         with tempfile.TemporaryDirectory(prefix='upgrade-mismatch-fixture-') as folder:
-            completed = upgrade._complete_inventory(data, folder)
+            completed = upgrade.complete_inventory(data, folder)
         self.assertEqual(completed['activation_discrepancies'], ['gamma'])
         gamma = next(item for item in completed['modules'] if item['id'] == 'gamma')
         self.assertTrue(gamma['enabled'])
-        result = upgrade.analyze(completed, catalog())
+        result = foundry_solver.analyze(completed, catalog())
         decision = next(item for item in result['modules'] if item['id'] == 'gamma')
         self.assertTrue(decision['original_enabled'])
         self.assertTrue(decision['proposed_enabled'])
@@ -132,12 +135,12 @@ class UpgradeTests(unittest.TestCase):
         releases['packages']['dnd5e']['releases'].append(
             release('dnd5e', '5.1.0', '14', '14', '14')
         )
-        result = upgrade.analyze(data, releases)
+        result = foundry_solver.analyze(data, releases)
         self.assertEqual(result['recommended_build'], '14.368')
         self.assertEqual(result['system']['selected_version'], '5.1.0')
 
     def test_approved_dependency_enables_newer_unverified_candidate(self):
-        result = upgrade.analyze(inventory(), catalog(), approved_dependencies=['beta'])
+        result = foundry_solver.analyze(inventory(), catalog(), approved_dependencies=['beta'])
         self.assertEqual(result['recommended_build'], '13.351')
         self.assertEqual(result['newest_all_verified_build'], '12.343')
         self.assertTrue(result['needs_clone_testing'])
@@ -154,11 +157,11 @@ class UpgradeTests(unittest.TestCase):
         releases['packages']['alpha']['releases'] = [
             release('alpha', '1.0.0', '12', '14', '12', [dependency('Plutonium')])
         ]
-        result = upgrade.analyze(data, releases)
+        result = foundry_solver.analyze(data, releases)
         self.assertIsNone(result['recommended_build'])
         self.assertIsNone(result['modules'][0]['proposed_enabled'])
         self.assertIn('requires excluded Plutonium', ' '.join(result['candidates'][0]['blockers']))
-        chosen = upgrade.analyze(data, releases, disabled_modules=['alpha'])
+        chosen = foundry_solver.analyze(data, releases, disabled_modules=['alpha'])
         self.assertEqual(chosen['recommended_build'], '14.368')
         self.assertIn('GM explicitly', chosen['modules'][0]['disabled_reason'])
 
@@ -170,10 +173,10 @@ class UpgradeTests(unittest.TestCase):
         releases['packages']['alpha']['releases'][1]['systems'] = [
             {'id': 'dnd5e', 'compatibility': {'maximum': '3.0.0'}}
         ]
-        result = upgrade.analyze(data, releases)
+        result = foundry_solver.analyze(data, releases)
         self.assertEqual(result['recommended_build'], '12.343')
         releases['packages']['alpha']['releases'][1]['systems'] = []
-        result = upgrade.analyze(data, releases, approved_dependencies=['beta'])
+        result = foundry_solver.analyze(data, releases, approved_dependencies=['beta'])
         self.assertEqual(result['recommended_build'], '13.351')
         self.assertEqual(result['locked_changes'], ['dnd5e'])
 
@@ -196,9 +199,9 @@ class UpgradeTests(unittest.TestCase):
             )
 
         def fake_fetch(url, *_args, **_kwargs):
-            if url == upgrade.RELEASES_URL:
+            if url == foundry_compat.RELEASES_URL:
                 return releases_page
-            if url.startswith(upgrade.PACKAGE_URL):
+            if url.startswith(foundry_catalog.PACKAGE_URL):
                 return package_page(url.split('/')[-2])
             package_id = url.rsplit('/', 1)[-1].removesuffix('.json')
             relationships = {'requires': [dependency('beta')]} if package_id == 'alpha' else {}
@@ -206,8 +209,8 @@ class UpgradeTests(unittest.TestCase):
                 {'id': package_id, 'version': '1.0.0', 'relationships': relationships}
             )
 
-        with patch.object(upgrade, '_fetch', side_effect=fake_fetch):
-            result = upgrade.collect_catalog(data)
+        with patch.object(foundry_catalog, 'fetch', side_effect=fake_fetch):
+            result = foundry_catalog.collect_catalog(data)
         self.assertEqual(result['builds'], ['13.351', '12.331'])
         self.assertEqual(result['packages']['alpha']['releases'][0]['requires'][0]['id'], 'beta')
         self.assertEqual(result['packages']['beta']['status'], 'listed')
@@ -227,7 +230,7 @@ class UpgradeTests(unittest.TestCase):
             with (
                 patch.object(upgrade.config, 'settings', return_value={'world_path': str(backup)}),
                 patch.object(upgrade.config, 'world_info', return_value=world),
-                patch.object(upgrade.foundry_backup, 'verify', return_value=verified) as verify,
+                patch.object(foundry_backup, 'verify', return_value=verified) as verify,
             ):
                 result = upgrade.report(inventory(), str(backup), catalog=catalog())
                 verify.assert_called_once_with(str(backup))
@@ -434,7 +437,7 @@ class UpgradeTests(unittest.TestCase):
 
     def test_parse_official_page_shapes_and_core_bounds(self):
         self.assertEqual(
-            upgrade.stable_builds(
+            foundry_catalog.stable_builds(
                 '<li class="article release flexrow"><a href="/releases/14.368">Release</a>'
                 '<span class="release-tag stable">Stable</span></li>'
                 '<li class="article release flexrow"><a href="/releases/14.369">Release</a>'
@@ -448,10 +451,10 @@ class UpgradeTests(unittest.TestCase):
             '<a href="https://example.org/module.json" title="Manifest Installation URL">Manifest URL</a></li>'
         )
         self.assertEqual(
-            upgrade.package_releases(page, 'alpha')[0]['compatibility']['maximum'], '13'
+            foundry_catalog.package_releases(page, 'alpha')[0]['compatibility']['maximum'], '13'
         )
-        self.assertTrue(upgrade._compatible({'minimum': '12', 'maximum': '12'}, (12, 343)))
-        self.assertFalse(upgrade._compatible({'minimum': '12', 'maximum': '12'}, (13, 341)))
+        self.assertTrue(foundry_compat.compatible({'minimum': '12', 'maximum': '12'}, (12, 343)))
+        self.assertFalse(foundry_compat.compatible({'minimum': '12', 'maximum': '12'}, (13, 341)))
 
 
 if __name__ == '__main__':
