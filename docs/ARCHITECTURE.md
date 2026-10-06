@@ -165,7 +165,7 @@ before applying; stable request-prefixed IDs and a prep application marker make 
 Editing request text or session after drafting invalidates the proposal.
 
 One worker runs per lane (forge, Claude, art). Lanes may run concurrently. `JobService` persists queue and
-process transitions; application callbacks settle image, workflow and inbox documents. State postprocessing
+process transitions through an injectable runner (`SubprocessRunner`: `start`, then `feed`, `wait`, `terminate`); application callbacks settle image, workflow and inbox documents. State postprocessing
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
 worker available. On restart, the server checks the data schema, completes interrupted changes and migrates
 before saved unfinished jobs are settled: a job that never started is requeued from its saved launch record

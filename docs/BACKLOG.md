@@ -11,8 +11,8 @@ line below: the agent merging second renumbers its rows and edits the Slack repl
 
 Next ID: W23
 
-| ID  | Priority | Work                                                                             | Acceptance criteria                                                                                                                                            |
-| --- | -------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W9  | 3        | Provider adapters (cancellation, progress and requeue of unstarted jobs shipped) | Fake-provider failure/cancel/retry tests; settings avoid secret storage                                                                                        |
-| W10 | 3        | Installer and performance budgets for very large maps                            | Clean-machine install test and measured time/memory at documented map sizes                                                                                    |
-| W15 | 3        | Serve several campaigns from one process                                         | Services receive their `Campaign` explicitly (no process-wide active campaign); app links to `forge/` scripts work when the campaign is outside the app folder |
+| ID  | Priority | Work                                                                                | Acceptance criteria                                                                                                                                            |
+| --- | -------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W9  | 3        | Alternative providers (cancellation, progress, requeue and the runner seam shipped) | Fake-provider failure/cancel/retry tests; settings avoid secret storage                                                                                        |
+| W10 | 3        | Installer and performance budgets for very large maps                               | Clean-machine install test and measured time/memory at documented map sizes                                                                                    |
+| W15 | 3        | Serve several campaigns from one process                                            | Services receive their `Campaign` explicitly (no process-wide active campaign); app links to `forge/` scripts work when the campaign is outside the app folder |

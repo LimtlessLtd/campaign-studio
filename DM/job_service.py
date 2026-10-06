@@ -35,6 +35,44 @@ def parse_progress(text):
     return {'percent': max(0, min(100, value)), 'label': label.strip()}
 
 
+class SubprocessProcess:
+    """A started child process: the three operations the service needs from any provider."""
+
+    def __init__(self, popen):
+        self.popen = popen
+
+    def feed(self, text):
+        self.popen.stdin.write(text.encode('utf-8'))
+        self.popen.stdin.close()
+
+    def wait(self):
+        return self.popen.wait()
+
+    def terminate(self):
+        self.popen.terminate()
+
+
+class SubprocessRunner:
+    """Runs a job's command as a child process. A provider with the same `start` is a drop-in replacement.
+
+    `start(cmd, cwd, env, log, has_stdin)` returns an object with `feed(text)`, `wait()` returning the
+    exit code and `terminate()`. It raises OSError when the job cannot be started.
+    """
+
+    def start(self, cmd, cwd, env, log, has_stdin):
+        return SubprocessProcess(
+            subprocess.Popen(
+                cmd,
+                cwd=cwd,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                env=env,
+                stdin=subprocess.PIPE if has_stdin else subprocess.DEVNULL,
+                creationflags=NO_WINDOW,
+            )
+        )
+
+
 class JobNotFound(LookupError):
     pass
 
@@ -44,12 +82,13 @@ class JobFinished(RuntimeError):
 
 
 class JobService:
-    def __init__(self, campaign, lock, on_finish, on_failure, on_restart):
+    def __init__(self, campaign, lock, on_finish, on_failure, on_restart, runner=None):
         self.campaign = campaign  # callable returning the Campaign whose jobs this service runs
         self.lock = lock
         self.on_finish = on_finish
         self.on_failure = on_failure
         self.on_restart = on_restart
+        self.runner = runner or SubprocessRunner()
         self.lanes = {'forge': queue.Queue(), 'claude': queue.Queue(), 'art': queue.Queue()}
         self.running = {}
         self.cancelled = set()  # ids cancelled while queued or running
@@ -171,22 +210,15 @@ class JobService:
             self.drop_launch(job['id'])  # a started job has side effects, so it is never replayed
         with open(self.job_file(job['id'], 'log'), 'w', encoding='utf-8', errors='replace') as log:
             try:
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=self.campaign().files,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    env=self.child_env(),
-                    stdin=subprocess.PIPE if stdin_text else subprocess.DEVNULL,
-                    creationflags=NO_WINDOW,
+                proc = self.runner.start(
+                    cmd, self.campaign().files, self.child_env(), log, bool(stdin_text)
                 )
                 with self.lock:
                     self.running[job['id']] = proc
                     if job['id'] in self.cancelled:
                         proc.terminate()
                 if stdin_text:
-                    proc.stdin.write(stdin_text.encode('utf-8'))
-                    proc.stdin.close()
+                    proc.feed(stdin_text)
                 code = proc.wait()
             except OSError as error:
                 log.write(f'\ncould not start: {error}\n')
