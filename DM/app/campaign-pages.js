@@ -22,6 +22,7 @@ const KINDS = {
   plot: 'Plot',
   other: 'Other',
   'stock map': 'Stock a map',
+  expand: 'Expand an entry',
 };
 
 async function queueArt({
@@ -86,6 +87,24 @@ async function attachArt(item, path) {
     }
   }
   refreshSoon();
+}
+
+const codexName = (id) => S.docs.codex?.entries.find((x) => x.id === id)?.name || id;
+
+/* One button on an entry: reuse its open expansion request, or start one, and let Claude draft it. */
+async function expandEntry(e) {
+  if (S.pending.codex) await flush('codex');
+  const box = await doc('inbox', { items: [] });
+  let item = box.items.find((it) => it.kind === 'expand' && it.codex === e.id && !it.applied);
+  if (!item) {
+    item = await addRequest({
+      kind: 'expand',
+      codex: e.id,
+      text: `Expand the codex entry "${e.name}": add detail and secrets that fit the campaign, an illustration brief, and any related entries that deepen it.`,
+    });
+  }
+  if (item.status === 'new') await sendToClaude(item);
+  go('#/inbox');
 }
 
 const codexChoices = () =>
@@ -236,6 +255,9 @@ function requestCard(it, box, draw) {
           ? h('a', { class: 'chip', href: '#/prep/' + it.session }, it.session.toUpperCase())
           : null,
         it.map ? h('a', { class: 'chip', href: '#/maps/' + it.map }, 'map: ' + it.map) : null,
+        it.kind === 'expand' && it.codex
+          ? h('a', { class: 'chip', href: '#/codex/' + it.codex }, 'entry: ' + codexName(it.codex))
+          : null,
       ),
       h(
         'div',
@@ -1116,6 +1138,7 @@ async function codexEntry(c, id, main, context) {
           },
           'Queue AI artwork',
         ),
+        h('button', { onclick: () => expandEntry(e) }, 'Draft related content'),
         h(
           'div',
           { class: 'two' },
@@ -1129,6 +1152,18 @@ async function codexEntry(c, id, main, context) {
         field(docName, e, 'group', { label: 'Group / allegiance' }),
         h('label', {}, 'Tags'),
         listEditor(docName, e.tags, { placeholder: 'Add a tag and press Enter' }),
+        e.related?.length
+          ? [
+              h('label', {}, 'Related entries'),
+              h(
+                'div',
+                { class: 'row' },
+                e.related.map((id) =>
+                  h('a', { class: 'chip', href: '#/codex/' + id }, codexName(id)),
+                ),
+              ),
+            ]
+          : null,
         h('label', {}, 'Mentioned in session summaries'),
         h(
           'div',
@@ -1232,7 +1267,7 @@ async function inboxPage(_arg, context) {
     },
     h('option', { value: '' }, '+ New request…'),
     Object.entries(KINDS)
-      .filter(([k]) => !['battle map', 'stock map', 'event', 'journal'].includes(k))
+      .filter(([k]) => !['battle map', 'stock map', 'event', 'journal', 'expand'].includes(k))
       .map(([k, v]) => h('option', { value: k }, v)),
   );
   render(
