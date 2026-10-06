@@ -11,13 +11,24 @@ import workflow
 
 REQUEST_ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 PREP_ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
-KINDS = {'npc', 'item', 'encounter', 'handout', 'plot', 'other', 'event', 'journal'}
+KINDS = {'npc', 'item', 'encounter', 'handout', 'plot', 'other', 'event', 'journal', 'expand'}
 ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
 STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
+
+FOCUS = workflow.obj(
+    {
+        'public': workflow.STR,
+        'secrets': workflow.STR,
+        'image_prompt': workflow.STR,
+        'links': workflow.arr(workflow.STR, 12),
+    }
+)
+EMPTY_FOCUS = {'public': '', 'secrets': '', 'image_prompt': '', 'links': []}
 
 SCHEMA = workflow.obj(
     {
         'summary': workflow.STR,
+        'focus': FOCUS,
         'entries': workflow.arr(
             workflow.obj(
                 {
@@ -79,8 +90,12 @@ SCHEMA = workflow.obj(
 
 
 def input_hash(item):
-    source = {key: item.get(key, '') for key in ('id', 'kind', 'text', 'session')}
+    source = {key: item.get(key, '') for key in ('id', 'kind', 'text', 'session', 'codex')}
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode('utf-8')).hexdigest()
+
+
+def codex_entries(read_doc):
+    return (read_doc('codex') or {'entries': []}).get('entries', [])
 
 
 def validate_request(item, read_doc):
@@ -90,6 +105,10 @@ def validate_request(item, read_doc):
         raise ValueError('Use the map studio for map requests.')
     if not isinstance(item.get('text'), str) or not 1 <= len(item['text'].strip()) <= 10000:
         raise ValueError('Describe the request in 1 to 10,000 characters.')
+    if item['kind'] == 'expand' and not any(
+        entry.get('id') == item.get('codex') for entry in codex_entries(read_doc)
+    ):
+        raise ValueError('The codex entry to expand no longer exists.')
     session = item.get('session') or ''
     if session:
         if not PREP_ID.fullmatch(str(session)) or read_doc('prep/' + session) is None:
@@ -105,6 +124,9 @@ def prompt_pack(item, read_doc, campaign):
         'campaign': campaign,
         'request': {key: item.get(key, '') for key in ('kind', 'text', 'session')},
         'codex': read_doc('codex') or {'entries': []},
+        'focus_entry': next(
+            (e for e in codex_entries(read_doc) if e.get('id') == item.get('codex')), None
+        ),
         'threads': read_doc('threads') or {'threads': []},
         'prep': read_doc('prep/' + session) if session else None,
     }
@@ -117,6 +139,16 @@ def prompt_pack(item, read_doc, campaign):
         'IDs; proposed NPC links use their proposed short IDs. Leave unused arrays empty and notes blank. '
         'A proposal must contain at least one substantive addition. '
     )
+    if item['kind'] == 'expand':
+        instruction += (
+            'Expand the codex entry named focus_entry. Put new text for that entry in focus: public is '
+            'what players may learn, secrets is GM-only, image_prompt is an illustration brief with no '
+            'lettering, and links lists the codex IDs (existing, or proposed in entries) it connects to. '
+            'Propose a few related entries only where they deepen it; leave focus fields blank '
+            'where nothing is needed. '
+        )
+    else:
+        instruction += 'Leave focus empty. '
     if session:
         instruction += (
             'Session prep additions go in scenes, handouts, goals, loot, checklist and notes. '
@@ -136,11 +168,20 @@ def validate(item, draft, read_doc):
         raise ValueError('The proposal must be a JSON object.')
     if len(json.dumps(draft, ensure_ascii=False)) > 240000:
         raise ValueError('The proposal is too large.')
+    draft = {
+        **draft,
+        'focus': draft.get('focus', EMPTY_FOCUS),
+    }  # proposals from before focus existed
     workflow.validate_schema(draft, SCHEMA)
     if not draft['summary'].strip():
         raise ValueError('Summarise the proposal.')
-    if not any(draft[key] for key in SCHEMA['properties'] if key != 'summary'):
+    focus = draft['focus']
+    if not any(focus.values()) and not any(
+        draft[key] for key in SCHEMA['properties'] if key not in ('summary', 'focus')
+    ):
         raise ValueError('The proposal has no additions.')
+    if any(focus.values()) and item['kind'] != 'expand':
+        raise ValueError('Only an expand request can add to an existing entry.')
     if not session and any(
         draft[key] for key in ('scenes', 'handouts', 'goals', 'loot', 'checklist', 'notes')
     ):
@@ -160,6 +201,9 @@ def validate(item, draft, read_doc):
         if entry.get('type') in ('npc', 'monster', 'pc')
     }
     proposed_npcs = {row['id'] for row in draft['entries'] if row['type'] in ('npc', 'monster')}
+    known = {entry['id'] for entry in codex_entries(read_doc)}
+    if any(link not in known and link not in proposed for link in focus['links']):
+        raise ValueError('The focus entry links to an unknown entry.')
     for scene in draft['scenes']:
         if any(npc not in known_npcs | proposed_npcs for npc in scene['npcs']):
             raise ValueError('A scene refers to an unknown NPC.')
@@ -169,6 +213,21 @@ def validate(item, draft, read_doc):
     if draft['notes'] and not draft['notes'].strip():
         raise ValueError('Notes cannot be whitespace only.')
     return deepcopy(draft)
+
+
+def expand_entry(codex, item, focus, prefix, proposed_ids):
+    """Add a reviewed expansion to the entry it was drafted for, once however often apply is retried."""
+    entry = next((e for e in codex['entries'] if e['id'] == item['codex']), None)
+    if entry is None:
+        raise ValueError('The codex entry to expand no longer exists.')
+    if item['id'] in entry.get('expanded_by', []):
+        return
+    for field in ('public', 'secrets'):
+        if focus[field].strip():
+            entry[field] = '\n\n'.join(x for x in (entry.get(field, ''), focus[field]) if x.strip())
+    links = [prefix + link if link in proposed_ids else link for link in focus['links']]
+    entry['related'] = list(dict.fromkeys([*entry.get('related', []), *links]))
+    entry.setdefault('expanded_by', []).append(item['id'])
 
 
 def stage(item, draft, read_doc):
@@ -213,7 +272,8 @@ def apply(item, read_doc, commit, inbox):
     )
     check(
         (read_doc('art') or {'items': []})['items'],
-        {'art-' + prefix + r['id'] for r in draft['entries'] if r['image_prompt'].strip()},
+        {'art-' + prefix + r['id'] for r in draft['entries'] if r['image_prompt'].strip()}
+        | ({'art-' + prefix + 'focus'} if draft['focus']['image_prompt'].strip() else set()),
     )
     session = item.get('session') or ''
     if session:
@@ -232,7 +292,10 @@ def apply(item, read_doc, commit, inbox):
             rows.append(row)
 
     changes = []
-    if draft['entries']:
+    focus = draft['focus']
+    proposed_ids = {row['id'] for row in draft['entries']}
+    focus_id = item.get('codex', '')
+    if draft['entries'] or any(focus.values()):
         codex = read_doc('codex') or {'entries': []}
         for row in draft['entries']:
             add(
@@ -245,9 +308,12 @@ def apply(item, read_doc, commit, inbox):
                     public=row['public'],
                     secrets=row['secrets'],
                     notes=row['notes'],
+                    related=[focus_id] if focus_id else [],
                     request=item['id'],
                 ),
             )
+        if any(focus.values()):
+            expand_entry(codex, item, focus, prefix, proposed_ids)
         changes.append(('codex', codex))
     if draft['threads']:
         threads = read_doc('threads') or {'threads': []}
@@ -264,17 +330,24 @@ def apply(item, read_doc, commit, inbox):
                 ),
             )
         changes.append(('threads', threads))
-    art_rows = [row for row in draft['entries'] if row['image_prompt'].strip()]
+    art_rows = [
+        (prefix + row['id'], row['name'], row['image_prompt'], 'art-' + prefix + row['id'])
+        for row in draft['entries']
+        if row['image_prompt'].strip()
+    ]
+    if focus['image_prompt'].strip():
+        focus_name = next(e['name'] for e in codex_entries(read_doc) if e['id'] == focus_id)
+        art_rows.append((focus_id, focus_name, focus['image_prompt'], 'art-' + prefix + 'focus'))
     if art_rows:
         art = read_doc('art') or {'items': []}
-        for row in art_rows:
+        for codex_id, title, prompt, art_id in art_rows:
             add(
                 art['items'],
                 shapes.ART_ITEM.new(
-                    id='art-' + prefix + row['id'],
-                    prompt=row['image_prompt'],
-                    title=row['name'],
-                    codex=prefix + row['id'],
+                    id=art_id,
+                    prompt=prompt,
+                    title=title,
+                    codex=codex_id,
                     created=time.time(),
                     request=item['id'],
                 ),
