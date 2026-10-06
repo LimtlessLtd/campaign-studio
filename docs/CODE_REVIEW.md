@@ -129,7 +129,7 @@ The work these findings call for, with the owner's feature requests, is tracked 
   journaled. Journaled changes are flushed to disk; ordinary single-document saves are not, so a power cut
   can still lose a just-saved edit.
   Backups remain necessary.
-- The in-memory queue fails unfinished jobs on restart; automatic resume/cancel is not implemented.
+- On restart, jobs that never started are requeued; jobs that were running are failed (replay could repeat side effects).
 - Workflow fingerprints cover layout/location changes, not all campaign text edited during generation.
 - The World Library reads selected media and top-level world documents from the world's database files, a
   GM-exported snapshot, or a paired read-only GM browser tab. It does not include compendium contents,
