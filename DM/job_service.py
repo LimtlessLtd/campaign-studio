@@ -18,6 +18,21 @@ import storage
 
 NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 CANCELLED_NOTE = 'Cancelled.'
+# A child process reports progress by printing `PROGRESS 3/10 label` or `PROGRESS 40% label`.
+PROGRESS_LINE = re.compile(r'^PROGRESS (?:(\d+)/(\d+)|(\d+)%)(?: (.*))?\r?$', re.M)
+
+
+def parse_progress(text):
+    """The last PROGRESS report in `text` as {percent, label}, or None. Percent is clamped to 0-100."""
+    found = PROGRESS_LINE.findall(text)
+    if not found:
+        return None
+    done, total, percent, label = found[-1]
+    if total:
+        value = round(100 * int(done) / int(total)) if int(total) else 0
+    else:
+        value = int(percent)
+    return {'percent': max(0, min(100, value)), 'label': label.strip()}
 
 
 class JobNotFound(LookupError):
@@ -172,6 +187,9 @@ class JobService:
                 return ''.join(file.readlines()[-lines:])
         except FileNotFoundError:
             return ''
+
+    def progress(self, job_id):
+        return parse_progress(self.log_tail(job_id, 200))
 
     def list_jobs(self, limit=30):
         if not os.path.isdir(self.jobs_dir()):
