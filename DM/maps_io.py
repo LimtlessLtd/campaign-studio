@@ -169,7 +169,7 @@ def export(slug, save_doc, here=None):
         key_path = os.path.join(folder, 'key.json')
         key = read_json(key_path) if os.path.isfile(key_path) else None
         tag = scene.setdefault('flags', {}).setdefault('world', {}).setdefault('wotgForge', {})
-        tag['key'] = forge.key_for_foundry(slug, key)
+        tag['key'] = forge.key_for_foundry(slug, key, here=here)
         tag['targetWorld'] = (
             config.world_info(config.settings(here)['world_path'])['id']
             if config.settings(here).get('world_path')

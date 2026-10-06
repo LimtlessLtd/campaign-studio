@@ -14,6 +14,9 @@ import campaign
 import campaign_core
 import config
 import maps_io
+
+sys.path.insert(0, str(ROOT / 'DM' / 'forge'))
+import forge
 from job_service import JobService
 
 FOLDERS = re.compile(r"""os\.path\.join\([^)]*'(data|maps|uploads|backups)'""")
@@ -60,6 +63,22 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(config.settings(other)['campaign_name'], 'Given')
             self.assertEqual(maps_io.unique_slug('Keep', other), 'keep-2')
             self.assertEqual(maps_io.unique_slug('Keep'), 'keep')
+
+    def test_forge_exports_use_the_campaign_they_are_given(self):
+        other = campaign.Campaign(Path(self.temp.name) / 'Other')
+        Path(other.data).mkdir(parents=True)
+        Path(other.data, 'codex.json').write_text(
+            json.dumps({'entries': [{'id': 'ogre', 'name': 'Given Ogre', 'type': 'npc'}]})
+        )
+        Path(other.map_index).parent.mkdir(parents=True, exist_ok=True)
+        Path(other.map_index).write_text(json.dumps({'items': []}))
+        key = {'areas': [{'n': 1, 'name': 'Hall', 'npcs': ['ogre']}]}
+        with campaign.using(self.studio):
+            snapshot = forge.key_for_foundry('hall', key, copy_art=False, here=other)
+            forge.update_index({'slug': 'hall', 'name': 'Hall'}, other)
+        self.assertIn('Given Ogre', json.dumps(snapshot))
+        self.assertEqual(json.loads(Path(other.map_index).read_text())['items'][0]['slug'], 'hall')
+        self.assertFalse(Path(self.studio.map_index).exists())
 
     def test_jobs_run_in_the_campaign_that_started_them(self):
         Path(self.studio.settings).write_text(json.dumps({'campaign_name': 'Elsewhere'}))
