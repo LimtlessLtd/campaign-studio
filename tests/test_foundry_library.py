@@ -114,6 +114,16 @@ class FoundryLibraryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'duplicate'):
             foundry_library.normalize_snapshot(payload, foundry_library.selected_world())
 
+    def test_pushed_snapshot_beyond_the_limit_is_trimmed_and_counted(self):
+        payload = self.snapshot()
+        payload['documents']['items'] = [{'id': 'b', 'name': 'B'}, {'id': 'a', 'name': 'A'}]
+        with patch.object(foundry_library, 'MAX_DOCUMENTS', 1):
+            clean = foundry_library.normalize_snapshot(
+                payload, foundry_library.selected_world(), origin='live'
+            )
+        self.assertEqual([item['id'] for item in clean['documents']['items']], ['a'])
+        self.assertEqual(clean['omitted'], {'items': 1})
+
     def database(self, name, documents, embedded=()):
         """Write a world database: {id: document} plus (sublevel, parent, id, document) rows."""
         rows = [

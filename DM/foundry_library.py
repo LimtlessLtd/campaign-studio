@@ -206,8 +206,20 @@ def normalize_snapshot(payload, world, origin='macro', stamp='', omitted=None):
     documents = {}
     for kind in KINDS:
         records = payload['documents'].get(kind, [])
-        if not isinstance(records, list) or len(records) > 5000:
-            raise ValueError('The Foundry snapshot has too many documents.')
+        if not isinstance(records, list):
+            raise ValueError('The Foundry snapshot contains an invalid document list.')
+        if len(records) > MAX_DOCUMENTS:
+            # Keep a stable subset and say so, as the world-folder reader does.
+            records = sorted(
+                records,
+                key=lambda item: (
+                    str(item.get('name', '')).casefold() if isinstance(item, dict) else '',
+                    str(item.get('id', '')) if isinstance(item, dict) else '',
+                ),
+            )
+            omitted = dict(omitted or {})
+            omitted[kind] = omitted.get(kind, 0) + len(records) - MAX_DOCUMENTS
+            records = records[:MAX_DOCUMENTS]
         cleaned = []
         seen = set()
         for item in records:
