@@ -13,7 +13,6 @@ Next ID: W23
 
 | ID  | Priority | Work                                                                      | Acceptance criteria                                                                                                                                            |
 | --- | -------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| W8  | 2        | Extend snapshot browsing into a live Foundry-side connection              | Stable provenance, read permissions and conflict policy; no raw DB editing                                                                                     |
 | W20 | 2        | Polish phone editing (access code and layout shipped)                     | Touch-sized controls and drag-free pin placement verified on a phone, plus built-in HTTPS or documented certificate setup for remote access                    |
 | W9  | 3        | Provider adapters and resumable queue (cancellation and progress shipped) | Fake-provider failure/cancel/retry tests; settings avoid secret storage                                                                                        |
 | W10 | 3        | Installer and performance budgets for very large maps                     | Clean-machine install test and measured time/memory at documented map sizes                                                                                    |

@@ -1114,11 +1114,14 @@ def render(meta, cells, segments, lights, out_base, check_path, jobs=None, build
         img.paste(Image.fromarray(tile, 'RGB'), (x, y))
         if len(cores) > 4 and n % step == 0 and n < len(cores):
             print(f'  {100 * n // len(cores)}%', flush=True)
+        if n % step == 0 or n == len(cores):
+            print(f'PROGRESS {5 + 80 * n // len(cores)}% painting', flush=True)
     roofs = []
     if buildings:
         import roofs as roof_painter
 
         print(f'  roofing {len(buildings)} buildings...', flush=True)
+        print('PROGRESS 87% roofing', flush=True)
         work = [(k, comp, meta['theme']) for k, comp in enumerate(buildings)]
         done = (
             pool.map(roof_painter.paint_roof, work) if pool else map(roof_painter.paint_roof, work)

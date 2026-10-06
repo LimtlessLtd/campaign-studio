@@ -61,9 +61,26 @@ The macro reads world documents through Foundry's client API and downloads a sum
 change Foundry. A snapshot you import is never replaced automatically; **Read again now** replaces it with
 a folder read.
 
+## Live GM connection
+
+In World Library, download the **live bridge macro**, create a Foundry Script macro with that code, and run
+it as GM in the selected world. It opens a Studio World Library tab. Approve **Connect and import** in that
+tab after checking the offered world and Foundry origin. The macro reads through Foundry's client document
+API, includes only documents the GM can observe, and sends the same bounded summary format as the export
+macro. It does not enable CORS, copy a Studio access code, or edit Foundry. The two tabs must stay open.
+If Studio asks for its access code, sign in and return to World Library; the macro continues announcing the
+connection. A blocked popup needs to be allowed before rerunning the macro.
+
+Foundry create, update and delete hooks mark the view as changed. Press **Refresh from Foundry** to receive
+a fresh snapshot. Studio records `live` as its source and scopes imported entries to the selected world and
+their Foundry UUIDs. If a value was edited in Studio, refresh keeps that entry rather than overwriting it;
+deleted Foundry documents remain in Studio for the GM to review. Switching worlds cannot display the old
+snapshot. This is one-way reading, not a write-back path. The macro and tab pairing have synthetic tests;
+live Foundry v11/v12/v13 behavior still needs GM verification.
+
 ## What is stored
 
-Either route saves a snapshot and imported codex entries under `DM/data` in the local Studio installation.
+All three routes save snapshots and imported codex entries under `DM/data` in the local Studio installation.
 Journal text, including GM-visible secrets, can appear in this local snapshot; protect Studio's runtime
 folder as you would the Foundry world. The page shows when the documents were read or exported and which
 route produced them.
@@ -73,6 +90,6 @@ hides the previous world's snapshot.
 The snapshot includes top-level world scenes, journals and their pages, actors and items. It does not include
 compendium documents, embedded documents other than journal pages (for example an actor's own items), or the
 complete mechanical data of game-system sheets. Descriptions are displayed as plain text. Editing existing
-Foundry documents, connecting them to Studio story threads, and one-click publishing need a Foundry-side
-integration and conflict handling. The existing map import macro remains the current path for applying
-Studio-generated maps and content.
+Foundry documents, connecting them to Studio story threads, and one-click publishing need a GM-reviewed
+write-back integration and expected-revision conflict handling. The existing map import macro remains the
+current path for applying Studio-generated maps and content.

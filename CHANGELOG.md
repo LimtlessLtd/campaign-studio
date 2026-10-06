@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+- **Live World Library:** a GM-run Script macro opens a paired Studio tab. Approve it there to read the
+  running Foundry client's permitted documents; later Foundry changes prompt an explicit refresh. Snapshots
+  retain world provenance and use the existing Studio-edit conflict rule. No Foundry documents are written.
 - **Job progress**: a child process can print `PROGRESS 3/10 label` or `PROGRESS 40% label`; `GET /api/jobs/<id>` returns the latest as `progress: {percent, label}` and the job card's bar uses it (it showed a guessed width before).
+  Map rendering now emits these reports during painting, roofing and export; the latest report remains visible after later log output.
 - **Foundry upgrade cutover review:** after a passing v12 module review, launch only the isolated clone in
   the selected newer Foundry build to let Foundry migrate it. The migrated-clone audit checks the installed
   releases and GM inspection. A final review rechecks that audit, the clone, the verified backup and the

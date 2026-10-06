@@ -23,6 +23,7 @@
   "DM/app/foundry-pages.js",
   "DM/app/world-pages.js",
   "DM/app/index.html",
+  "DM/app/live-library.js",
   "DM/app/map-pages.js",
   "DM/app/merge.js",
   "DM/app/state.js",
@@ -101,6 +102,7 @@
   "tests/test_shapes.py",
   "tools/check_macro.cjs",
   "tools/check_foundry_import.cjs",
+  "tools/check_foundry_live.cjs",
   "tools/check_merge.cjs",
   "tools/check_routes.cjs",
   "tools/check_source.py"

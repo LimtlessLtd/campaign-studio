@@ -77,7 +77,10 @@ world's files cannot be read, download the export Script macro, run it as GM in 
 snapshot instead. **Import world into Studio** adds actors, items and scenes to the codex in one action;
 first-run setup also runs it and reports failures. Importing a macro snapshot uses the same rules. Studio
 edits are kept on reimport, source worlds remain separate, and supported local Foundry images display while
-their world is connected. See [first run and World Library](docs/FOUNDRY_LIBRARY.md).
+their world is connected. For a read from a running Foundry client, download the live bridge Script macro
+from World Library, run it as GM, and approve the connection in the Studio tab it opens. The bridge signals
+later Foundry changes for an explicit refresh; it does not edit Foundry documents. See
+[first run and World Library](docs/FOUNDRY_LIBRARY.md).
 
 **Prepare for Foundry → Update Foundry export** copies assets and scene JSON to the selected world's
 `Data/wotg-maps` folder. Download the Script macro and run it as GM in Foundry. The server does not write the

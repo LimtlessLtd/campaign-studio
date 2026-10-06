@@ -226,6 +226,7 @@ async function studioLibrary(_arg, context) {
   const detail = h('div', { class: 'library-detail card' });
   const pager = h('div', { class: 'library-pager' });
   const importCard = h('section', { class: 'card library-import' });
+  const live = liveLibraryCard(context, () => refresh());
   let source = 'macro';
   let autoRead = false;
   let readError = '';
@@ -275,9 +276,11 @@ async function studioLibrary(_arg, context) {
         { class: 'eyebrow' },
         kind === 'assets'
           ? 'FOUNDRY MEDIA'
-          : source === 'folder'
-            ? 'FOUNDRY WORLD'
-            : 'FOUNDRY SNAPSHOT',
+          : source === 'live'
+            ? 'RUNNING FOUNDRY'
+            : source === 'folder'
+              ? 'FOUNDRY WORLD'
+              : 'FOUNDRY SNAPSHOT',
       ),
       h('h2', {}, item.name),
       item.folder ? h('p', { class: 'muted' }, 'Folder: ' + item.folder) : null,
@@ -302,9 +305,11 @@ async function studioLibrary(_arg, context) {
         { class: 'small-note' },
         kind === 'assets'
           ? 'Read-only. Refresh this page to see media files added later.'
-          : source === 'folder'
-            ? 'Read-only. Changes made in Foundry appear when you open this page again.'
-            : 'Read-only. Refresh the snapshot in Foundry to see later changes.',
+          : source === 'live'
+            ? 'Read-only. Use Refresh from Foundry to see later changes.'
+            : source === 'folder'
+              ? 'Read-only. Changes made in Foundry appear when you open this page again.'
+              : 'Read-only. Refresh the snapshot in Foundry to see later changes.',
       ),
     );
   };
@@ -327,6 +332,7 @@ async function studioLibrary(_arg, context) {
       return refresh();
     }
     if (!result.world) {
+      live.setWorld(null);
       render(
         status,
         h('p', { class: 'muted' }, 'Connect a Foundry world in Settings to browse its library.'),
@@ -336,6 +342,7 @@ async function studioLibrary(_arg, context) {
       render(pager);
       return;
     }
+    live.setWorld(result.world);
     source = snapshot?.source || 'macro';
     const omitted = Object.entries(snapshot?.omitted || {}).map(
       ([category, count]) => `${count} more ${category} not shown`,
@@ -352,7 +359,7 @@ async function studioLibrary(_arg, context) {
         'small',
         {},
         snapshot
-          ? `${source === 'folder' ? 'Read from the world folder' : 'Imported snapshot'}: ${when(snapshot.exported_at)} · Foundry ${snapshot.core_version}` +
+          ? `${source === 'folder' ? 'Read from the world folder' : source === 'live' ? 'Read from the running Foundry GM' : 'Imported snapshot'}: ${when(snapshot.exported_at)} · Foundry ${snapshot.core_version}` +
               (omitted.length ? ` · ${omitted.join(', ')}` : '')
           : result.readable
             ? 'No documents read yet. Media files can still be browsed.'
@@ -426,7 +433,7 @@ async function studioLibrary(_arg, context) {
             'a',
             {
               class: 'btn',
-              href: fileUrl('DM/forge/foundry-library-export.js'),
+              href: '/api/foundry/library/macro',
               download: 'campaign-studio-library-export.js',
             },
             'Download export macro',
@@ -520,6 +527,7 @@ async function studioLibrary(_arg, context) {
       h('a', { class: 'btn', href: '#/settings' }, 'World settings'),
     ),
     status,
+    live.element,
     importCard,
     tabs,
     h(

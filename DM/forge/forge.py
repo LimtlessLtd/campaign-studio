@@ -581,12 +581,14 @@ def forge(plan_path, foundry_copy=True, jobs=None):
         raise PlanError('map folder names must be lowercase letters, digits and dashes')
     for w in lint(cells):
         print(f'  warning: {w}')
+    print('PROGRESS 5% preparing map', flush=True)
     segments, lights = geometry(meta, cells)
     out = lambda ext: os.path.join(folder, slug + ext)
     from render2d import render
 
     houses = buildings(meta, cells)
     image, roofs = render(meta, cells, segments, lights, out(''), out('.check.jpg'), jobs, houses)
+    print('PROGRESS 95% exporting map', flush=True)
     if os.path.exists(out('.check.png')):
         os.remove(out('.check.png'))  # older forges wrote PNG
     ext = os.path.splitext(image)[1]
@@ -664,6 +666,7 @@ def forge(plan_path, foundry_copy=True, jobs=None):
         + ', '.join(f'{v} {k}' for k, v in counts.items())
         + (f'  ->  Foundry Data/{FOUNDRY_DIR}/{slug}' if copied else '')
     )
+    print('PROGRESS 100% complete', flush=True)
 
 
 def key_only(plan_path):

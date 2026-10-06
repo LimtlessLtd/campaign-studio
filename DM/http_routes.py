@@ -73,6 +73,7 @@ ROUTES = {
         (lambda path: path == '/api/foundry/backup/plan', '_get_backup_plan'),
         (lambda path: path == '/api/foundry/worlds', '_get_worlds'),
         (lambda path: path == '/api/foundry/library', '_get_library'),
+        (lambda path: path == '/api/foundry/library/macro', '_get_library_macro'),
         (lambda path: path == '/api/foundry/asset', '_get_asset'),
         (lambda path: path == '/api/maps/pending', '_get_pending_maps'),
         (lambda path: path.startswith('/api/workflow/'), '_get_workflow'),
@@ -104,6 +105,7 @@ ROUTES = {
             '_post_dismiss_commit',
         ),
         (lambda path: path == '/api/foundry/library/import', '_post_import_library'),
+        (lambda path: path == '/api/foundry/library/live-import', '_post_live_library'),
         (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
         (lambda path: path == '/api/foundry/world/import', '_post_import_world'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
@@ -267,7 +269,9 @@ class Handler(SimpleHTTPRequestHandler):
             p = None
             if method == 'POST' and path != '/api/upload-image':
                 limit = (
-                    20 * 1024 * 1024 if path == '/api/foundry/library/import' else 2 * 1024 * 1024
+                    20 * 1024 * 1024
+                    if path in ('/api/foundry/library/import', '/api/foundry/library/live-import')
+                    else 2 * 1024 * 1024
                 )
                 p = json.loads(self.body(limit).decode('utf-8') or '{}')
                 if not isinstance(p, dict):
@@ -362,6 +366,17 @@ class Handler(SimpleHTTPRequestHandler):
                 limit=int(query.get('limit', ['60'])[0]),
             )
         )
+
+    def _get_library_macro(self, path, query, p):
+        """Serve the reviewed source macro from the installation, even with external DM_HOME."""
+        source = Path(FORGE) / 'foundry-library-export.js'
+        body = source.read_bytes()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _get_asset(self, path, query, p):
         file, mime = foundry_library.media_file(
@@ -567,6 +582,14 @@ class Handler(SimpleHTTPRequestHandler):
         if not world:
             raise Invalid('Connect a Foundry world before importing its library snapshot.')
         snapshot = foundry_library.normalize_snapshot(p, world)
+        return self._save_foundry_import(snapshot, world)
+
+    def _post_live_library(self, path, query, p):
+        """Accept a paired GM browser snapshot through Studio's own authenticated page."""
+        world = foundry_library.selected_world()
+        if not world:
+            raise Invalid('Connect a Foundry world before opening a live library.')
+        snapshot = foundry_library.normalize_snapshot(p, world, origin='live')
         return self._save_foundry_import(snapshot, world)
 
     def _post_read_library(self, path, query, p):

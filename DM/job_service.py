@@ -19,7 +19,7 @@ import storage
 NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 CANCELLED_NOTE = 'Cancelled.'
 # A child process reports progress by printing `PROGRESS 3/10 label` or `PROGRESS 40% label`.
-PROGRESS_LINE = re.compile(r'^PROGRESS (?:(\d+)/(\d+)|(\d+)%)(?: (.*))?\r?$', re.M)
+PROGRESS_LINE = re.compile(r'^PROGRESS (?:(\d{1,9})/(\d{1,9})|(\d{1,9})%)(?: (.*))?\r?$', re.M)
 
 
 def parse_progress(text):
@@ -189,7 +189,14 @@ class JobService:
             return ''
 
     def progress(self, job_id):
-        return parse_progress(self.log_tail(job_id, 200))
+        latest = None
+        try:
+            with open(self.job_file(job_id, 'log'), encoding='utf-8', errors='replace') as file:
+                for line in file:
+                    latest = parse_progress(line) or latest
+        except FileNotFoundError:
+            pass
+        return latest
 
     def list_jobs(self, limit=30):
         if not os.path.isdir(self.jobs_dir()):
