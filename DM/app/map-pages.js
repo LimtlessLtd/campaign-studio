@@ -1494,7 +1494,7 @@ async function mapStudio(slugArg, context) {
         'a',
         {
           class: 'btn',
-          href: fileUrl('DM/forge/foundry-import-macro.js'),
+          href: '/forge-scripts/foundry-import-macro.js',
           download: 'campaign-studio-import.js',
         },
         'Download import macro',

@@ -652,7 +652,7 @@ function foundryUpgradeCard(hasWorld) {
     ),
     h(
       'a',
-      { class: 'btn', href: fileUrl('DM/forge/foundry-upgrade-inventory.js'), download: '' },
+      { class: 'btn', href: '/forge-scripts/foundry-upgrade-inventory.js', download: '' },
       'Download GM inventory macro',
     ),
     h('label', {}, 'Import GM inventory JSON', input),
@@ -716,7 +716,7 @@ function foundryUpgradeCard(hasWorld) {
     ),
     h(
       'a',
-      { class: 'btn', href: fileUrl('DM/forge/foundry-upgrade-audit.js'), download: '' },
+      { class: 'btn', href: '/forge-scripts/foundry-upgrade-audit.js', download: '' },
       'Download migrated-clone audit macro',
     ),
     auditReviewInput,

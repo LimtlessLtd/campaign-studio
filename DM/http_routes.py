@@ -92,6 +92,7 @@ ROUTES = {
         (lambda path: path.startswith('/api/jobs/'), '_get_job'),
         (lambda path: path == '/api/images', '_get_images'),
         (lambda path: path.startswith('/files/'), '_get_file'),
+        (lambda path: path.startswith('/forge-scripts/'), '_get_forge_script'),
     ),
     'PUT': (
         (lambda path: path.startswith('/api/doc/'), '_put_doc'),
@@ -135,6 +136,9 @@ ROUTES = {
 
 
 GATE = remote_access.AccessGate(os.environ.get('DM_ACCESS_CODE', ''))
+
+
+FORGE_SCRIPT = re.compile(r'^[a-z0-9][a-z0-9-]*\.js$')
 
 
 class RouteError(Exception):
@@ -517,6 +521,21 @@ class Handler(SimpleHTTPRequestHandler):
         with open(full, 'rb') as f:
             shutil.copyfileobj(f, self.wfile)
         return
+
+    def _get_forge_script(self, path, query, p):
+        # the Foundry macros ship with the app, so they are served from the install folder, not the campaign
+        name = urllib.parse.unquote(path[len('/forge-scripts/') :])
+        full = os.path.join(FORGE, name)
+        if not FORGE_SCRIPT.match(name) or not os.path.isfile(full):
+            raise NotFound('no such script')
+        with open(full, 'rb') as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/javascript; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        self.wfile.write(body)
 
     def _put_doc(self, path, query, p):
         name = path[9:]
