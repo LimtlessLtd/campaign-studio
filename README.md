@@ -32,11 +32,31 @@ Open http://127.0.0.1:8766. On first run, name the Studio project and select an 
 create a world in Foundry Setup and then select it. The world picker detects common local User Data folders;
 you can also enter a custom path. The server binds to localhost.
 
-To use Studio from a phone, set `DM_BIND` to the computer's address (or `0.0.0.0`) and `DM_ACCESS_CODE` to a
-code of at least 8 characters before starting it, then open `http://<that address>:8766` on the phone and enter
-the code once. The server refuses to listen beyond localhost without a code. The connection is plain HTTP,
-so use it on a network you trust or through a private network such as Tailscale, or put an HTTPS proxy in front
-(it sets the cookie `Secure` when it sends `X-Forwarded-Proto: https`).
+To use Studio from a phone on a trusted network, set `DM_BIND` to the computer's address (or `0.0.0.0`) and
+`DM_ACCESS_CODE` to a code of at least 8 characters before starting it. Open `http://<that address>:8766` on
+the phone and enter the code once. The server refuses to listen beyond localhost without a code. This direct
+connection is plain HTTP; use the HTTPS setup below when the network is not fully trusted.
+
+For HTTPS on a local network, keep Studio bound to its default `127.0.0.1` and set `DM_ACCESS_CODE` before
+starting it. Install [Caddy](https://caddyserver.com/docs/install) on the same computer and save this
+`Caddyfile`, replacing the example address with the computer's stable LAN address:
+
+```caddyfile
+192.168.1.50 {
+    tls internal
+    reverse_proxy 127.0.0.1:8766
+}
+```
+
+Run `caddy run --config Caddyfile`. Install Caddy's `pki/authorities/local/root.crt` root certificate in the
+phone's trusted certificate store, then open `https://192.168.1.50` on the phone and enter the access code.
+On iPhone, also enable full trust in Settings → General → About → Certificate Trust Settings, as
+[Apple documents](https://support.apple.com/en-us/102390). Android's CA certificate installation is in its
+security settings and varies by device.
+Keep the root certificate and its private key under your control, and restrict port 443 to the intended
+network. Caddy's [local HTTPS guide](https://caddyserver.com/docs/running#local-https-with-systemd) explains
+where the certificate lives and why other devices must trust it. Caddy forwards HTTPS to the loopback-only
+Studio process; the login cookie receives `Secure` through its forwarded protocol header.
 Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder to keep the campaign's
 `data`, `maps`, `uploads` and `backups` there instead of in the app's `DM` folder.
 
@@ -50,6 +70,8 @@ Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder t
   if the layout or its location pins change. Save named checkpoints; compare and restore earlier layouts.
 - Imported PNG/JPEG/WebP maps retain their artwork and grid scale. Add location pins and generate linked
   content. Imported artwork has no editable grid plan; its key can still be checkpointed and restored.
+- On a phone, tap **Add pin** and then the world map, or **Place at center**; the four position buttons move
+  the selected pin by one percent without dragging. **Add location** on a battle map also uses a map tap.
 - A new map can automatically queue a content draft after rendering. Content drafts respect your selected
   counts and thread connections. Apply them after review. Per-location Generate buttons use the same workflow.
 

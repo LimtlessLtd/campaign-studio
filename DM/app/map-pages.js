@@ -837,7 +837,7 @@ async function mapStudio(slugArg, context) {
             },
           },
           icon('plus'),
-          placing ? 'Click to place…' : 'Add location',
+          placing ? 'Select map position…' : 'Add location',
         ),
         h(
           'button',

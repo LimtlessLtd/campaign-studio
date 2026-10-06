@@ -130,6 +130,26 @@ class RemoteRouteTests(unittest.TestCase):
         status, _, _ = self.send('/api/state', headers={'Cookie': 'dm_session=forged'})
         self.assertEqual(status, 401)
 
+    def test_https_proxy_login_sets_a_secure_cookie_for_the_phone_host(self):
+        body = urllib.parse.urlencode({'code': CODE}).encode()
+        status, _, response = self.send(
+            '/login',
+            'POST',
+            host='192.168.1.50',
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Forwarded-Proto': 'https',
+            },
+            body=body,
+        )
+        self.assertEqual(status, 303)
+        cookie = response.getheader('Set-Cookie')
+        self.assertIn('; Secure', cookie)
+        status, _, _ = self.send(
+            '/api/state', host='192.168.1.50', headers={'Cookie': cookie.split(';')[0]}
+        )
+        self.assertEqual(status, 200)
+
     def test_an_oversized_login_body_gets_a_page_not_a_dropped_connection(self):
         status, body, _ = self.send(
             '/login',
