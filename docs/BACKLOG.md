@@ -15,4 +15,4 @@ Next ID: W23
 | --- | -------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | W9  | 3        | Alternative providers (cancellation, progress, requeue and the runner seam shipped) | Fake-provider failure/cancel/retry tests; settings avoid secret storage        |
 | W10 | 3        | Installer and performance budgets for very large maps                               | Clean-machine install test and measured time/memory at documented map sizes    |
-| W15 | 3        | Serve several campaigns from one process (forge script links shipped)               | Services receive their `Campaign` explicitly (no process-wide active campaign) |
+| W15 | 3        | Serve several campaigns from one process (forge links, map import/export shipped)   | Services receive their `Campaign` explicitly (no process-wide active campaign) |

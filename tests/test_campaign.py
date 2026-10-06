@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
 import campaign
 import campaign_core
+import config
+import maps_io
 from job_service import JobService
 
 FOLDERS = re.compile(r"""os\.path\.join\([^)]*'(data|maps|uploads|backups)'""")
@@ -46,6 +48,18 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(campaign_core.campaign_path(stored), str(upload.resolve()))
         self.assertTrue((Path(self.studio.data) / 'codex.json').is_file())
         self.assertNotEqual(campaign.active(), self.studio)
+
+    def test_settings_and_slugs_use_the_campaign_they_are_given(self):
+        other = campaign.Campaign(Path(self.temp.name) / 'Other')
+        Path(other.data).mkdir(parents=True)
+        Path(other.settings).write_text(json.dumps({'campaign_name': 'Given'}))
+        Path(self.studio.settings).write_text(json.dumps({'campaign_name': 'Active'}))
+        Path(other.map_folder('keep')).mkdir(parents=True)
+        with campaign.using(self.studio):
+            self.assertEqual(config.settings()['campaign_name'], 'Active')
+            self.assertEqual(config.settings(other)['campaign_name'], 'Given')
+            self.assertEqual(maps_io.unique_slug('Keep', other), 'keep-2')
+            self.assertEqual(maps_io.unique_slug('Keep'), 'keep')
 
     def test_jobs_run_in_the_campaign_that_started_them(self):
         Path(self.studio.settings).write_text(json.dumps({'campaign_name': 'Elsewhere'}))
