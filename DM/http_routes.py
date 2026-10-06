@@ -11,6 +11,7 @@ from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 
 import campaign
+import ai_provider
 import config
 import foundry_backup
 import foundry_library
@@ -319,7 +320,8 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_json(
             dict(
                 public=public_content(),
-                claude=bool(shutil.which('claude')),
+                claude=bool(shutil.which('claude')),  # retained for older local clients
+                ai=ai_provider.status(),
                 campaign=cfg['campaign_name'],
                 world_key=foundry_library.world_key(world) if world else '',
                 onboarding_needed=not os.path.isfile(campaign.active().settings),
@@ -349,7 +351,8 @@ class Handler(SimpleHTTPRequestHandler):
                 settings=cfg,
                 world=world,
                 error=error,
-                claude=bool(shutil.which('claude')),
+                claude=bool(shutil.which('claude')),  # retained for older local clients
+                ai=ai_provider.status(),
                 image_key_available=bool(os.environ.get(cfg['images']['key_env'])),
             )
         )
@@ -758,10 +761,7 @@ class Handler(SimpleHTTPRequestHandler):
         cfg.update(
             campaign_name=name,
             world_path=world_path,
-            ai={
-                'provider': 'claude',
-                'model': str((p.get('ai') or {}).get('model') or '')[:100],
-            },
+            ai=ai_provider.clean_settings(p.get('ai') or {}),
             images={
                 'endpoint': endpoint,
                 'model': str(images.get('model') or '')[:100],
@@ -823,7 +823,7 @@ class Handler(SimpleHTTPRequestHandler):
             job = new_job('forge', 'generate', 'Build ' + label, cmd, slug=slug, populate=True)
             return self.send_json({'slug': slug, 'job': job})
         value = workflow.create(slug, brief, 'layout')
-        job = start_workflow(value) if shutil.which('claude') else None
+        job = start_workflow(value) if ai_provider.status()['available'] else None
         return self.send_json({'slug': slug, 'workflow': value, 'job': job})
 
     def _post_map(self, path, query, p):
@@ -923,7 +923,11 @@ class Handler(SimpleHTTPRequestHandler):
         value = workflow.create(
             slug, brief, 'content' if action == 'populate' else 'revision', instruction
         )
-        job = start_workflow(value) if p.get('run', True) and shutil.which('claude') else None
+        job = (
+            start_workflow(value)
+            if p.get('run', True) and ai_provider.status()['available']
+            else None
+        )
         return self.send_json({'workflow': value, 'job': job})
 
     def _post_workflow(self, path, query, p):
@@ -950,7 +954,9 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 workflow.save(value)
                 job = (
-                    start_workflow(value) if p.get('run', True) and shutil.which('claude') else None
+                    start_workflow(value)
+                    if p.get('run', True) and ai_provider.status()['available']
+                    else None
                 )
                 return self.send_json({'workflow': value, 'job': job})
         if action == 'run':

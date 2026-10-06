@@ -9,6 +9,7 @@ import shutil
 import sys
 import threading
 import campaign
+import ai_provider
 import commits
 import config
 import foundry_library
@@ -462,28 +463,6 @@ def generate_cmd(p):
     return cmd, f'{name or kind} ({W}x{H})'
 
 
-def structured_claude_cmd(schema):
-    exe = shutil.which('claude')
-    if not exe:
-        raise ValueError('Claude Code (the claude command) is not installed or not on PATH')
-    command = [
-        exe,
-        '-p',
-        '--output-format',
-        'json',
-        '--json-schema',
-        json.dumps(schema),
-        '--tools',
-        '',
-        '--restricted',
-        '--strict-mcp-config',
-    ]
-    model = config.settings()['ai'].get('model')
-    if model:
-        command += ['--model', model]
-    return command
-
-
 def request_pack(item):
     cfg = config.settings()
     campaign_info = {'name': cfg['campaign_name']}
@@ -507,7 +486,7 @@ def start_request(rid):
         if item.get('status') == 'done':
             raise ValueError('Reopen this request before drafting again.')
         pack = request_pack(item)
-        cmd = structured_claude_cmd(pack['schema'])
+        cmd = ai_provider.command('request', pack['schema'])
         job = new_job(
             'claude',
             'request-draft',
@@ -528,7 +507,7 @@ def start_workflow(value):
         if value['status'] in ('running', 'applied'):
             raise ValueError('This workflow is already running or applied.')
         workflow.check_base(value)
-        cmd = structured_claude_cmd(workflow.schema(value['kind']))
+        cmd = ai_provider.command(value['kind'], workflow.schema(value['kind']))
         cfg = config.settings()
         campaign_info = {'name': cfg['campaign_name']}
         if cfg.get('world_path'):
@@ -595,7 +574,8 @@ def normal_brief(p, existing=False):
 
 def map_busy(slug):
     return any(
-        j.get('slug') == slug and j.get('status') in ('queued', 'running') for j in list_jobs(200)
+        j.get('slug') == slug and j.get('status') in ('queued', 'running')
+        for j in JOBS_SERVICE.iter_jobs()
     )
 
 

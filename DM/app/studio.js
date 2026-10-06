@@ -601,16 +601,27 @@ async function studioSettings(_arg, context) {
         h('div', { class: 'section-icon' }, icon('spark')),
         h('h2', {}, 'AI workflow'),
         badge(
-          result.claude ? 'Claude Code detected' : 'Claude Code unavailable',
-          result.claude ? 'good' : '',
+          result.ai.available ? `${result.ai.label} configured` : `${result.ai.label} unavailable`,
+          result.ai.available ? 'good' : '',
         ),
-        formInput(f.ai, 'model', 'Claude model (optional)', {
-          placeholder: 'Use your CLI default',
+        formInput(f.ai, 'provider', 'Draft provider', {
+          options: [
+            ['claude', 'Claude Code'],
+            ['openai', 'OpenAI API'],
+          ],
+        }),
+        formInput(f.ai, 'model', 'AI model', {
+          placeholder: 'Optional for Claude Code; required for OpenAI API',
+        }),
+        formInput(f.ai, 'key_env', 'OpenAI API key environment variable', {
+          help: result.ai.key_available
+            ? 'For OpenAI API. Environment key detected; only this variable name is saved.'
+            : 'For OpenAI API. Set this variable before starting Studio; only its name is saved.',
         }),
         h(
           'p',
           { class: 'muted' },
-          'The workflow passes a map brief and campaign context to Claude and validates its structured proposal. You can also export prompt packs for another assistant.',
+          'The selected provider drafts a structured proposal from your campaign context. You review it before applying. OpenAI API drafts may incur charges; prompt packs work with other assistants too.',
         ),
         h(
           'p',

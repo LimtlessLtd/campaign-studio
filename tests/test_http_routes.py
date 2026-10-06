@@ -75,6 +75,28 @@ class RouteTests(unittest.TestCase):
                 urllib.request.urlopen(self.url + '/forge-scripts/' + bad)
             self.assertEqual(caught.exception.code, 404)
 
+    def test_ai_settings_only_store_the_environment_variable_name(self):
+        settings = {
+            'ai': {
+                'provider': 'openai',
+                'model': 'gpt-4o-mini',
+                'key_env': 'STUDIO_TEST_KEY',
+                'api_key': 'never-store-this',
+            }
+        }
+        status, saved, _ = self.request('/api/settings', 'POST', settings)
+        self.assertEqual(status, 200)
+        self.assertEqual(saved['settings']['ai']['provider'], 'openai')
+        self.assertNotIn('never-store-this', Path(campaign.active().settings).read_text())
+        with patch.dict('os.environ', {'STUDIO_TEST_KEY': 'fixture-secret'}):
+            status, state, _ = self.request('/api/state')
+        self.assertEqual(status, 200)
+        self.assertEqual(state['ai']['label'], 'OpenAI API')
+        self.assertTrue(state['ai']['available'])
+        self.assertIn('claude', state)
+        for ai in ({'provider': 'other'}, {'provider': 'openai', 'model': ''}):
+            self.assertEqual(self.request('/api/settings', 'POST', {'ai': ai})[0], 400)
+
     def test_cancel_route_distinguishes_bad_missing_and_finished_jobs(self):
         status, _, _ = self.request('/api/jobs/NOT-HEX/cancel', 'POST')
         self.assertEqual(status, 400)

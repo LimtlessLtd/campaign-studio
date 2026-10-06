@@ -91,7 +91,7 @@ async function attachArt(item, path) {
 
 const codexName = (id) => S.docs.codex?.entries.find((x) => x.id === id)?.name || id;
 
-/* One button on an entry: reuse its open expansion request, or start one, and let Claude draft it. */
+/* One button on an entry: reuse its open expansion request, or start one, and draft it. */
 async function expandEntry(e) {
   if (S.pending.codex) await flush('codex');
   const box = await doc('inbox', { items: [] });
@@ -103,7 +103,7 @@ async function expandEntry(e) {
       text: `Expand the codex entry "${e.name}": add detail and secrets that fit the campaign, an illustration brief, and any related entries that deepen it.`,
     });
   }
-  if (item.status === 'new') await sendToClaude(item);
+  if (item.status === 'new') await sendToAI(item);
   go('#/inbox');
 }
 
@@ -173,10 +173,10 @@ async function addRequest(fields) {
   await flush('inbox');
   return item;
 }
-async function sendToClaude(item) {
-  if (!S.state.claude) {
+async function sendToAI(item) {
+  if (!S.state.ai.available) {
     alert(
-      'Claude Code is unavailable. Export the prompt pack and import a proposal from another assistant.',
+      `${S.state.ai.label} is unavailable. Export the prompt pack and import a proposal from another assistant.`,
     );
     return;
   }
@@ -222,8 +222,8 @@ function statusChip(it) {
   const txt =
     it.status === 'doing'
       ? job && job.status === 'queued'
-        ? 'queued for Claude'
-        : 'Claude is drafting…'
+        ? `queued for ${S.state.ai.label}`
+        : `${S.state.ai.label} is drafting…`
       : it.status === 'review'
         ? 'Ready to review'
         : it.status;
@@ -267,8 +267,8 @@ function requestCard(it, box, draw) {
           : it.status !== 'doing' && it.status !== 'done'
             ? h(
                 'button',
-                { class: 'primary', onclick: () => sendToClaude(it) },
-                it.status === 'review' ? 'Draft again' : 'Draft with Claude',
+                { class: 'primary', onclick: () => sendToAI(it) },
+                it.status === 'review' ? 'Draft again' : `Draft with ${S.state.ai.label}`,
               )
             : null,
         !isMap && it.status !== 'doing' && it.status !== 'done'
@@ -751,7 +751,7 @@ async function makePanel(session, context) {
       const item = await addRequest({ kind, text: ta.value.trim(), session });
       render(formBox);
       draw();
-      if (now) await sendToClaude(item);
+      if (now) await sendToAI(item);
     };
     render(
       formBox,
@@ -763,7 +763,11 @@ async function makePanel(session, context) {
         h(
           'div',
           { class: 'row', style: 'margin-top:8px' },
-          h('button', { class: 'primary', onclick: () => submit(true) }, 'Draft with Claude'),
+          h(
+            'button',
+            { class: 'primary', onclick: () => submit(true) },
+            `Draft with ${S.state.ai.label}`,
+          ),
           h('button', { onclick: () => submit(false) }, 'Save for later'),
           h('button', { onclick: () => render(formBox) }, 'Close'),
         ),
@@ -1287,8 +1291,8 @@ async function inboxPage(_arg, context) {
     h(
       'p',
       { class: 'sub' },
-      S.state.claude
-        ? 'Requests become structured drafts for you to review before applying. Claude can draft in the background; prompt packs work with other assistants too.'
+      S.state.ai.available
+        ? `Requests become structured drafts for you to review before applying. ${S.state.ai.label} can draft in the background; prompt packs work with other assistants too.`
         : 'Requests become structured drafts for you to review before applying. Export a prompt pack and import a proposal from another assistant.',
     ),
     list,
