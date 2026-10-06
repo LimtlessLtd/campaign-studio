@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Cancel** button on a running or queued job card. A queued job fails at once; a running one has its process terminated. The workflow, image brief or request it was producing is marked failed and can be retried. API: `POST /api/jobs/<id>/cancel`.
 - **Draft related content** button on a codex entry: queues an `expand` request that Claude drafts in the background. The proposal can add public text and secrets to the entry, an illustration brief for the image queue, links to existing or new related entries, and new related entries. Nothing changes until you apply it, and applying twice adds nothing twice. Entries show their related entries as links (stored as extra fields, no schema change).
 - **Phone and network access** (opt-in): start the server with `DM_BIND` and an `DM_ACCESS_CODE` (8+ characters)
   and other devices sign in once with the code (session cookie `HttpOnly`, `SameSite=Strict`; wrong codes lock
