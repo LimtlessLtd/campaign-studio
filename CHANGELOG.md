@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Restart keeps queued jobs:** a job still waiting when the DM site stopped is requeued on the next start from a saved launch record (command and stdin only). A job that was already running is still marked failed.
 - **Phone editing:** world-map pins can be placed at the center and adjusted in one-percent steps without dragging.
   Map pins and common controls have larger touch targets at phone widths; a touch-emulated Chromium flow checks
   world and battle-map placement. The README now gives a Caddy local-certificate HTTPS setup for phone access.

@@ -168,7 +168,8 @@ One worker runs per lane (forge, Claude, art). Lanes may run concurrently. `JobS
 process transitions; application callbacks settle image, workflow and inbox documents. State postprocessing
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
 worker available. On restart, the server checks the data schema, completes interrupted changes and migrates
-before saved unfinished jobs are marked failed; the queue does not automatically resume.
+before saved unfinished jobs are settled: a job that never started is requeued from its saved launch record
+(`<id>.launch`: command and stdin, never the environment); one that was running is marked failed.
 `POST /api/jobs/<id>/cancel` fails a queued job at once and terminates a running one; either way the
 owning workflow, image brief or request is settled through the normal failure callback.
 A job reports progress by printing `PROGRESS <done>/<total> [label]` or `PROGRESS <n>% [label]`; the job

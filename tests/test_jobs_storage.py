@@ -34,6 +34,7 @@ class JobsStorageTests(unittest.TestCase):
                 lambda job: restarted.append(job['id']),
             )
             pending = service.new_job('forge', 'fixture', 'Pending', [])
+            service.drop_launch(pending['id'])  # without a launch record it cannot be requeued
             finished = service.new_job('art', 'fixture', 'Finished', [])
             finished['status'] = 'done'
             service.save_job(finished)
@@ -48,6 +49,35 @@ class JobsStorageTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(Path(service.job_file(pending['id'])).read_text())['status'], 'failed'
             )
+
+    def test_restart_requeues_unstarted_jobs_and_fails_started_ones(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            restarted = []
+            make = lambda: JobService(
+                lambda: Campaign(os.path.join(temporary, 'DM')),
+                threading.RLock(),
+                lambda *_: None,
+                lambda *_: None,
+                lambda job: restarted.append(job['id']),
+            )
+            first = make()
+            waiting = first.new_job('forge', 'fixture', 'Waiting', ['cmd', 'a'], 'prompt')
+            started = first.new_job('art', 'fixture', 'Started', ['cmd', 'b'])
+            started.update(status='running')
+            first.save_job(started)
+            first.drop_launch(started['id'])
+            bare = first.new_job('claude', 'fixture', 'No launch record', ['cmd', 'c'])
+            first.drop_launch(bare['id'])
+
+            second = make()
+            second.recover_unfinished()
+
+            self.assertEqual(sorted(restarted), sorted([started['id'], bare['id']]))
+            job, cmd, stdin = second.lanes['forge'].get_nowait()
+            self.assertEqual((job['id'], cmd, stdin), (waiting['id'], ['cmd', 'a'], 'prompt'))
+            self.assertTrue(second.lanes['art'].empty() and second.lanes['claude'].empty())
+            saved = json.loads(Path(second.job_file(waiting['id'])).read_text())
+            self.assertEqual(saved['status'], 'queued')
 
     def test_subprocess_job_records_completion_and_log(self):
         with tempfile.TemporaryDirectory() as temporary:

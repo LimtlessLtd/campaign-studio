@@ -80,8 +80,32 @@ class JobService:
             **extra,
         )
         self.save_job(job)
+        self.save_launch(job['id'], cmd, stdin_text)
         self.lanes[lane].put((job, cmd, stdin_text))
         return job
+
+    def save_launch(self, job_id, cmd, stdin_text):
+        """Keep what a queued job needs to start, so a restart can requeue it. Never holds the environment."""
+        path = self.job_file(job_id, 'launch')
+        with open(path + '.tmp', 'w', encoding='utf-8') as file:
+            json.dump({'cmd': cmd, 'stdin': stdin_text}, file)
+        storage.atomic_replace(path + '.tmp', path)
+
+    def drop_launch(self, job_id):
+        try:
+            os.remove(self.job_file(job_id, 'launch'))
+        except FileNotFoundError:
+            pass
+
+    def load_launch(self, job_id):
+        try:
+            with open(self.job_file(job_id, 'launch'), encoding='utf-8') as file:
+                data = json.load(file)
+        except (FileNotFoundError, ValueError):
+            return None
+        if isinstance(data.get('cmd'), list) and all(isinstance(part, str) for part in data['cmd']):
+            return data['cmd'], data.get('stdin')
+        return None
 
     def child_env(self):
         env = dict(os.environ)
@@ -134,6 +158,7 @@ class JobService:
     def settle_cancelled(self, job):
         job.update(status='failed', ended=time.time(), note=CANCELLED_NOTE, cancelled=True)
         self.save_job(job)
+        self.drop_launch(job['id'])
         self.on_failure(job, RuntimeError(CANCELLED_NOTE))
 
     def execute_job(self, job, cmd, stdin_text):
@@ -143,6 +168,7 @@ class JobService:
                 return  # cancel() already settled it while it was queued
             job.update(status='running', started=time.time())
             self.save_job(job)
+            self.drop_launch(job['id'])  # a started job has side effects, so it is never replayed
         with open(self.job_file(job['id'], 'log'), 'w', encoding='utf-8', errors='replace') as log:
             try:
                 proc = subprocess.Popen(
@@ -211,13 +237,22 @@ class JobService:
         return out
 
     def recover_unfinished(self, before=None):
-        """Fail jobs a stopped server left unfinished; keep any queued at or after before."""
-        for job in self.list_jobs(200):
+        """Settle jobs a stopped server left unfinished; keep any queued at or after before.
+
+        A job that never started is requeued when its launch record survives; one that was running is
+        failed, because replaying it could repeat its side effects. Call before the workers start.
+        """
+        for job in reversed(self.list_jobs(200)):  # oldest first, so lanes keep their order
             if (
                 job
                 and job.get('status') in ('queued', 'running')
                 and (before is None or job.get('created', 0) < before)
             ):
+                launch = self.load_launch(job['id']) if job['status'] == 'queued' else None
+                if launch and job.get('lane') in self.lanes:
+                    self.lanes[job['lane']].put((job, *launch))
+                    continue
+                self.drop_launch(job['id'])
                 job['status'] = 'failed'
                 job['note'] = 'the DM site stopped while this was running'
                 self.save_job(job)
