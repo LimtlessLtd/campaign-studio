@@ -535,6 +535,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         'reviewed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'backup_path': str(backup_path),
         'clone_path': str(clone),
+        'world_id': plan['world']['id'],
         'plan_path': str(plan_file),
         'plan_sha256': storage.sha256_file(plan_file),
         'report_path': str(report_file),
@@ -563,7 +564,9 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
     return result
 
 
-def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks=None):
+def audit_migration(
+    review_path, inventory, confirmed_clone=False, manual_checks=None, *, save=True
+):
     """Audit a GM-exported migrated clone against its saved target package plan."""
     if confirmed_clone is not True:
         raise ValueError('Confirm that this export came from the isolated migrated clone.')
@@ -776,6 +779,8 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
         'confirmed_clone_export': True,
         'cutover_ready': False,
     }
+    if not save:
+        return result
     suffix = uuid.uuid4().hex
     inventory_file = backup_path / f'migration-audit-inventory-{suffix}.json'
     audit_file = backup_path / f'migration-audit-{suffix}.json'
@@ -786,4 +791,91 @@ def audit_migration(review_path, inventory, confirmed_clone=False, manual_checks
     result['audit_path'] = str(audit_file)
     with audit_file.open('x', encoding='utf-8') as stream:
         json.dump(result, stream, indent=2, ensure_ascii=False)
+    return result
+
+
+def review_cutover(audit_path, confirmed_closed=False):
+    """Recheck the migrated clone and unchanged original before a manual User Data switch."""
+    if confirmed_closed is not True or foundry_backup.running_foundry():
+        raise ValueError(
+            'Close both the original and isolated Foundry installations before cutover review.'
+        )
+    selected_audit = foundry_backup.absolute_folder(audit_path, 'Migration audit')
+    if not selected_audit.is_file() or selected_audit.stat().st_size > 256 * 1024:
+        raise ValueError('Select a passing migrated-clone audit.')
+    preliminary = json.loads(selected_audit.read_text(encoding='utf-8'))
+    if not isinstance(preliminary, dict):
+        raise ValueError('Invalid migrated-clone audit.')
+    backup = foundry_backup.verify(preliminary.get('backup_path'))
+    backup_path = Path(backup['path'])
+    audit_file, audit = _sidecar(selected_audit, backup_path, 'migration-audit-', 256 * 1024)
+    inventory_file, inventory = _sidecar(
+        audit.get('inventory_path'), backup_path, 'migration-audit-inventory-', 2 * 1024 * 1024
+    )
+    if (
+        audit.get('format') != 'campaign-studio-foundry-migration-audit'
+        or audit.get('status') != 'reviewed'
+        or audit.get('blockers') != []
+        or audit.get('audit_path') != str(audit_file)
+        or audit.get('inventory_sha256') != storage.sha256_file(inventory_file)
+        or audit.get('confirmed_clone_export') is not True
+        or audit.get('cutover_ready') is not False
+    ):
+        raise ValueError('The saved migration audit is not a passing, unchanged audit.')
+    current = audit_migration(
+        audit.get('v12_review_path'), inventory, True, audit.get('manual_checks'), save=False
+    )
+    evidence = (
+        'status',
+        'backup_path',
+        'clone_path',
+        'v12_review_path',
+        'v12_review_sha256',
+        'plan_path',
+        'target_build',
+        'reported_build',
+        'selected_system',
+        'selected_modules',
+        'installed_system_version',
+        'installed_module_versions',
+        'configured_enabled',
+        'runtime_active',
+        'manual_checks',
+        'blockers',
+    )
+    if any(audit.get(key) != current.get(key) for key in evidence):
+        raise ValueError(
+            'The migrated clone or its evidence changed after the audit. Audit it again.'
+        )
+    source = foundry_backup.verify_source(backup_path)
+    backup_manifest = foundry_backup.read_manifest(backup_path)
+    original_world = (
+        Path(source['path']) / storage.manifest_path(backup_manifest['world']['manifest_path'])
+    ).parent.resolve()
+    selected = config.world_info(config.settings().get('world_path'))
+    if (
+        Path(selected['path']).resolve() != original_world
+        or selected['id'] != backup['world']['id']
+    ):
+        raise ValueError('Select the original Foundry world in Settings before cutover review.')
+    if foundry_backup.running_foundry():
+        raise ValueError('Foundry started during cutover review. Close it and review again.')
+    result = {
+        'format': 'campaign-studio-foundry-cutover-review',
+        'status': 'ready_for_manual_cutover',
+        'cutover_ready': True,
+        'reviewed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'audit_path': str(audit_file),
+        'audit_sha256': storage.sha256_file(audit_file),
+        'backup_path': str(backup_path),
+        'backup_manifest_sha256': storage.sha256_file(backup_path / foundry_backup.MANIFEST),
+        'original_user_data': source['path'],
+        'clone_path': current['clone_path'],
+        'target_build': current['target_build'],
+        'world_id': inventory['world']['id'],
+    }
+    receipt = backup_path / f'cutover-review-{result["audit_sha256"][:24]}.json'
+    with storage.file_lock(receipt):
+        storage.atomic_json(receipt, result, durable=True)
+    result['review_path'] = str(receipt)
     return result

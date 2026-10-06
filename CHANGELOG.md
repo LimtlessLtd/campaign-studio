@@ -3,6 +3,11 @@
 ## Unreleased
 
 - **Job progress**: a child process can print `PROGRESS 3/10 label` or `PROGRESS 40% label`; `GET /api/jobs/<id>` returns the latest as `progress: {percent, label}` and the job card's bar uses it (it showed a guessed width before).
+- **Foundry upgrade cutover review:** after a passing v12 module review, launch only the isolated clone in
+  the selected newer Foundry build to let Foundry migrate it. The migrated-clone audit checks the installed
+  releases and GM inspection. A final review rechecks that audit, the clone, the verified backup and the
+  unchanged original User Data, then saves a manual cutover receipt. Studio does not move User Data or run
+  Foundry; keep the v12 installation and backup for rollback.
 - **Cancel** button on a running or queued job card. A queued job fails at once; a running one has its process terminated. The workflow, image brief or request it was producing is marked failed and can be retried. API: `POST /api/jobs/<id>/cancel`.
 - **Draft related content** button on a codex entry: queues an `expand` request that Claude drafts in the background. The proposal can add public text and secrets to the entry, an illustration brief for the image queue, links to existing or new related entries, and new related entries. Nothing changes until you apply it, and applying twice adds nothing twice. Entries show their related entries as links (stored as extra fields, no schema change).
 - **Phone and network access** (opt-in): start the server with `DM_BIND` and an `DM_ACCESS_CODE` (8+ characters)

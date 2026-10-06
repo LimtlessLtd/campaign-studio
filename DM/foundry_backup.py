@@ -250,6 +250,14 @@ def verify(path):
     return {'path': str(package), **_verify_tree(package / 'User Data', manifest), 'verified': True}
 
 
+def verify_source(path):
+    """Refuse cutover if the original User Data has changed since its offline backup."""
+    package = absolute_folder(path, 'Backup folder')
+    manifest = read_manifest(package)
+    root = absolute_folder(manifest.get('source_user_data'), 'Original Foundry User Data')
+    return {'path': str(root), **_verify_tree(root, manifest), 'unchanged': True}
+
+
 def rehearse(path, destination):
     package = absolute_folder(path, 'Backup folder')
     manifest = read_manifest(package)

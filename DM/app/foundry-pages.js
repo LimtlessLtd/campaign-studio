@@ -173,6 +173,7 @@ function foundryUpgradeCard(hasWorld) {
     actorsItems: false,
     modules: false,
   };
+  const cutoverForm = { audit: '', closed: false };
   let inventory = null;
   let cloneInventory = null;
   let migratedInventory = null;
@@ -185,6 +186,7 @@ function foundryUpgradeCard(hasWorld) {
   const cloneOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reviewOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const auditOutput = h('div', { class: 'upgrade-report', role: 'status' });
+  const cutoverOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reportInput = formInput(cloneForm, 'report', 'Saved compatibility report', {
     help: 'The latest report fills this in automatically. You can paste an earlier report path.',
   });
@@ -196,6 +198,9 @@ function foundryUpgradeCard(hasWorld) {
   });
   const auditReviewInput = formInput(auditForm, 'review', 'Passing v12 clone review', {
     help: 'A passing review fills this in automatically. You can paste an earlier review path.',
+  });
+  const cutoverAuditInput = formInput(cutoverForm, 'audit', 'Passing migrated-clone audit', {
+    help: 'A passing audit fills this in automatically. You can paste an earlier audit path.',
   });
   const input = h('input', {
     type: 'file',
@@ -495,7 +500,7 @@ function foundryUpgradeCard(hasWorld) {
                 'p',
                 { class: 'small-note' },
                 review.status === 'v12_modules_reviewed'
-                  ? `Keep the clone isolated. The next steps are to install the plan's selected releases, run Foundry ${review.target_build} on this clone, and manually inspect the migrated world. Studio has not approved migration or cutover.`
+                  ? `Keep the clone isolated. Install the selected releases, then launch Foundry ${review.target_build} with User Data Path ${review.clone_path} and open world ${review.world_id}. Foundry migrates that clone when it opens. Inspect the migrated world before importing its GM audit. Studio has not approved cutover.`
                   : 'Resolve the listed differences in the v12 clone, save and reload its module configuration, export a fresh inventory, and review again.',
               ),
             );
@@ -548,6 +553,10 @@ function foundryUpgradeCard(hasWorld) {
                 modules: auditForm.modules,
               },
             });
+            if (audit.status === 'reviewed') {
+              cutoverForm.audit = audit.audit_path;
+              cutoverAuditInput.querySelector('input').value = audit.audit_path;
+            }
             render(
               auditOutput,
               h(
@@ -591,6 +600,45 @@ function foundryUpgradeCard(hasWorld) {
         }),
     },
     'Audit migrated clone',
+  );
+  const reviewCutover = h(
+    'button',
+    {
+      class: 'primary',
+      disabled: !hasWorld,
+      onclick: () =>
+        attempt(async () => {
+          reviewCutover.disabled = true;
+          render(cutoverOutput, 'Rechecking the audit, clone, original User Data and backup…');
+          try {
+            const review = await post('/api/foundry/upgrade/review-cutover', {
+              audit_path: cutoverForm.audit,
+              confirmed_closed: cutoverForm.closed,
+            });
+            render(
+              cutoverOutput,
+              h('h4', {}, 'Ready for manual cutover'),
+              h('p', {}, `Target Foundry ${review.target_build} · world ${review.world_id}.`),
+              h('p', { class: 'backup-path' }, `Use this User Data path: ${review.clone_path}`),
+              h(
+                'p',
+                { class: 'backup-path' },
+                `Keep the original at: ${review.original_user_data}`,
+              ),
+              h('p', { class: 'backup-path' }, `Keep the verified backup: ${review.backup_path}`),
+              h('p', {}, `Saved cutover review: ${review.review_path}`),
+              h(
+                'p',
+                { class: 'small-note' },
+                'Studio has not moved any data or changed Foundry settings. Point the target installation to the clone only after this check, and keep the original v12 installation and backup for rollback. Recheck here if either User Data folder changes before switching.',
+              ),
+            );
+          } finally {
+            reviewCutover.disabled = false;
+          }
+        }),
+    },
+    'Review cutover readiness',
   );
   return h(
     'section',
@@ -694,6 +742,19 @@ function foundryUpgradeCard(hasWorld) {
     formInput(auditForm, 'modules', 'I tested retained module behavior', { type: 'checkbox' }),
     auditMigration,
     auditOutput,
+    h('hr'),
+    h('h3', {}, 'Review cutover readiness'),
+    h(
+      'p',
+      { class: 'muted' },
+      'After the migrated-clone audit passes, close both Foundry installations. Studio rechecks that the clone still matches the audit, the original User Data is unchanged since backup, and the verified backup remains intact.',
+    ),
+    cutoverAuditInput,
+    formInput(cutoverForm, 'closed', 'I closed both Foundry installations', {
+      type: 'checkbox',
+    }),
+    reviewCutover,
+    cutoverOutput,
   );
 }
 
