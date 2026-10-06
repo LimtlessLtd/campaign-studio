@@ -986,6 +986,28 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/foundry/library/import', snapshot, expected=403, writable=False)
         imported = self.request('/api/foundry/library/import', snapshot)
         self.assertEqual(imported['counts']['journals'], 1)
+        live = copy.deepcopy(snapshot)
+        live['documents']['actors'][0]['summary'] = 'First live description'
+        self.request('/api/foundry/library/live-import', wrong, expected=400)
+        self.request('/api/foundry/library/live-import', live, expected=403, writable=False)
+        live_report = self.request('/api/foundry/library/live-import', live)
+        self.assertEqual(live_report['updated'], 1)
+        self.assertEqual(
+            self.request('/api/foundry/library?kind=actors')['snapshot']['source'], 'live'
+        )
+        codex = campaign_core.read_json(campaign_core.doc_path('codex'))
+        actor = next(
+            entry for entry in codex['entries'] if entry['foundry']['uuid'] == 'Actor.actor1'
+        )
+        actor['notes'] = 'My Studio edits'
+        campaign_core.write_doc('codex', codex)
+        live['documents']['actors'][0]['summary'] = 'Changed in Foundry'
+        self.assertEqual(self.request('/api/foundry/library/live-import', live)['kept'], 1)
+        codex = campaign_core.read_json(campaign_core.doc_path('codex'))
+        actor = next(
+            entry for entry in codex['entries'] if entry['foundry']['uuid'] == 'Actor.actor1'
+        )
+        self.assertEqual(actor['notes'], 'My Studio edits')
         journals = self.request('/api/foundry/library?kind=journals&q=legend')
         self.assertEqual(journals['items'][0]['pages'][0]['text'], 'Hidden door')
         self.assertFalse(journals['readable'])

@@ -231,6 +231,81 @@ class BrowserSmoke(unittest.TestCase):
             requests, [{'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}]
         )
 
+    def test_live_library_pairs_with_a_foundry_tab_and_refreshes(self):
+        world = self.studio.root / 'User Data' / 'Data' / 'worlds' / 'fixture-world'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text((self.studio.world / 'world.json').read_text())
+        campaign_core.write_doc('settings', {**self.stored('settings'), 'world_path': str(world)})
+        snapshot = {
+            'format': 'campaign-studio-foundry-library',
+            'schema': 1,
+            'world': {'id': 'fixture-world', 'title': 'Fixture', 'system': 'dnd5e'},
+            'exportedAt': '2026-10-06T12:00:00Z',
+            'documents': {
+                'scenes': [],
+                'journals': [],
+                'actors': [{'id': 'actor1', 'name': 'Scout', 'type': 'npc', 'summary': 'First'}],
+                'items': [],
+            },
+        }
+        self.open('#/library')
+        with self.page.expect_download() as saved_macro:
+            self.page.get_by_role('button', name='Download live bridge macro').click()
+        self.assertIn(
+            'const CAMPAIGN_STUDIO_LIVE_ORIGIN =',
+            Path(saved_macro.value.path()).read_text(encoding='utf-8'),
+        )
+        with self.page.expect_popup() as opened:
+            self.page.evaluate("window.__livePopup = window.open('/#/library', '_blank')")
+        live = opened.value
+        live.on('pageerror', lambda error: self.errors.append(str(error)))
+        expect(live.get_by_role('heading', name='Live Foundry connection')).to_be_visible()
+        self.page.evaluate(
+            """() => window.__livePopup.postMessage({
+              studioLive: 1, type: 'hello', nonce: 'wrong-world',
+              world: {id: 'other-world', title: 'Other'},
+            }, location.origin)"""
+        )
+        expect(live.get_by_role('button', name='Connect and import')).to_be_disabled()
+        self.page.evaluate(
+            """(snapshot) => {
+              window.__liveSnapshot = snapshot;
+              window.addEventListener('message', (event) => {
+                const request = event.data;
+                if (request?.studioLive === 1 && request.type === 'request') {
+                  window.__livePopup.postMessage({
+                    studioLive: 1, type: 'snapshot', nonce: request.nonce,
+                    requestId: request.requestId, snapshot: window.__liveSnapshot,
+                  }, location.origin);
+                }
+              });
+              window.__livePopup.postMessage({
+                studioLive: 1, type: 'hello', nonce: 'fixture-nonce',
+                world: {id: 'fixture-world', title: 'Fixture'},
+              }, location.origin);
+            }""",
+            snapshot,
+        )
+        live.get_by_role('button', name='Connect and import').click()
+        expect(live.get_by_role('button', name='Refresh from Foundry')).to_be_visible()
+        self.assertEqual(self.stored('foundry-library')['source'], 'live')
+        self.assertEqual(self.stored('codex')['entries'][0]['notes'], 'First')
+        self.page.evaluate(
+            """() => {
+              window.__liveSnapshot.documents.actors[0].summary = 'Second';
+              window.__livePopup.postMessage({
+                studioLive: 1, type: 'changed', nonce: 'fixture-nonce',
+              }, location.origin);
+            }"""
+        )
+        expect(
+            live.get_by_text('Foundry changed. Refresh to read its current documents.')
+        ).to_be_visible()
+        with live.expect_response('**/api/foundry/library/live-import') as refreshed:
+            live.get_by_role('button', name='Refresh from Foundry').click()
+        self.assertEqual(refreshed.value.status, 200)
+        self.assertEqual(self.stored('codex')['entries'][0]['notes'], 'Second')
+
     def test_proposal_review_applies_to_the_campaign(self):
         slug, brief = self.studio.import_map()
         workflow.stage(workflow.create(slug, brief), self.studio.proposal())

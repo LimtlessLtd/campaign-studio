@@ -20,6 +20,7 @@ flowchart LR
   HTTP --> Library[foundry_library: world/media discovery]
   WorldFiles[World database files] --> LevelDB[foundry_leveldb: read-only reader] --> Library
   FoundrySnapshot[GM exports read-only document snapshot] --> Library
+  FoundryGM[Running Foundry GM client] --> Bridge[Paired browser message bridge] --> UI
 ```
 
 ## Modules
@@ -59,6 +60,7 @@ flowchart LR
 | `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                           |
 | `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                            |
 | `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                   |
+| `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                     |
 | `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation              |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
 
@@ -102,6 +104,11 @@ snapshot and codex changes together. Codex provenance uses an opaque source-worl
 Foundry document UUID; an identical document ID in another world cannot update it. The browser loads
 supported local images through the read-only Foundry asset route only while that world is selected. Macro
 snapshots use the same conversion and commit path as direct folder reads.
+The live GM bridge also uses that path. Its browser messages require the paired opener and exact origin;
+the Studio user explicitly approves the offered world, and the server validates it again. The Foundry
+macro checks GM/read permission before sending bounded summaries. The existing importer updates an entry
+only when its imported fields are still unchanged in Studio; it never deletes a Studio entry for a missing
+Foundry document.
 
 ## Data schema and migrations
 
@@ -199,10 +206,13 @@ The world picker reads `world.json` for identity and system information. The Wor
 local media under `Data` and the world's scenes, journals, actors and items, read from its database files
 (`foundry_leveldb` for v11+ worlds, following `CURRENT` and `MANIFEST` to exclude retired files; one JSON
 document per line for v10 and earlier) or from a GM-exported
-snapshot. Both routes pass `normalize_snapshot`, which validates the chosen world and stores only bounded
+snapshot. A GM-run Script macro can instead send a fresh snapshot from the running Foundry client to a
+paired Studio tab on request, without direct cross-origin API access. All three paths pass
+`normalize_snapshot`, which validates the chosen world and stores only bounded
 summaries under Studio's private `DM/data`. A folder-read snapshot records a fingerprint of the database
 files, so the page re-reads when they change. The reader opens no database, takes no lock and writes
-nothing. It is not live Foundry synchronization. Assets and JSON are copied to
+nothing. The browser bridge is read-only and lasts while both tabs stay open; it does not synchronize edits
+back to Foundry. Assets and JSON are copied to
 `Data/wotg-maps`; the user runs the macro as GM. No world database is written by Python. Imported documents
 carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
 and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
@@ -210,7 +220,7 @@ and unmanaged walls/lights for modern managed imports; older untagged scenes may
 The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12 or v13
 scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while other systems get journal
 content. Fixture contracts cover these combinations and tagged reimport ownership. The live GM checks in
-`docs/FOUNDRY_IMPORT.md` remain necessary. Live two-way world synchronization, mechanical stat block
+`docs/FOUNDRY_IMPORT.md` remain necessary. Foundry write-back, mechanical stat block
 adapters and v14 support are future work.
 
 The Foundry backup service reads the selected world manifest to locate its User Data folder. It copies that
