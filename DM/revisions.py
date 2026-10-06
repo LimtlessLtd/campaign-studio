@@ -10,17 +10,19 @@ from pathlib import Path
 import campaign
 
 
-def folder(slug):
+def folder(slug, here=None):
+    here = here or campaign.active()
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', slug):
         raise ValueError('Invalid map id.')
-    path = campaign.active().map_folder(slug)
+    path = here.map_folder(slug)
     if not os.path.isdir(path):
         raise ValueError('Map not found.')
     return path
 
 
-def checkpoint(slug, label='Before edit'):
-    source = folder(slug)
+def checkpoint(slug, label='Before edit', here=None):
+    here = here or campaign.active()
+    source = folder(slug, here)
     rid = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-') + os.urandom(3).hex()
     target = os.path.join(source, 'revisions', rid)
     os.makedirs(target)
@@ -29,7 +31,7 @@ def checkpoint(slug, label='Before edit'):
         if os.path.isfile(os.path.join(source, name)):
             shutil.copy2(os.path.join(source, name), os.path.join(target, name))
             files.append(name)
-    brief = campaign.active().map_brief(slug)
+    brief = here.map_brief(slug)
     if os.path.isfile(brief):
         shutil.copy2(brief, os.path.join(target, 'brief.json'))
     preview = ''
@@ -37,7 +39,7 @@ def checkpoint(slug, label='Before edit'):
         if os.path.isfile(os.path.join(source, name)):
             dest = 'preview' + os.path.splitext(name)[1]
             shutil.copy2(os.path.join(source, name), os.path.join(target, dest))
-            preview = campaign.active().relative(os.path.join(target, dest))
+            preview = here.relative(os.path.join(target, dest))
             break
     value = {
         'id': rid,
@@ -51,8 +53,8 @@ def checkpoint(slug, label='Before edit'):
     return value
 
 
-def listing(slug):
-    path = os.path.join(folder(slug), 'revisions')
+def listing(slug, here=None):
+    path = os.path.join(folder(slug, here), 'revisions')
     if not os.path.isdir(path):
         return []
     result = []
@@ -64,11 +66,11 @@ def listing(slug):
     return result
 
 
-def restore(slug, rid, commit):
+def restore(slug, rid, commit, here=None):
     """Checkpoint the current map, then restore its plan, key and brief in one commit."""
     if not re.fullmatch(r'[0-9a-f-]+', rid):
         raise ValueError('Invalid revision id.')
-    source = os.path.join(folder(slug), 'revisions', rid)
+    source = os.path.join(folder(slug, here), 'revisions', rid)
     plan = os.path.join(source, 'plan.txt')
     if not os.path.isfile(plan) and not os.path.isfile(os.path.join(source, 'key.json')):
         raise ValueError('Revision has no saved plan or area key.')
@@ -86,5 +88,5 @@ def restore(slug, rid, commit):
         if os.path.isfile(path):
             with open(path, encoding='utf-8') as f:
                 changes.append((doc, json.load(f)))
-    checkpoint(slug, 'Before restoring ' + rid)
+    checkpoint(slug, 'Before restoring ' + rid, here)
     return commit('Restore ' + slug + ' revision ' + rid, changes)

@@ -606,7 +606,7 @@ def apply_content(wid):
         if value['status'] != 'review':
             raise ValueError('There is no draft awaiting review.')
         workflow.check_base(value)
-        revisions.checkpoint(value['map'], 'Before applying AI content')
+        revisions.checkpoint(value['map'], 'Before applying AI content', campaign.active())
         stocked = {'type': 'mark_stocked', 'slug': value['map']}
         return workflow.apply_content(value, functools.partial(commit_docs, after=[stocked]))
 
@@ -615,7 +615,9 @@ def restore_revision(slug, rid):
     """Restore a map checkpoint and re-render it; recovery re-renders after a crash too."""
     rerender = forge_follow_up(slug, 'Restore ' + slug)
     with LOCK:
-        [job] = revisions.restore(slug, rid, functools.partial(commit_docs, after=[rerender]))
+        [job] = revisions.restore(
+            slug, rid, functools.partial(commit_docs, after=[rerender]), campaign.active()
+        )
     if job is None:
         raise ValueError('The revision was restored, but its render could not be queued.')
     return job
@@ -630,7 +632,7 @@ def apply_layout(wid):
         draft = workflow.validate(value, value['draft'])
         folder = campaign.active().map_folder(slug)
         if os.path.exists(os.path.join(folder, 'plan.txt')):
-            revisions.checkpoint(slug, 'Before AI revision')
+            revisions.checkpoint(slug, 'Before AI revision', campaign.active())
         os.makedirs(folder, exist_ok=True)
         key = read_json(doc_path('mapkey/' + slug))
         if key is None:
