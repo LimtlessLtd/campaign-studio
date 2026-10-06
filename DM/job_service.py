@@ -17,6 +17,15 @@ import config
 import storage
 
 NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
+CANCELLED_NOTE = 'Cancelled.'
+
+
+class JobNotFound(LookupError):
+    pass
+
+
+class JobFinished(RuntimeError):
+    pass
 
 
 class JobService:
@@ -28,6 +37,7 @@ class JobService:
         self.on_restart = on_restart
         self.lanes = {'forge': queue.Queue(), 'claude': queue.Queue(), 'art': queue.Queue()}
         self.running = {}
+        self.cancelled = set()  # ids cancelled while queued or running
 
     def jobs_dir(self):
         return self.campaign().jobs
@@ -84,9 +94,40 @@ class JobService:
             finally:
                 self.lanes[lane].task_done()
 
-    def execute_job(self, job, cmd, stdin_text):
-        job.update(status='running', started=time.time())
+    def cancel(self, job_id):
+        """Stop a queued or running job and settle it as failed with `cancelled` set."""
+        with self.lock:
+            try:
+                with open(self.job_file(job_id), encoding='utf-8') as file:
+                    job = json.load(file)
+            except FileNotFoundError:
+                raise JobNotFound(job_id) from None
+            if job.get('status') not in ('queued', 'running'):
+                raise JobFinished(job_id)
+            if job_id in self.cancelled:
+                return job
+            self.cancelled.add(job_id)
+            if job['status'] == 'running':
+                proc = self.running.get(job_id)
+                if proc:
+                    proc.terminate()
+                # Otherwise execute_job is about to start the process: it stops it and settles the record.
+                return job
+            self.settle_cancelled(job)
+            return job
+
+    def settle_cancelled(self, job):
+        job.update(status='failed', ended=time.time(), note=CANCELLED_NOTE, cancelled=True)
         self.save_job(job)
+        self.on_failure(job, RuntimeError(CANCELLED_NOTE))
+
+    def execute_job(self, job, cmd, stdin_text):
+        with self.lock:
+            if job['id'] in self.cancelled:
+                self.cancelled.discard(job['id'])
+                return  # cancel() already settled it while it was queued
+            job.update(status='running', started=time.time())
+            self.save_job(job)
         with open(self.job_file(job['id'], 'log'), 'w', encoding='utf-8', errors='replace') as log:
             try:
                 proc = subprocess.Popen(
@@ -98,7 +139,10 @@ class JobService:
                     stdin=subprocess.PIPE if stdin_text else subprocess.DEVNULL,
                     creationflags=NO_WINDOW,
                 )
-                self.running[job['id']] = proc
+                with self.lock:
+                    self.running[job['id']] = proc
+                    if job['id'] in self.cancelled:
+                        proc.terminate()
                 if stdin_text:
                     proc.stdin.write(stdin_text.encode('utf-8'))
                     proc.stdin.close()
@@ -107,8 +151,13 @@ class JobService:
                 log.write(f'\ncould not start: {error}\n')
                 code = -1
             finally:
-                self.running.pop(job['id'], None)
+                with self.lock:
+                    self.running.pop(job['id'], None)
         with self.lock:
+            if job['id'] in self.cancelled:
+                self.cancelled.discard(job['id'])
+                self.settle_cancelled(job)
+                return
             tail = self.log_tail(job['id'], 400)
             slug = re.findall(r'^SLUG (\S+)', tail, re.M)
             job.update(status='done' if code == 0 else 'failed', ended=time.time(), returncode=code)

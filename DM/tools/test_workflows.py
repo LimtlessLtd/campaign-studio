@@ -535,6 +535,89 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assert_shaped()
 
+    def test_expand_entry_adds_text_links_and_art_once(self):
+        campaign_core.write_doc(
+            'codex',
+            {
+                'entries': [
+                    shapes.CODEX_ENTRY.new(
+                        id='gate', type='place', name='Harbour Gate', public='A gate.'
+                    )
+                ]
+            },
+        )
+        item = {
+            'id': 'req-expand',
+            'kind': 'expand',
+            'codex': 'gate',
+            'text': 'Expand the gate.',
+            'status': 'new',
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        pack = self.request('/api/requests/req-expand/pack')
+        self.assertIn('Harbour Gate', pack['prompt'])
+        draft = {
+            'summary': 'Gate lore.',
+            'focus': {
+                'public': 'Its lamps burn blue.',
+                'secrets': 'A smuggler tunnel runs beneath.',
+                'image_prompt': 'A lamplit harbour gate at dusk',
+                'links': ['keeper'],
+            },
+            'entries': [
+                {
+                    'id': 'keeper',
+                    'type': 'npc',
+                    'name': 'Gate Keeper',
+                    'public': 'Sour.',
+                    'secrets': '',
+                    'notes': '',
+                    'image_prompt': '',
+                }
+            ],
+            'threads': [],
+            'scenes': [],
+            'handouts': [],
+            'goals': [],
+            'loot': [],
+            'checklist': [],
+            'notes': '',
+        }
+        broken = {**draft, 'focus': {**draft['focus'], 'links': ['nobody']}}
+        self.request('/api/requests/req-expand/stage', {'draft': broken}, expected=400)
+        self.request('/api/requests/req-expand/stage', {'draft': draft})
+        self.request('/api/requests/req-expand/apply', {})
+        entries = {
+            e['id']: e for e in campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+        }
+        self.assertEqual(entries['gate']['public'], 'A gate.\n\nIts lamps burn blue.')
+        self.assertEqual(entries['gate']['related'], ['req-expand-keeper'])
+        self.assertEqual(entries['req-expand-keeper']['related'], ['gate'])
+        art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
+        self.assertEqual([(a['id'], a['codex']) for a in art], [('art-req-expand-focus', 'gate')])
+        # A second pass over the same request, as after a crash, adds nothing further.
+        codex = campaign_core.read_json(campaign_core.doc_path('codex'))
+        request_workflow.expand_entry(codex, item, draft['focus'], 'req-expand-', {'keeper'})
+        self.assertEqual(codex['entries'][0]['public'], 'A gate.\n\nIts lamps burn blue.')
+        self.assert_shaped()
+
+    def test_focus_content_needs_an_expand_request(self):
+        campaign_core.write_doc(
+            'inbox', {'items': [{'id': 'req-n', 'kind': 'npc', 'text': 'x', 'status': 'new'}]}
+        )
+        draft = self.request_proposal()
+        draft['focus'] = {'public': 'x', 'secrets': '', 'image_prompt': '', 'links': []}
+        self.request('/api/requests/req-n/stage', {'draft': draft}, expected=400)
+
+    def test_expand_proposal_for_a_deleted_entry_is_rejected(self):
+        campaign_core.write_doc('codex', {'entries': []})
+        item = {'id': 'req-gone', 'kind': 'expand', 'codex': 'gate', 'text': 'x', 'status': 'new'}
+        campaign_core.write_doc('inbox', {'items': [item]})
+        draft = self.request_proposal()
+        draft['entries'] = []
+        draft['focus'] = {'public': '', 'secrets': '', 'image_prompt': 'A gate.', 'links': []}
+        self.request('/api/requests/req-gone/stage', {'draft': draft}, expected=400)
+
     def test_general_request_validation_and_stale_source(self):
         campaign_core.write_doc('prep/s1', {'scenes': [], 'goals': []})
         item = {

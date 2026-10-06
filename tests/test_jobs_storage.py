@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +18,7 @@ import campaign
 import campaign_core as core
 import storage
 from campaign import Campaign
+import job_service
 from job_service import JobService
 
 
@@ -69,6 +71,63 @@ class JobsStorageTests(unittest.TestCase):
             self.assertEqual(saved['slug'], 'fixture')
             self.assertEqual(saved['returncode'], 0)
             self.assertEqual(finished, [(job['id'], 0, 'SLUG fixture\n')])
+
+    def make_service(self, temporary, failures):
+        return JobService(
+            lambda: Campaign(os.path.join(temporary, 'DM')),
+            threading.RLock(),
+            lambda *_: None,
+            lambda job, error: failures.append((job['id'], str(error))),
+            lambda *_: None,
+        )
+
+    def test_cancel_queued_job_settles_it_and_worker_skips_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            failures = []
+            service = self.make_service(temporary, failures)
+            job = service.new_job('forge', 'fixture', 'Cancel me', [sys.executable, '-c', 'pass'])
+            service.cancel(job['id'])
+            queued_job, cmd, stdin = service.lanes['forge'].get_nowait()
+            service.execute_job(queued_job, cmd, stdin)
+
+            saved = json.loads(Path(service.job_file(job['id'])).read_text())
+            self.assertEqual((saved['status'], saved['cancelled']), ('failed', True))
+            self.assertEqual(failures, [(job['id'], 'Cancelled.')])
+            self.assertFalse(Path(service.job_file(job['id'], 'log')).exists())
+            self.assertEqual(service.cancelled, set())
+
+    def test_cancel_running_job_terminates_the_process(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            failures = []
+            service = self.make_service(temporary, failures)
+            job = service.new_job(
+                'forge', 'fixture', 'Sleep', [sys.executable, '-c', 'import time; time.sleep(60)']
+            )
+            queued_job, cmd, stdin = service.lanes['forge'].get_nowait()
+            thread = threading.Thread(target=service.execute_job, args=(queued_job, cmd, stdin))
+            thread.start()
+            deadline = time.time() + 20
+            while job['id'] not in service.running and time.time() < deadline:
+                time.sleep(0.05)
+            service.cancel(job['id'])
+            thread.join(30)
+
+            self.assertFalse(thread.is_alive())
+            saved = json.loads(Path(service.job_file(job['id'])).read_text())
+            self.assertEqual((saved['status'], saved['cancelled']), ('failed', True))
+            self.assertEqual(failures, [(job['id'], 'Cancelled.')])
+            self.assertEqual(service.running, {})
+
+    def test_cancel_rejects_unknown_and_finished_jobs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            service = self.make_service(temporary, [])
+            with self.assertRaises(job_service.JobNotFound):
+                service.cancel('missing')
+            job = service.new_job('art', 'fixture', 'Done', [])
+            job['status'] = 'done'
+            service.save_job(job)
+            with self.assertRaises(job_service.JobFinished):
+                service.cancel(job['id'])
 
     def test_worker_survives_result_processing_failure(self):
         lane = queue.Queue()

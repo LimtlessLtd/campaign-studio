@@ -17,6 +17,7 @@ import foundry_library
 import foundry_upgrade
 import maps_io
 import packaging_source
+import job_service
 import remote_access
 import request_workflow
 import revisions
@@ -32,6 +33,7 @@ from campaign_core import (
     apply_content,
     apply_layout,
     campaign_path,
+    cancel_job,
     commit_docs,
     doc_path,
     editable_doc_path,
@@ -111,6 +113,10 @@ ROUTES = {
         (lambda path: path == '/api/foundry/upgrade/review-clone', '_post_review_clone'),
         (lambda path: path == '/api/foundry/upgrade/audit-migration', '_post_audit_migration'),
         (lambda path: path == '/api/foundry/upgrade/review-cutover', '_post_review_cutover'),
+        (
+            lambda path: path.startswith('/api/jobs/') and path.endswith('/cancel'),
+            '_post_cancel_job',
+        ),
         (lambda path: path.startswith('/api/requests/'), '_post_request'),
         (lambda path: path == '/api/maps/import', '_post_map_import'),
         (lambda path: path == '/api/settings', '_post_settings'),
@@ -466,6 +472,17 @@ class Handler(SimpleHTTPRequestHandler):
         if not job:
             raise NotFound('no such job')
         return self.send_json(dict(job, log=log_tail(job_id)))
+
+    def _post_cancel_job(self, path, query, p):
+        job_id = path[len('/api/jobs/') : -len('/cancel')]
+        if not re.fullmatch(r'[0-9a-f-]+', job_id):
+            raise Invalid('bad job id')
+        try:
+            return self.send_json(cancel_job(job_id))
+        except job_service.JobNotFound:
+            raise NotFound('no such job') from None
+        except job_service.JobFinished:
+            raise Conflict('That job has already finished.') from None
 
     def _get_images(self, path, query, p):
         return self.send_json(list_images(query.get('dir', ['Handouts'])[0]))
