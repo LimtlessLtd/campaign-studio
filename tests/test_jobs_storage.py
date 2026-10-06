@@ -126,12 +126,16 @@ class JobsStorageTests(unittest.TestCase):
         )
         self.assertEqual(job_service.parse_progress('PROGRESS 250%')['percent'], 100)
         self.assertEqual(job_service.parse_progress('PROGRESS 0/0')['percent'], 0)
+        self.assertIsNone(job_service.parse_progress('PROGRESS ' + '9' * 5000 + '%'))
         with tempfile.TemporaryDirectory() as temporary:
             service = self.make_service(temporary, [])
             script = "print('PROGRESS 2/5 half', flush=True)"
             job = service.new_job('forge', 'fixture', 'Report', [sys.executable, '-c', script])
             queued_job, cmd, stdin = service.lanes['forge'].get_nowait()
             service.execute_job(queued_job, cmd, stdin)
+            self.assertEqual(service.progress(job['id']), {'percent': 40, 'label': 'half'})
+            with open(service.job_file(job['id'], 'log'), 'a', encoding='utf-8') as log:
+                log.write('more work\n' * 250)
             self.assertEqual(service.progress(job['id']), {'percent': 40, 'label': 'half'})
 
     def test_cancel_rejects_unknown_and_finished_jobs(self):

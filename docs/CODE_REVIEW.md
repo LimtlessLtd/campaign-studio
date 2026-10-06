@@ -70,6 +70,11 @@ gate checks capacity under its lock. This can temporarily delay a legitimate new
 have recently failed. An oversized login form could also reset the response connection on Windows while
 the request body remained unread; modest oversized forms are now drained before the 400 response.
 
+Review of PR #30 found no confirmed bugs or design faults. Review of PR #35 found that map painting still
+printed bare percentages, which its new progress parser ignored, so the visible map job bar stopped
+advancing. The renderer now emits explicit progress reports. The progress reader also retains the latest
+report after more than 200 later log lines and ignores oversized numeric reports.
+
 ### Fixed in this review
 
 | Finding                                                                                    | Resolution                                                                          |

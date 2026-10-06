@@ -4,6 +4,7 @@ python DM/tools/test_workflows.py
 """
 
 import base64
+import contextlib
 import copy
 import io
 import json
@@ -743,7 +744,11 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(key['areas'][0]['name'], 'Lodge')
         self.assert_shaped()
         self.assertEqual(campaign_core.JOURNAL.entries(), [])
-        forge.forge(str(folder / 'plan.txt'), foundry_copy=False, jobs=1)
+        render_log = io.StringIO()
+        with contextlib.redirect_stdout(render_log):
+            forge.forge(str(folder / 'plan.txt'), foundry_copy=False, jobs=1)
+        self.assertIn('PROGRESS 100% complete', render_log.getvalue())
+        self.assertIn('% painting', render_log.getvalue())
         self.assertTrue((folder / 'fixture-layout.webp').is_file())
         scene = json.loads((folder / 'fixture-layout.foundry.json').read_text())
         self.assertTrue(scene['walls'])
