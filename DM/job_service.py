@@ -19,7 +19,7 @@ import storage
 NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 CANCELLED_NOTE = 'Cancelled.'
 # A child process reports progress by printing `PROGRESS 3/10 label` or `PROGRESS 40% label`.
-PROGRESS_LINE = re.compile(r'^PROGRESS (?:(\d+)/(\d+)|(\d+)%)(?: (.*))??$', re.M)
+PROGRESS_LINE = re.compile(r'^PROGRESS (?:(\d+)/(\d+)|(\d+)%)(?: (.*))?\r?$', re.M)
 
 
 def parse_progress(text):
