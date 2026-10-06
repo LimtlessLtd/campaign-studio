@@ -22,6 +22,43 @@ import job_service
 from job_service import JobService
 
 
+class FakeProcess:
+    def __init__(self, code, output, hold=False):
+        self.code, self.output, self.terminated = code, output, False
+        self.release = threading.Event()
+        if not hold:
+            self.release.set()
+
+    def feed(self, text):
+        self.fed = text
+
+    def wait(self):
+        self.release.wait(20)
+        return self.code
+
+    def terminate(self):
+        self.terminated = True
+        self.release.set()
+
+
+class FakeRunner:
+    """Replays scripted outcomes: a FakeProcess to start, or an exception to raise."""
+
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.fed = []
+
+    def start(self, cmd, cwd, env, log, has_stdin):
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        log.write(outcome.output)
+        log.flush()
+        feed = outcome.feed
+        outcome.feed = lambda text: (self.fed.append(text), feed(text))
+        return outcome
+
+
 class JobsStorageTests(unittest.TestCase):
     def test_restart_fails_only_unfinished_jobs_once(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -102,14 +139,71 @@ class JobsStorageTests(unittest.TestCase):
             self.assertEqual(saved['returncode'], 0)
             self.assertEqual(finished, [(job['id'], 0, 'SLUG fixture\n')])
 
-    def make_service(self, temporary, failures):
+    def make_service(self, temporary, failures, runner=None):
         return JobService(
             lambda: Campaign(os.path.join(temporary, 'DM')),
             threading.RLock(),
             lambda *_: None,
             lambda job, error: failures.append((job['id'], str(error))),
             lambda *_: None,
+            runner,
         )
+
+    def test_a_fake_provider_stands_in_for_the_subprocess(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            finished = []
+            runner = FakeRunner([FakeProcess(0, 'SLUG made\n'), FakeProcess(3, 'boom\n')])
+            service = self.make_service(temporary, [], runner)
+            service.on_finish = lambda job, code, tail: finished.append((job['id'], code, tail))
+
+            ok = service.new_job('forge', 'fixture', 'Works', ['a'], 'prompt')
+            service.execute_job(*service.lanes['forge'].get_nowait())
+            bad = service.new_job('forge', 'fixture', 'Fails', ['b'])
+            service.execute_job(*service.lanes['forge'].get_nowait())
+
+            saved = lambda job: json.loads(Path(service.job_file(job['id'])).read_text())
+            self.assertEqual((saved(ok)['status'], saved(ok)['slug']), ('done', 'made'))
+            self.assertEqual((saved(bad)['status'], saved(bad)['returncode']), ('failed', 3))
+            self.assertEqual(runner.fed, ['prompt'])
+            self.assertEqual([entry[1] for entry in finished], [0, 3])
+
+    def test_a_provider_that_cannot_start_fails_the_job_and_a_retry_can_succeed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runner = FakeRunner([OSError('no such provider'), FakeProcess(0, '')])
+            service = self.make_service(temporary, [], runner)
+
+            first = service.new_job('claude', 'fixture', 'Try', ['x'])
+            service.execute_job(*service.lanes['claude'].get_nowait())
+            retry = service.new_job('claude', 'fixture', 'Try again', ['x'])
+            service.execute_job(*service.lanes['claude'].get_nowait())
+
+            failed = json.loads(Path(service.job_file(first['id'])).read_text())
+            self.assertEqual((failed['status'], failed['returncode']), ('failed', -1))
+            self.assertIn('no such provider', service.log_tail(first['id']))
+            self.assertEqual(
+                json.loads(Path(service.job_file(retry['id'])).read_text())['status'], 'done'
+            )
+            self.assertEqual(service.running, {})
+
+    def test_cancelling_a_fake_provider_job_terminates_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            failures = []
+            hung = FakeProcess(0, '', hold=True)
+            service = self.make_service(temporary, failures, FakeRunner([hung]))
+            job = service.new_job('art', 'fixture', 'Hang', ['x'])
+            thread = threading.Thread(
+                target=service.execute_job, args=service.lanes['art'].get_nowait()
+            )
+            thread.start()
+            deadline = time.time() + 20
+            while job['id'] not in service.running and time.time() < deadline:
+                time.sleep(0.02)
+            service.cancel(job['id'])
+            thread.join(20)
+
+            self.assertFalse(thread.is_alive())
+            self.assertTrue(hung.terminated)
+            self.assertEqual(failures, [(job['id'], 'Cancelled.')])
 
     def test_cancel_queued_job_settles_it_and_worker_skips_it(self):
         with tempfile.TemporaryDirectory() as temporary:
