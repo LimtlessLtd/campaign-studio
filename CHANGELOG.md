@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Large pushed snapshots:** an exported or live Foundry snapshot with more than 5,000 documents of one kind is now
+  trimmed to a stable subset and reported as omitted, as the world-folder reader does, instead of being rejected.
 - **Live World Library:** a GM-run Script macro opens a paired Studio tab. Approve it there to read the
   running Foundry client's permitted documents; later Foundry changes prompt an explicit refresh. Snapshots
   retain world provenance and use the existing Studio-edit conflict rule. No Foundry documents are written.
