@@ -32,20 +32,21 @@ import storage
 FOUNDRY_DIR = 'wotg-maps'
 
 
-def key_for_foundry(slug, key, copy_art=True):
+def key_for_foundry(slug, key, copy_art=True, here=None):
     """Snapshot linked codex entries and local art into the private GM journal export."""
     if not key:
         return None
+    here = here or campaign.active()
     result = deepcopy(key)
-    codex_path = os.path.join(campaign.active().data, 'codex.json')
+    codex_path = os.path.join(here.data, 'codex.json')
     if os.path.exists(codex_path):
         with open(codex_path, encoding='utf-8') as f:
             codex = json.load(f)
     else:
         codex = {'entries': []}
     entries = {e['id']: e for e in codex.get('entries', [])}
-    files = os.path.realpath(campaign.active().files)
-    foundry_data = config.foundry_data()
+    files = os.path.realpath(here.files)
+    foundry_data = config.foundry_data(here)
     art_dir = os.path.join(foundry_data, FOUNDRY_DIR, slug, 'art')
 
     def art_path(path):
@@ -562,8 +563,8 @@ def write_foundry_index(target):
         storage.atomic_json(path, [dict(slug=slug, name=names[slug]) for slug in listing])
 
 
-def update_index(entry):
-    path = campaign.active().map_index
+def update_index(entry, here=None):
+    path = (here or campaign.active()).map_index
 
     def upsert(index):
         index['items'] = [e for e in index['items'] if e['slug'] != entry['slug']] + [entry]
@@ -572,7 +573,8 @@ def update_index(entry):
     storage.update_json(path, {'items': []}, upsert)
 
 
-def forge(plan_path, foundry_copy=True, jobs=None):
+def forge(plan_path, foundry_copy=True, jobs=None, here=None):
+    here = here or campaign.active()
     plan_path = os.path.abspath(plan_path)
     folder = os.path.dirname(plan_path)
     meta, cells = parse_plan(Path(plan_path).read_text(encoding='utf-8'))
@@ -608,11 +610,13 @@ def forge(plan_path, foundry_copy=True, jobs=None):
     key = os.path.join(folder, 'key.json')
     key_data = json.loads(Path(key).read_text(encoding='utf-8')) if os.path.exists(key) else None
     if key_data:  # the DM key: numbered areas, loot and events, for the journal and map pins
-        v12['flags']['world']['wotgForge']['key'] = key_for_foundry(slug, key_data, foundry_copy)
+        v12['flags']['world']['wotgForge']['key'] = key_for_foundry(
+            slug, key_data, foundry_copy, here
+        )
     storage.atomic_json(out('.foundry.json'), v12)
     storage.atomic_json(out('.da.json'), da)
     copied = False
-    foundry_data = config.foundry_data()
+    foundry_data = config.foundry_data(here)
     if foundry_copy and os.path.isdir(foundry_data):
         target = os.path.join(foundry_data, FOUNDRY_DIR)
         os.makedirs(target, exist_ok=True)
@@ -631,7 +635,7 @@ def forge(plan_path, foundry_copy=True, jobs=None):
             shutil.copytree(out('.roofs'), roof_dir)
         write_foundry_index(target)
         copied = True
-    rel = lambda p: os.path.relpath(p, campaign.active().files).replace('\\', '/')
+    rel = lambda p: os.path.relpath(p, here.files).replace('\\', '/')
     counts = dict(
         walls=sum(1 for s in segments if s['kind'] in ('wall', 'hedge')),
         doors=sum(1 for s in segments if 'door' in s['kind']),
@@ -659,7 +663,8 @@ def forge(plan_path, foundry_copy=True, jobs=None):
             stocked=bool((key_data or {}).get('stocked')),
             updated=datetime.datetime.now().isoformat(timespec='seconds'),
             **counts,
-        )
+        ),
+        here,
     )
     print(
         f'{meta["name"]}: {len(cells[0])}x{len(cells)} cells, '
@@ -669,7 +674,7 @@ def forge(plan_path, foundry_copy=True, jobs=None):
     print('PROGRESS 100% complete', flush=True)
 
 
-def key_only(plan_path):
+def key_only(plan_path, here=None):
     """Put an edited DM key into the already-forged scene (and Foundry's copy) without repainting."""
     folder = os.path.dirname(os.path.abspath(plan_path))
     slug = os.path.basename(folder)
@@ -681,13 +686,14 @@ def key_only(plan_path):
     key = (
         json.loads(Path(key_path).read_text(encoding='utf-8')) if os.path.exists(key_path) else None
     )
-    scene['flags']['world']['wotgForge']['key'] = key_for_foundry(slug, key)
+    here = here or campaign.active()
+    scene['flags']['world']['wotgForge']['key'] = key_for_foundry(slug, key, here=here)
     storage.atomic_json(scene_path, scene)
-    foundry_data = config.foundry_data()
+    foundry_data = config.foundry_data(here)
     target = os.path.join(foundry_data, FOUNDRY_DIR)
     if foundry_data and os.path.isdir(target):
         shutil.copy2(scene_path, os.path.join(target, slug + '.json'))
-    index = campaign.active().map_index
+    index = here.map_index
     if os.path.exists(index) and key:
 
         def annotate(data):
