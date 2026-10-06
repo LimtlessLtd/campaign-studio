@@ -202,6 +202,8 @@ def validate(item, draft, read_doc):
     }
     proposed_npcs = {row['id'] for row in draft['entries'] if row['type'] in ('npc', 'monster')}
     known = {entry['id'] for entry in codex_entries(read_doc)}
+    if any(focus.values()) and item.get('codex') not in known:
+        raise ValueError('The codex entry to expand no longer exists.')
     if any(link not in known and link not in proposed for link in focus['links']):
         raise ValueError('The focus entry links to an unknown entry.')
     for scene in draft['scenes']:
