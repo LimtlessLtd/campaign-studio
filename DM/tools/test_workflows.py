@@ -609,6 +609,15 @@ class StudioIntegration(unittest.TestCase):
         draft['focus'] = {'public': 'x', 'secrets': '', 'image_prompt': '', 'links': []}
         self.request('/api/requests/req-n/stage', {'draft': draft}, expected=400)
 
+    def test_expand_proposal_for_a_deleted_entry_is_rejected(self):
+        campaign_core.write_doc('codex', {'entries': []})
+        item = {'id': 'req-gone', 'kind': 'expand', 'codex': 'gate', 'text': 'x', 'status': 'new'}
+        campaign_core.write_doc('inbox', {'items': [item]})
+        draft = self.request_proposal()
+        draft['entries'] = []
+        draft['focus'] = {'public': '', 'secrets': '', 'image_prompt': 'A gate.', 'links': []}
+        self.request('/api/requests/req-gone/stage', {'draft': draft}, expected=400)
+
     def test_general_request_validation_and_stale_source(self):
         campaign_core.write_doc('prep/s1', {'scenes': [], 'goals': []})
         item = {

@@ -107,9 +107,11 @@ class JobService:
             if job_id in self.cancelled:
                 return job
             self.cancelled.add(job_id)
-            proc = self.running.get(job_id)
-            if proc:
-                proc.terminate()  # execute_job settles the record when the process exits
+            if job['status'] == 'running':
+                proc = self.running.get(job_id)
+                if proc:
+                    proc.terminate()
+                # Otherwise execute_job is about to start the process: it stops it and settles the record.
                 return job
             self.settle_cancelled(job)
             return job
