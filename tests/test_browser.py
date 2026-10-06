@@ -200,6 +200,37 @@ class BrowserSmoke(unittest.TestCase):
             (area['name'], area['text']), ('Lantern landing', 'Fog hangs over the water.')
         )
 
+    def test_cutover_review_shows_the_manual_switch_path(self):
+        requests = []
+
+        def cutover_response(route):
+            requests.append(route.request.post_data_json)
+            route.fulfill(
+                status=200,
+                content_type='application/json',
+                body=json.dumps(
+                    {
+                        'target_build': '13.351',
+                        'world_id': 'fixture-world',
+                        'clone_path': '/synthetic/clone',
+                        'original_user_data': '/synthetic/original',
+                        'backup_path': '/synthetic/backup',
+                        'review_path': '/synthetic/backup/cutover-review.json',
+                    }
+                ),
+            )
+
+        self.page.route('**/api/foundry/upgrade/review-cutover', cutover_response)
+        self.open('#/settings')
+        self.page.get_by_label('Passing migrated-clone audit').fill('/synthetic/backup/audit.json')
+        self.page.get_by_label('I closed both Foundry installations').check()
+        self.page.get_by_role('button', name='Review cutover readiness').click()
+        expect(self.page.get_by_role('heading', name='Ready for manual cutover')).to_be_visible()
+        expect(self.page.get_by_text('Use this User Data path: /synthetic/clone')).to_be_visible()
+        self.assertEqual(
+            requests, [{'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}]
+        )
+
     def test_proposal_review_applies_to_the_campaign(self):
         slug, brief = self.studio.import_map()
         workflow.stage(workflow.create(slug, brief), self.studio.proposal())

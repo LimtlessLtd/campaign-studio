@@ -112,6 +112,7 @@ ROUTES = {
         (lambda path: path == '/api/foundry/upgrade/prepare-clone', '_post_prepare_clone'),
         (lambda path: path == '/api/foundry/upgrade/review-clone', '_post_review_clone'),
         (lambda path: path == '/api/foundry/upgrade/audit-migration', '_post_audit_migration'),
+        (lambda path: path == '/api/foundry/upgrade/review-cutover', '_post_review_cutover'),
         (
             lambda path: path.startswith('/api/jobs/') and path.endswith('/cancel'),
             '_post_cancel_job',
@@ -649,6 +650,11 @@ class Handler(SimpleHTTPRequestHandler):
                 p.get('confirmed_clone') is True,
                 p.get('manual_checks'),
             )
+        )
+
+    def _post_review_cutover(self, path, query, p):
+        return self.send_json(
+            foundry_upgrade.review_cutover(p.get('audit_path'), p.get('confirmed_closed') is True)
         )
 
     def _post_request(self, path, query, p):

@@ -918,6 +918,22 @@ class StudioIntegration(unittest.TestCase):
             )
             self.assertEqual(audit['status'], 'reviewed')
             self.assertFalse(audit['cutover_ready'])
+            cutover_payload = {'audit_path': audit['audit_path'], 'confirmed_closed': True}
+            self.request(
+                '/api/foundry/upgrade/review-cutover',
+                cutover_payload,
+                expected=403,
+                writable=False,
+            )
+            self.request(
+                '/api/foundry/upgrade/review-cutover',
+                {'audit_path': audit['audit_path']},
+                expected=400,
+            )
+            cutover = self.request('/api/foundry/upgrade/review-cutover', cutover_payload)
+            self.assertEqual(cutover['status'], 'ready_for_manual_cutover')
+            self.assertTrue(cutover['cutover_ready'])
+            self.assertTrue(Path(cutover['review_path']).is_file())
 
     def test_first_run_world_picker_and_read_only_library(self):
         user_data = self.root / 'Foundry User Data'
