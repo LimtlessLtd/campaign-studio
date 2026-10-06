@@ -141,13 +141,13 @@ scenes, map keys and areas; schema 2 completed every shaped record. Adding a fie
 
 ## Workflows and jobs
 
-| Object       | States                                                           |
-| ------------ | ---------------------------------------------------------------- |
-| Workflow     | queued/ready → running → review → applied; failed can be retried |
-| Request      | new → doing → review → done; interrupted drafts return to new    |
-| Job          | queued → running → done or failed                                |
-| Image brief  | queued → generating → ready or failed                            |
-| Story thread | open, planned, foreshadowed, resolved (GM managed)               |
+| Object       | States                                                                   |
+| ------------ | ------------------------------------------------------------------------ |
+| Workflow     | queued/ready → running → review → applied; failed can be retried         |
+| Request      | new → doing → review → done; interrupted drafts return to new            |
+| Job          | queued → running → done or failed (cancelled jobs fail, `cancelled` set) |
+| Image brief  | queued → generating → ready or failed                                    |
+| Story thread | open, planned, foreshadowed, resolved (GM managed)                       |
 
 Layout/content proposals are validated against a bounded schema. Layout fingerprints cover plan bytes
 and numbered location identities/coordinates; changes make old proposals stale. They do not fingerprint
@@ -162,6 +162,8 @@ process transitions; application callbacks settle image, workflow and inbox docu
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
 worker available. On restart, the server checks the data schema, completes interrupted changes and migrates
 before saved unfinished jobs are marked failed; the queue does not automatically resume.
+`POST /api/jobs/<id>/cancel` fails a queued job at once and terminates a running one; either way the
+owning workflow, image brief or request is settled through the normal failure callback.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 

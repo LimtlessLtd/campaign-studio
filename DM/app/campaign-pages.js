@@ -426,6 +426,17 @@ function jobBox(job, signal) {
       j.status === 'done' && j.slug
         ? h('a', { class: 'btn', href: '#/maps/' + j.slug }, 'Open the map →')
         : null,
+      j.status === 'running' || j.status === 'queued'
+        ? h(
+            'button',
+            {
+              class: 'btn',
+              onclick: () =>
+                post('/api/jobs/' + j.id + '/cancel').then(draw, (e) => toast(e.message, true)),
+            },
+            'Cancel',
+          )
+        : null,
     );
     if ((j.status === 'running' || j.status === 'queued') && box.isConnected)
       setTimeout(draw, 1500);

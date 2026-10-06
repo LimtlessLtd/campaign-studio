@@ -414,6 +414,7 @@ job_file = JOBS_SERVICE.job_file
 save_job = JOBS_SERVICE.save_job
 new_job = JOBS_SERVICE.new_job
 worker = JOBS_SERVICE.worker
+cancel_job = JOBS_SERVICE.cancel
 execute_job = JOBS_SERVICE.execute_job
 log_tail = JOBS_SERVICE.log_tail
 list_jobs = JOBS_SERVICE.list_jobs

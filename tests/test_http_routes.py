@@ -63,6 +63,17 @@ class RouteTests(unittest.TestCase):
             status, _, _ = self.request('/api/maps/fixture/export', 'POST')
         self.assertEqual(status, 409)
 
+    def test_cancel_route_distinguishes_bad_missing_and_finished_jobs(self):
+        status, _, _ = self.request('/api/jobs/NOT-HEX/cancel', 'POST')
+        self.assertEqual(status, 400)
+        status, _, _ = self.request('/api/jobs/abc-123/cancel', 'POST')
+        self.assertEqual(status, 404)
+        job = http_routes.new_job('art', 'fixture', 'Queued', [])
+        status, body, _ = self.request(f'/api/jobs/{job["id"]}/cancel', 'POST')
+        self.assertEqual((status, body['status'], body['cancelled']), (200, 'failed', True))
+        status, _, _ = self.request(f'/api/jobs/{job["id"]}/cancel', 'POST')
+        self.assertEqual(status, 409)
+
     def test_stale_document_conflict_still_returns_latest_revision_and_document(self):
         status, _, headers = self.request('/api/doc/codex', 'PUT', {'entries': []})
         self.assertEqual(status, 200)
