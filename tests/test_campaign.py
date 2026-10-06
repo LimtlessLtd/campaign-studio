@@ -14,6 +14,7 @@ import campaign
 import campaign_core
 import config
 import maps_io
+import revisions
 
 sys.path.insert(0, str(ROOT / 'DM' / 'forge'))
 import forge
@@ -79,6 +80,20 @@ class CampaignTests(unittest.TestCase):
         self.assertIn('Given Ogre', json.dumps(snapshot))
         self.assertEqual(json.loads(Path(other.map_index).read_text())['items'][0]['slug'], 'hall')
         self.assertFalse(Path(self.studio.map_index).exists())
+
+    def test_revisions_use_the_campaign_they_are_given(self):
+        other = campaign.Campaign(Path(self.temp.name) / 'Other')
+        folder = Path(other.map_folder('keep'))
+        folder.mkdir(parents=True)
+        (folder / 'plan.txt').write_text('plan')
+        with campaign.using(self.studio):
+            made = revisions.checkpoint('keep', 'Saved', other)
+            listed = revisions.listing('keep', other)
+            with self.assertRaises(ValueError):
+                revisions.listing('keep')
+        self.assertEqual([r['id'] for r in listed], [made['id']])
+        self.assertTrue((folder / 'revisions' / made['id'] / 'plan.txt').is_file())
+        self.assertFalse(Path(self.studio.map_folder('keep')).exists())
 
     def test_jobs_run_in_the_campaign_that_started_them(self):
         Path(self.studio.settings).write_text(json.dumps({'campaign_name': 'Elsewhere'}))
