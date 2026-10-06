@@ -349,6 +349,56 @@ class BrowserSmoke(unittest.TestCase):
         self.page.get_by_role('link', name='Open battle map').click()
         expect(self.page).to_have_url(re.compile('#/maps/' + slug))
 
+    def test_phone_can_place_and_adjust_pins_without_dragging(self):
+        slug, _brief = self.studio.import_map()
+        phone = browser.new_context(viewport=NARROW, is_mobile=True, has_touch=True)
+        self.addCleanup(phone.close)
+        page = phone.new_page()
+        page.on('pageerror', lambda error: self.errors.append(str(error)))
+        page.goto(self.studio.url + '/#/world')
+        page.get_by_role('button', name='Add a world map').tap()
+        page.get_by_label('Name', exact=True).fill('Phone realm')
+        page.locator('dialog input[type=file]').set_input_files(
+            {'name': 'realm.png', 'mimeType': 'image/png', 'buffer': PNG}
+        )
+        expect(page.get_by_text('Image uploaded.')).to_be_visible()
+        page.get_by_role('button', name='Add world map').tap()
+
+        page.get_by_role('button', name='Add pin').tap()
+        expect(page.get_by_text('Tap the map to place the pin.')).to_be_visible()
+        page.locator('.map-stage img').tap(position={'x': 50, 'y': 50})
+        expect(page.get_by_role('button', name='Pin 1: unnamed')).to_be_visible()
+        page.get_by_label('Place name').fill('Quay')
+        page.get_by_label('Battle map').select_option(slug)
+        page.get_by_role('button', name='Move pin', exact=True).tap()
+        page.get_by_role('button', name='Place at center').tap()
+        page.get_by_role('button', name='Move pin right one percent').tap()
+        expect(page.locator('#saved')).to_contain_text('Saved')
+        pin = self.stored('world-maps')['maps'][0]['pins'][0]
+        self.assertAlmostEqual(pin['x'], 0.51)
+        self.assertAlmostEqual(pin['y'], 0.5)
+
+        for control in [
+            page.get_by_role('button', name='Pin 1: Quay'),
+            page.get_by_role('button', name='Move pin right one percent'),
+            page.locator('#side nav a[data-nav="maps"]'),
+        ]:
+            box = control.bounding_box()
+            self.assertGreaterEqual(box['width'], 44, control.inner_text())
+            self.assertGreaterEqual(box['height'], 44, control.inner_text())
+        overflow = page.evaluate(
+            'document.documentElement.scrollWidth - document.documentElement.clientWidth'
+        )
+        self.assertLessEqual(overflow, 0)
+
+        page.goto(self.studio.url + '/#/maps/' + slug)
+        page.get_by_role('button', name='Add location').tap()
+        page.locator('.map-stage img').tap(position={'x': 35, 'y': 35})
+        page.get_by_label('Location name').fill('Harbor')
+        page.get_by_role('button', name='Add location').last.tap()
+        expect(page.locator('#saved')).to_contain_text('Saved')
+        self.assertIn('Harbor', [area['name'] for area in self.stored('mapkey/' + slug)['areas']])
+
     def test_narrow_navigation_reaches_every_page(self):
         self.page.set_viewport_size(NARROW)
         self.open('#/')

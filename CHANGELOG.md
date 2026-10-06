@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Phone editing:** world-map pins can be placed at the center and adjusted in one-percent steps without dragging.
+  Map pins and common controls have larger touch targets at phone widths; a touch-emulated Chromium flow checks
+  world and battle-map placement. The README now gives a Caddy local-certificate HTTPS setup for phone access.
 - **Large pushed snapshots:** an exported or live Foundry snapshot with more than 5,000 documents of one kind is now
   trimmed to a stable subset and reported as omitted, as the world-folder reader does, instead of being rejected.
 - **Live World Library:** a GM-run Script macro opens a paired Studio tab. Approve it there to read the

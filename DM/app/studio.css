@@ -1792,6 +1792,29 @@ hr {
   display: grid;
   gap: 12px;
 }
+.world-nudge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 700px), (pointer: coarse) {
+  button,
+  .btn,
+  input,
+  select,
+  #side nav a {
+    min-height: 44px;
+  }
+  .studio-canvas .map-pin {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    font-size: 15px;
+  }
+  .world-nudge button {
+    min-width: 64px;
+  }
+}
 @media (max-width: 800px) {
   .world-layout {
     grid-template-columns: minmax(0, 1fr);

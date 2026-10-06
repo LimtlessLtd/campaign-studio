@@ -21,6 +21,19 @@ async function worldPage(arg, context) {
   const viewport = h('div', { class: 'map-viewport' }, stage);
   const inspector = h('div', { class: 'world-inspector' });
 
+  const placePin = (x, y) => {
+    if (state.placing === 'new') {
+      const pin = blank('world_pin', { id: uid('pin'), x, y });
+      current.pins.push(pin);
+      state.pin = pin.id;
+    } else if (state.placing === 'move' && pinOf()) {
+      Object.assign(pinOf(), { x, y });
+    } else return;
+    state.placing = false;
+    save(WORLD_DOC);
+    draw();
+  };
+
   const drawStage = () => {
     viewport.classList.toggle('placing', !!state.placing);
     render(
@@ -51,16 +64,9 @@ async function worldPage(arg, context) {
     );
   };
   stage.addEventListener('click', (e) => {
-    if (!state.placing) return;
+    if (!state.placing || e.target.closest('.map-pin')) return;
     const [x, y] = unitAt(e, stage.getBoundingClientRect());
-    if (state.placing === 'new') {
-      const pin = blank('world_pin', { id: uid('pin'), x, y });
-      current.pins.push(pin);
-      state.pin = pin.id;
-    } else Object.assign(pinOf(), { x, y });
-    state.placing = false;
-    save(WORLD_DOC);
-    draw();
+    placePin(x, y);
   });
 
   const drawInspector = () => {
@@ -84,6 +90,30 @@ async function worldPage(arg, context) {
               rows: 3,
               change: () => save(WORLD_DOC),
             }),
+            h(
+              'div',
+              { class: 'world-nudge', role: 'group', 'aria-label': 'Adjust pin position' },
+              [
+                ['Up', 0, -0.01],
+                ['Left', -0.01, 0],
+                ['Right', 0.01, 0],
+                ['Down', 0, 0.01],
+              ].map(([label, dx, dy]) =>
+                h(
+                  'button',
+                  {
+                    'aria-label': `Move pin ${label.toLowerCase()} one percent`,
+                    onclick: () => {
+                      pin.x = clampUnit(pin.x + dx);
+                      pin.y = clampUnit(pin.y + dy);
+                      save(WORLD_DOC);
+                      drawStage();
+                    },
+                  },
+                  label,
+                ),
+              ),
+            ),
             h(
               'div',
               { class: 'row' },
@@ -116,7 +146,22 @@ async function worldPage(arg, context) {
           ]
         : h('p', { class: 'muted' }, 'Choose a pin on the map, or add one.'),
       state.placing
-        ? h('p', { class: 'muted', role: 'status' }, 'Click the map to place the pin.')
+        ? h(
+            'div',
+            { class: 'row' },
+            h('p', { class: 'muted', role: 'status' }, 'Tap the map to place the pin.'),
+            h('button', { onclick: () => placePin(0.5, 0.5) }, 'Place at center'),
+            h(
+              'button',
+              {
+                onclick: () => {
+                  state.placing = false;
+                  draw();
+                },
+              },
+              'Cancel placement',
+            ),
+          )
         : null,
     );
   };
