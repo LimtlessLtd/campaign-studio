@@ -63,6 +63,18 @@ class RouteTests(unittest.TestCase):
             status, _, _ = self.request('/api/maps/fixture/export', 'POST')
         self.assertEqual(status, 409)
 
+    def test_forge_scripts_come_from_the_install_folder_not_the_campaign(self):
+        with urllib.request.urlopen(
+            self.url + '/forge-scripts/foundry-import-macro.js'
+        ) as response:
+            self.assertEqual(response.status, 200)
+            self.assertIn('javascript', response.headers['Content-Type'])
+            self.assertTrue(response.read())
+        for bad in ('forge.py', '..%2Fcampaign.py', 'missing.js'):
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.urlopen(self.url + '/forge-scripts/' + bad)
+            self.assertEqual(caught.exception.code, 404)
+
     def test_cancel_route_distinguishes_bad_missing_and_finished_jobs(self):
         status, _, _ = self.request('/api/jobs/NOT-HEX/cancel', 'POST')
         self.assertEqual(status, 400)

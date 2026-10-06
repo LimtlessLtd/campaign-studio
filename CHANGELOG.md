@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Foundry macros from any campaign location:** the import macro and upgrade scripts are served from the application folder at `/forge-scripts/<name>.js`; their download links no longer assume the campaign sits beside `DM/`.
 - **Job provider seam:** `JobService` starts work through a runner (`SubprocessRunner` by default) with `start`, `feed`, `wait` and `terminate`, so another provider can replace the child process. Tests use a fake provider for success, failure, start failure with retry, and cancellation. No behaviour change for existing jobs.
 - **Restart keeps queued jobs:** a job still waiting when the DM site stopped is requeued on the next start from a saved launch record (command and stdin only). A job that was already running is still marked failed.
 - **Phone editing:** world-map pins can be placed at the center and adjusted in one-percent steps without dragging.
