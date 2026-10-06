@@ -394,7 +394,7 @@ function jobBox(job, signal) {
       return;
     }
     if (signal?.aborted) return;
-    const pct = [...(j.log || '').matchAll(/(\d+)%/g)].map((m) => +m[1]).pop();
+    const pct = j.progress ? j.progress.percent : null;
     render(
       box,
       h(
@@ -415,7 +415,7 @@ function jobBox(job, signal) {
         ? h(
             'div',
             { class: 'bar' },
-            h('i', { style: `width:${/roofing/.test(j.log) ? 92 : pct ? pct * 0.85 : 5}%` }),
+            h('i', { style: `width:${pct === null ? 5 : Math.max(5, pct)}%` }),
           )
         : null,
       h(

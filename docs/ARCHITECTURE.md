@@ -164,6 +164,8 @@ worker available. On restart, the server checks the data schema, completes inter
 before saved unfinished jobs are marked failed; the queue does not automatically resume.
 `POST /api/jobs/<id>/cancel` fails a queued job at once and terminates a running one; either way the
 owning workflow, image brief or request is settled through the normal failure callback.
+A job reports progress by printing `PROGRESS <done>/<total> [label]` or `PROGRESS <n>% [label]`; the job
+API returns the last such line as `progress`.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 

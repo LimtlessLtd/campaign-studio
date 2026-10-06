@@ -40,6 +40,7 @@ from campaign_core import (
     generate_cmd,
     import_foundry_snapshot,
     job_file,
+    job_progress,
     list_docs,
     list_images,
     list_jobs,
@@ -470,7 +471,7 @@ class Handler(SimpleHTTPRequestHandler):
         job = read_json(job_file(job_id))
         if not job:
             raise NotFound('no such job')
-        return self.send_json(dict(job, log=log_tail(job_id)))
+        return self.send_json(dict(job, log=log_tail(job_id), progress=job_progress(job_id)))
 
     def _post_cancel_job(self, path, query, p):
         job_id = path[len('/api/jobs/') : -len('/cancel')]

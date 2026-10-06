@@ -417,6 +417,7 @@ worker = JOBS_SERVICE.worker
 cancel_job = JOBS_SERVICE.cancel
 execute_job = JOBS_SERVICE.execute_job
 log_tail = JOBS_SERVICE.log_tail
+job_progress = JOBS_SERVICE.progress
 list_jobs = JOBS_SERVICE.list_jobs
 
 
