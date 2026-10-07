@@ -348,7 +348,10 @@ def schema(kind):
     return CONTENT_SCHEMA if kind == 'content' else LAYOUT_SCHEMA
 
 
-def prompt_pack(value, campaign_info):
+def prompt_pack(value, campaign_info, for_run=False):
+    if for_run and needs_plan(value):
+        value = deepcopy(value)  # A preview plans the next run without changing the saved workflow.
+        begin(value)
     slug = value['map']
     key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
     codex = read(os.path.join(campaign.active().data, 'codex.json'), {'entries': []})

@@ -256,6 +256,10 @@ class StudioIntegration(unittest.TestCase):
         ]
         campaign_core.write_doc('mapkey/' + slug, key)
         value = workflow.create(slug, brief)
+        run_preview = workflow.prompt_pack(value, {}, for_run=True)
+        planned = json.loads(run_preview['prompt'].partition('REFERENCE DATA:' + chr(10))[2])
+        self.assertEqual(planned['batch']['areas'], [n for n in range(1, 312) if n % 5 == 4][:25])
+        self.assertNotIn('batches', value)
         workflow.begin(value)
         notable = [n for n in range(1, 312) if n % 5 == 4]
         self.assertEqual([n for b in value['batches'] for n in b], notable)

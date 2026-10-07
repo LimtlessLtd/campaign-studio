@@ -1786,7 +1786,7 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
               onclick: () =>
                 attempt(() =>
                   contextPreview(
-                    '/api/workflow/' + w.id + '/pack',
+                    '/api/workflow/' + w.id + '/pack?for_run=1',
                     '/api/workflow/' + w.id + '/context',
                     () => route(true),
                   ),

@@ -437,7 +437,11 @@ class Handler(SimpleHTTPRequestHandler):
             campaign_info = {'name': config.settings()['campaign_name']}
             if config.settings().get('world_path'):
                 campaign_info['world'] = config.world_info(config.settings()['world_path'])
-            return self.send_json(workflow.prompt_pack(value, campaign_info))
+            return self.send_json(
+                workflow.prompt_pack(
+                    value, campaign_info, for_run=query.get('for_run', [''])[0] == '1'
+                )
+            )
         return self.send_json(value)
 
     def _get_request_pack(self, path, query, p):
