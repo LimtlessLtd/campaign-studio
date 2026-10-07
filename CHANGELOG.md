@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Folder picker for the world import (W24):** the World Library page offers "Choose folders to import" before the one-click import. Folders made only of compendium copies start unticked; leaving the picker alone imports as before, and unticked documents stay searchable in the library.
 - **Relay record check (W45):** `tools/check_relay.py` fails CI when a commit has a `Reviewed-PR:` line that git does not read as a trailer (for example above a separate `Co-Authored-By` paragraph), so a review can no longer be lost silently. Run it locally with `python tools/check_relay.py origin/main..HEAD`.
 - **Macro snapshots mark compendium copies (W24):** the Foundry library export macro now sends the `compendium` flag for each document, so a world imported from a macro snapshot skips compendium copies by default, like one read from the world folder. Re-run the macro to refresh an older snapshot.
 - **Big-map stocking in batches (W26):** a map with more than 30 areas is drafted in AI batches of up to 25 notable areas (anything but plain houses, plus areas with linked threads or entries); plain houses take a rollable template description and keep their starter loot. Counts in the brief are now maximums, shared across the batches, and a short draft applies with a note in its summary. A batch the validator rejects is rerun once with the validation message before the workflow fails, and a failed workflow resumes at its current batch. Small maps behave as before. The manual prompt and paste route still describes the whole map in one response.
