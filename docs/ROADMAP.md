@@ -102,17 +102,6 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W26 Big-map stocking
-
-- `workflow.validate` needs every numbered area described in one response. Generated districts have 44
-  areas at 60 × 60 squares and 311 at 160 × 120.
-- A content brief gets a scope: notable areas (anything but plain houses, plus areas with linked threads or
-  entries) or an explicit list. Draft about 25 areas per batch; remaining houses take rollable templates
-  like `STARTER_LOOT`.
-- Count targets become maximums, and a short draft applies with a note.
-- After a validation failure, run one refinement through the existing `feedback` path with the validation
-  message as the instruction, then stop and show the error.
-
 ### W28 Per-record storage
 
 - Autosave PUTs the whole codex for any edit, and the server keeps 50 copies. At about 8 MB after a large
