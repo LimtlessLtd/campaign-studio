@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **World Library review fixes:** previously saved snapshots without a compendium flag still open in the folder picker and import. Macro exports also detect legacy `flags.core.sourceId` when `_stats.compendiumSource` is empty.
 - **Folder picker for the world import (W24):** the World Library page offers "Choose folders to import" before the one-click import. Folders made only of compendium copies start unticked; leaving the picker alone imports as before, and unticked documents stay searchable in the library.
 - **Relay record check (W45):** `tools/check_relay.py` fails CI when a commit has a `Reviewed-PR:` line that git does not read as a trailer (for example above a separate `Co-Authored-By` paragraph), so a review can no longer be lost silently. Run it locally with `python tools/check_relay.py origin/main..HEAD`.
 - **Macro snapshots mark compendium copies (W24):** the Foundry library export macro now sends the `compendium` flag for each document, so a world imported from a macro snapshot skips compendium copies by default, like one read from the world folder. Re-run the macro to refresh an older snapshot.

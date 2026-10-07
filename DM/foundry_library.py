@@ -573,7 +573,7 @@ def import_folders(snapshot):
                 document['folder'], {'name': document['folder'], 'count': 0, 'compendium': 0}
             )
             row['count'] += 1
-            row['compendium'] += 1 if document['compendium'] else 0
+            row['compendium'] += 1 if document.get('compendium') is True else 0
     return [
         {**row, 'suggested': row['compendium'] < row['count']}
         for row in sorted(found.values(), key=lambda row: row['name'].casefold())
@@ -605,7 +605,11 @@ def import_into_codex(snapshot, codex, folders=None):
     report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0, 'skipped': 0}
     for kind, entry_type in CODEX_IMPORTS:
         for document in snapshot['documents'].get(kind, []):
-            if document['folder'] not in chosen if chosen is not None else document['compendium']:
+            if chosen is None:
+                selected = document.get('compendium') is not True
+            else:
+                selected = document['folder'] in chosen
+            if not selected:
                 report['skipped'] += 1
                 continue
             image = document['image']
