@@ -19,6 +19,7 @@ import foundry_library
 import foundry_upgrade
 import maps_io
 import packaging_source
+import references
 import job_service
 import remote_access
 import request_workflow
@@ -93,6 +94,7 @@ ROUTES = {
         (lambda path: path == '/api/revs', '_get_revs'),
         (lambda path: path.startswith('/api/plan/'), '_get_plan'),
         (lambda path: path == '/api/usage', '_get_usage'),
+        (lambda path: path.startswith('/api/codex/') and path.endswith('/uses'), '_get_codex_uses'),
         (lambda path: path == '/api/jobs', '_get_jobs'),
         (lambda path: path.startswith('/api/jobs/'), '_get_job'),
         (lambda path: path == '/api/images', '_get_images'),
@@ -106,6 +108,10 @@ ROUTES = {
     'POST': (
         (lambda path: path == '/api/upload-image', '_post_upload'),
         (lambda path: path == '/api/package', '_post_package'),
+        (
+            lambda path: path.startswith('/api/codex/') and path.endswith('/delete'),
+            '_post_codex_delete',
+        ),
         (
             lambda path: path.startswith('/api/commits/') and path.endswith('/dismiss'),
             '_post_dismiss_commit',
@@ -556,6 +562,39 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
         self.wfile.write(body)
+
+    def _reference_docs(self):
+        maps = read_json(doc_path('maps/index'), {'items': []}).get('items', [])
+        return references.documents(
+            lambda name: read_json(doc_path(name)),
+            list_docs('prep'),
+            [m['slug'] for m in maps if isinstance(m, dict) and SLUG.fullmatch(str(m.get('slug')))],
+        )
+
+    def _codex_id(self, path, suffix):
+        entry_id = path[len('/api/codex/') : -len(suffix)]
+        if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', entry_id):
+            raise Invalid('Invalid codex entry.')
+        return entry_id
+
+    def _get_codex_uses(self, path, query, p):
+        entry_id = self._codex_id(path, '/uses')
+        with LOCK:
+            docs = self._reference_docs()
+            if not any(e.get('id') == entry_id for e in docs.get('codex', {}).get('entries', [])):
+                raise NotFound('No such codex entry.')
+            return self.send_json({'uses': references.scan(docs, entry_id)})
+
+    def _post_codex_delete(self, path, query, p):
+        entry_id = self._codex_id(path, '/delete')
+        with LOCK:
+            docs = self._reference_docs()
+            try:
+                changed = references.remove(docs, entry_id)
+            except KeyError:
+                raise NotFound('No such codex entry.') from None
+            commit_docs(f'Delete codex entry {entry_id}', [(name, docs[name]) for name in changed])
+            return self.send_json({'ok': True, 'changed': changed})
 
     def _put_doc(self, path, query, p):
         name = path[9:]

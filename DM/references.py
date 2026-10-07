@@ -1,0 +1,102 @@
+"""Where a codex entry is used, and removing it without leaving dangling links.
+
+Records point at codex entries by ID from several documents: other entries' `related` lists, thread `pcs`,
+art items, prep scenes, map-area `npcs`/`items`, and a request's focus entry. `scan` lists every use and
+`remove` deletes the entry and unlinks them all in memory; the caller commits every changed document with
+one `commit_docs`, so a deletion is never half applied. Both take a plain {document name: value} mapping
+from `documents`, so the rules need no running campaign.
+"""
+
+CODEX = 'codex'
+
+
+def documents(read_doc, prep_names, map_slugs):
+    """Load every document that can reference a codex entry, keyed by its document name."""
+    names = [CODEX, 'threads', 'art', 'inbox']
+    names += [f'prep/{name}' for name in prep_names] + [f'mapkey/{slug}' for slug in map_slugs]
+    return {name: value for name in names if isinstance(value := read_doc(name), dict)}
+
+
+def _rows(doc, field):
+    rows = doc.get(field)
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+def _ids(row, field):
+    value = row.get(field)
+    return value if isinstance(value, list) else []
+
+
+def _links(docs):
+    """Each place that holds codex IDs: (document, label, owner record, field, list-or-scalar)."""
+    for name, doc in docs.items():
+        if name == CODEX:
+            for entry in _rows(doc, 'entries'):
+                yield (
+                    name,
+                    f'Related to {entry.get("name") or entry.get("id")}',
+                    entry,
+                    'related',
+                    True,
+                )
+        elif name == 'threads':
+            for thread in _rows(doc, 'threads'):
+                yield (
+                    name,
+                    f'Thread: {thread.get("title") or thread.get("id")}',
+                    thread,
+                    'pcs',
+                    True,
+                )
+        elif name == 'art':
+            for item in _rows(doc, 'items'):
+                yield name, f'Art: {item.get("title") or item.get("id")}', item, 'codex', False
+        elif name == 'inbox':
+            for item in _rows(doc, 'items'):
+                yield (
+                    name,
+                    f'Request: {str(item.get("text") or item.get("id"))[:60]}',
+                    item,
+                    'codex',
+                    False,
+                )
+        elif name.startswith('prep/'):
+            for scene in _rows(doc, 'scenes'):
+                label = f'Session {doc.get("n", name[6:])}, scene: {scene.get("title") or scene.get("id")}'
+                yield name, label, scene, 'npcs', True
+        elif name.startswith('mapkey/'):
+            for area in _rows(doc, 'areas'):
+                label = f'Map {name[7:]}, area {area.get("n")}: {area.get("name", "")}'
+                for field in ('npcs', 'items'):
+                    yield name, label, area, field, True
+
+
+def scan(docs, entry_id):
+    """Every use of entry_id outside its own record: [{doc, where}], in document order."""
+    found = []
+    for name, label, owner, field, is_list in _links(docs):
+        if name == CODEX and owner.get('id') == entry_id:
+            continue
+        if (entry_id in _ids(owner, field)) if is_list else owner.get(field) == entry_id:
+            found.append({'doc': name, 'where': label})
+    return found
+
+
+def remove(docs, entry_id):
+    """Delete the entry from docs['codex'] and unlink it everywhere. Returns the names of changed docs."""
+    codex = docs.get(CODEX)
+    entries = codex.get('entries') if codex else None
+    if not isinstance(entries, list) or not any(
+        isinstance(e, dict) and e.get('id') == entry_id for e in entries
+    ):
+        raise KeyError(entry_id)
+    codex['entries'] = [e for e in entries if not (isinstance(e, dict) and e.get('id') == entry_id)]
+    changed = {CODEX}
+    for name, _, owner, field, is_list in _links(docs):
+        if is_list and entry_id in _ids(owner, field):
+            owner[field] = [value for value in owner[field] if value != entry_id]
+            changed.add(name)
+        elif not is_list and owner.get(field) == entry_id:
+            owner[field] = ''
+            changed.add(name)
+    return sorted(changed, key=lambda name: (name != CODEX, name))
