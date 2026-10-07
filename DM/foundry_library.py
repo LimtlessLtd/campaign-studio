@@ -241,6 +241,7 @@ def normalize_snapshot(payload, world, origin='macro', stamp='', omitted=None):
                     'type': _short(item.get('type'), 80),
                     'image': _short(item.get('image'), 1000),
                     'summary': _short(item.get('summary'), 20000),
+                    'compendium': item.get('compendium') is True,
                     'pages': [
                         {
                             'id': _short(page.get('id'), 128),
@@ -427,6 +428,10 @@ def _record(kind, document, children, folders):
         'type': document.get('type') if isinstance(document.get('type'), str) else '',
         'image': document.get('img') or '',
         'summary': '',
+        # Copies of compendium documents (gear, spells, stock monsters) rarely need campaign notes.
+        'compendium': bool(
+            _dig(document, ('_stats', 'compendiumSource'), ('flags', 'core', 'sourceId'))
+        ),
     }
     if kind == 'scenes':
         record['image'] = _dig(document, ('background', 'src'), ('thumb',)) or ''
@@ -554,8 +559,12 @@ CODEX_IMPORTS = (
 IMPORTED_FIELDS = ('name', 'group', 'notes', 'image')
 
 
-def import_into_codex(snapshot, codex):
+def import_into_codex(snapshot, codex, folders=None):
     """Add or refresh codex entries for the snapshot's actors, items and scenes.
+
+    `folders` is the list of folder names to import ('' is the unfiled documents). Without it, everything
+    except documents copied from a compendium is imported. Skipped documents stay in the snapshot, which
+    is the searchable reference library, and existing entries for them are left alone.
 
     Each entry remembers its source world, canonical Foundry UUID and last imported values. A later import
     refreshes an entry only while it still holds those values, so anything edited in Studio is kept.
@@ -571,9 +580,13 @@ def import_into_codex(snapshot, codex):
         and isinstance(entry['foundry'].get('uuid'), str)
     }
     taken = {entry.get('id') for entry in entries}
-    report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0}
+    chosen = None if folders is None else set(folders)
+    report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0, 'skipped': 0}
     for kind, entry_type in CODEX_IMPORTS:
         for document in snapshot['documents'].get(kind, []):
+            if document['folder'] not in chosen if chosen is not None else document['compendium']:
+                report['skipped'] += 1
+                continue
             image = document['image']
             if image:
                 try:

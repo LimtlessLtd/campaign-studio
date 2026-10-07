@@ -91,6 +91,9 @@ their row and finding say enough.
   a codex entry by Foundry UUID, and reaching prompts only as W23 search hits.
 - Store a hash of the imported values instead of the `foundry.imported` copy, which doubles the codex today.
   The migration computes the hash from the stored copy.
+- Done: records carry a `compendium` flag, `import_into_codex` takes a folder list (default skips compendium
+  copies) and `/api/foundry/world/import` accepts `folders`. Left: the folder picker, the hash, and
+  Foundry-macro snapshots, which do not yet send the flag.
 
 ### W25 Linked Foundry documents
 

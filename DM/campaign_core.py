@@ -187,11 +187,11 @@ def commit_docs(label, changes, after=()):
     return JOURNAL.commit(label, changes, after)
 
 
-def import_foundry_snapshot(snapshot):
+def import_foundry_snapshot(snapshot, folders=None):
     """Commit a World Library snapshot and its codex changes as one recoverable operation."""
     with LOCK:
         codex = read_json(doc_path('codex'), {'entries': []})
-        report = foundry_library.import_into_codex(snapshot, codex)
+        report = foundry_library.import_into_codex(snapshot, codex, folders)
         commit_docs('Import Foundry world', [('foundry-library', snapshot), ('codex', codex)])
         return report
 
