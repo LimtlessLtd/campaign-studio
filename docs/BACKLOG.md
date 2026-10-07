@@ -30,7 +30,7 @@ Next ID: W57
 | W41 | 2        | Playable NPCs based on a compendium monster: duplicated, renamed, re-imaged and annotated                   | The NPC imports with its attacks; reimport changes name, art and notes only    |
 | W42 | 2        | Art pipeline: style guide, templates per kind, batch per prep, token cut-outs, adapters                     | One action fills every missing image for a prep; fake-provider tests           |
 | W43 | 2        | Live Foundry check with the owner on their v12 dnd5e versions (owner-assisted)                              | Exact versions and results recorded; failures become backlog rows              |
-| W44 | 2        | AI usage ledger: tokens, cost and time per job; ask before prompts over a set size                          | A fake-provider job records usage; a large prompt asks first                   |
+| W44 | 2        | AI usage ledger, remainder: totals per session; ask before prompts over a set size (per-job done)           | A large prompt asks first; totals per session                                  |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                     | Two folders with one name import separately; older snapshots still open        |
 | W10 | 3        | Installer and performance budgets for very large maps                                                       | Clean-machine install test and measured time/memory at documented map sizes    |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped) | Services receive their `Campaign` explicitly (no process-wide active campaign) |

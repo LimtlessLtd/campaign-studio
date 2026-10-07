@@ -598,8 +598,22 @@ async function studioLibrary(_arg, context) {
   await refresh();
 }
 
+function usageSummary(usage) {
+  const month = usage.months[0];
+  if (!month) return h('p', { class: 'small-note' }, 'No AI drafts have reported usage yet.');
+  const tokens = month.input_tokens + month.output_tokens;
+  const cost = month.cost_usd ? `$${month.cost_usd.toFixed(2)}` : 'no cost reported';
+  const unpriced = month.unpriced ? ` (${month.unpriced} without a price)` : '';
+  return h(
+    'p',
+    { class: 'small-note' },
+    `${month.month}: ${month.jobs} draft${month.jobs === 1 ? '' : 's'}, ${tokens.toLocaleString()} tokens, ${cost}${unpriced}, ${Math.round(month.seconds)} s.`,
+  );
+}
+
 async function studioSettings(_arg, context) {
   const result = await context.api('/api/settings');
+  const usage = await context.api('/api/usage');
   const f = clone(result.settings);
   const saved = h(
     'div',
@@ -672,6 +686,7 @@ async function studioSettings(_arg, context) {
           step: 1000,
           help: 'About four characters per token. Includes the draft prompt and schema; default 64,000.',
         }),
+        usageSummary(usage),
         h(
           'p',
           { class: 'muted' },

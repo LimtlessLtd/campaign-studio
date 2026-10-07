@@ -1,6 +1,7 @@
 """One Campaign object locates a campaign's files, for this process and the jobs it starts."""
 
 import json
+import os
 import re
 import sys
 import tempfile
@@ -166,6 +167,21 @@ class CampaignTests(unittest.TestCase):
                     json.dumps({'id': f'newer-{n:04d}', 'status': 'done'})
                 )
             self.assertTrue(campaign_core.map_busy('old-map'))
+
+    def test_a_finished_draft_job_records_its_usage_for_the_totals(self):
+        with campaign.using(self.studio):
+            service = campaign_core.JOBS_SERVICE
+            job = {'id': 'draft-1', 'kind': 'ai-workflow', 'status': 'done', 'created': 1.0}
+            os.makedirs(self.studio.jobs, exist_ok=True)
+            Path(service.job_file('draft-1', 'log')).write_text(
+                json.dumps({'result': '{}', 'total_cost_usd': 0.5, 'usage': {'input_tokens': 7}}),
+                encoding='utf-8',
+            )
+            campaign_core.finish_job(job, 0, '')
+            service.save_job(job)
+            months = campaign_core.usage_totals()['months']
+        self.assertEqual((months[0]['jobs'], months[0]['input_tokens']), (1, 7))
+        self.assertEqual(months[0]['cost_usd'], 0.5)
 
 
 if __name__ == '__main__':

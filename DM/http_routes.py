@@ -60,6 +60,7 @@ from campaign_core import (
     rev_of,
     start_request,
     start_workflow,
+    usage_totals,
     write_doc,
     write_target,
 )
@@ -91,6 +92,7 @@ ROUTES = {
         (lambda path: path.startswith('/api/doc/'), '_get_doc'),
         (lambda path: path == '/api/revs', '_get_revs'),
         (lambda path: path.startswith('/api/plan/'), '_get_plan'),
+        (lambda path: path == '/api/usage', '_get_usage'),
         (lambda path: path == '/api/jobs', '_get_jobs'),
         (lambda path: path.startswith('/api/jobs/'), '_get_job'),
         (lambda path: path == '/api/images', '_get_images'),
@@ -495,6 +497,9 @@ class Handler(SimpleHTTPRequestHandler):
         if not os.path.exists(p):
             raise NotFound('no such plan')
         return self.send_json({'text': Path(p).read_text(encoding='utf-8')})
+
+    def _get_usage(self, path, query, p):
+        return self.send_json(usage_totals())
 
     def _get_jobs(self, path, query, p):
         return self.send_json(list_jobs())

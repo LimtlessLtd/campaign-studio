@@ -77,6 +77,18 @@ def parse_response(payload):
     return draft
 
 
+def token_usage(payload):
+    """Tokens the response reports. OpenAI states no price, so cost stays unknown."""
+    used = payload.get('usage') if isinstance(payload, dict) else None
+    used = used if isinstance(used, dict) else {}
+    cached = (used.get('input_tokens_details') or {}).get('cached_tokens')
+    return {
+        'input_tokens': used.get('input_tokens', 0),
+        'output_tokens': used.get('output_tokens', 0),
+        'cache_read_input_tokens': cached if isinstance(cached, int) else 0,
+    }
+
+
 def generate(kind, model, key_env, prompt, opener=None):
     key = os.environ.get(key_env)
     if not key:
@@ -109,7 +121,8 @@ def generate(kind, model, key_env, prompt, opener=None):
         raw = response.read(MAX_RESPONSE + 1)
     if len(raw) > MAX_RESPONSE:
         raise ValueError('OpenAI returned a response larger than 8 MB.')
-    return parse_response(json.loads(raw))
+    payload = json.loads(raw)
+    return parse_response(payload), token_usage(payload)
 
 
 def main():
@@ -117,8 +130,8 @@ def main():
         raise ValueError('Expected draft kind, model and key environment variable.')
     kind, model, key_env = sys.argv[1:]
     prompt = sys.stdin.read(8 * 1024 * 1024 + 1)
-    draft = generate(kind, model, key_env, prompt)
-    print(json.dumps({'structured_output': draft}, ensure_ascii=False), flush=True)
+    draft, used = generate(kind, model, key_env, prompt)
+    print(json.dumps({'structured_output': draft, 'usage': used}, ensure_ascii=False), flush=True)
 
 
 if __name__ == '__main__':

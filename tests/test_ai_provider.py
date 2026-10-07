@@ -110,6 +110,11 @@ class AIProviderTests(unittest.TestCase):
         opener = FakeOpener(
             {
                 'status': 'completed',
+                'usage': {
+                    'input_tokens': 12,
+                    'output_tokens': 7,
+                    'input_tokens_details': {'cached_tokens': 4},
+                },
                 'output': [
                     {
                         'type': 'message',
@@ -122,10 +127,12 @@ class AIProviderTests(unittest.TestCase):
             }
         )
         with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'secret-value'}):
-            result = openai_worker.generate(
+            result, used = openai_worker.generate(
                 'request', 'gpt-4o-mini', 'STUDIO_TEST_KEY', 'Synthetic prompt', opener
             )
         self.assertEqual(result, draft)
+        self.assertEqual(used['input_tokens'], 12)
+        self.assertEqual(used['cache_read_input_tokens'], 4)
         self.assertEqual(opener.request.full_url, openai_worker.RESPONSES_URL)
         self.assertEqual(opener.request.get_header('Authorization'), 'Bearer secret-value')
         body = json.loads(opener.request.data)
