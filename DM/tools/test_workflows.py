@@ -664,7 +664,7 @@ class StudioIntegration(unittest.TestCase):
             return {'id': 'job-test', 'request': extra['request'], 'source': extra['source']}
 
         with (
-            patch.object(campaign_core.shutil, 'which', return_value='claude'),
+            patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
             patch.object(campaign_core, 'new_job', side_effect=fake_job),
         ):
             job = self.request('/api/requests/req-run/run', {})
@@ -688,6 +688,43 @@ class StudioIntegration(unittest.TestCase):
         saved = campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]
         self.assertEqual(saved['status'], 'review')
         self.assertEqual(saved['draft']['entries'][0]['id'], 'watcher')
+
+    def test_general_request_can_queue_an_openai_draft_without_storing_the_key(self):
+        settings = config.settings()
+        settings['ai'] = {
+            'provider': 'openai',
+            'model': 'gpt-4o-mini',
+            'key_env': 'STUDIO_TEST_KEY',
+        }
+        campaign_core.write_doc('settings', settings)
+        campaign_core.write_doc(
+            'inbox',
+            {
+                'items': [
+                    {'id': 'req-openai', 'kind': 'npc', 'text': 'Invent a guard.', 'status': 'new'}
+                ]
+            },
+        )
+        captured = {}
+
+        def fake_job(lane, kind, label, cmd, prompt, **extra):
+            captured.update(lane=lane, kind=kind, cmd=cmd, prompt=prompt)
+            return {'id': 'job-openai', 'request': extra['request'], 'source': extra['source']}
+
+        with (
+            patch.dict(os.environ, {'STUDIO_TEST_KEY': 'fixture-secret'}),
+            patch.object(campaign_core, 'new_job', side_effect=fake_job),
+        ):
+            self.request('/api/requests/req-openai/run', {})
+        self.assertEqual((captured['lane'], captured['kind']), ('claude', 'request-draft'))
+        self.assertIn('openai_worker.py', captured['cmd'][2])
+        self.assertEqual(captured['cmd'][3:], ['request', 'gpt-4o-mini', 'STUDIO_TEST_KEY'])
+        self.assertNotIn('fixture-secret', ' '.join(captured['cmd']))
+        self.assertIn('Invent a guard.', captured['prompt'])
+        self.assertEqual(
+            campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]['status'],
+            'doing',
+        )
 
     def test_layout_operations_and_revision_recover_original_plan(self):
         brief = campaign_core.normal_brief(

@@ -10,6 +10,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -99,6 +100,28 @@ class BrowserSmoke(unittest.TestCase):
             if v['impact'] in BLOCKING
         ]
         self.assertEqual(found, [], label)
+
+    def test_openai_settings_enable_structured_draft_controls(self):
+        self.page.set_viewport_size(NARROW)
+        with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'synthetic-key'}):
+            self.open('#/settings')
+            self.page.get_by_label('Draft provider').select_option('openai')
+            self.page.get_by_label('AI model').fill('gpt-4o-mini')
+            self.page.get_by_label('OpenAI API key environment variable').fill('STUDIO_TEST_KEY')
+            self.page.get_by_role('button', name='Save settings').click()
+            expect(self.page.get_by_text('OpenAI API configured')).to_be_visible()
+            self.assert_accessible('OpenAI provider settings')
+            self.assertEqual(self.stored('settings')['ai']['key_env'], 'STUDIO_TEST_KEY')
+            campaign_core.write_doc(
+                'inbox',
+                {
+                    'items': [
+                        {'id': 'req-provider', 'kind': 'npc', 'text': 'A guard', 'status': 'new'}
+                    ]
+                },
+            )
+            self.open('#/inbox')
+            expect(self.page.get_by_role('button', name='Draft with OpenAI API')).to_be_visible()
 
     def test_first_run_wizard_connects_a_world(self):
         (self.studio.dm / 'data' / 'settings.json').unlink()

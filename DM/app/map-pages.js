@@ -482,8 +482,8 @@ async function newMapStudio(context) {
               ),
               formInput(f, 'auto_content', 'Start the content workflow after the layout', {
                 type: 'checkbox',
-                help: S.state.claude
-                  ? 'Claude Code is available on this computer.'
+                help: S.state.ai.available
+                  ? `${S.state.ai.label} is available.`
                   : 'You can export the prompt pack for your preferred AI assistant.',
                 change,
               }),
@@ -1756,14 +1756,14 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
                     await poll();
                     route(true);
                   },
-                  S.state.claude ? 'Draft refinement' : 'Prepare refinement prompt',
+                  S.state.ai.available ? 'Draft refinement' : 'Prepare refinement prompt',
                 );
               },
             },
             'Refine proposal',
           )
         : null,
-      S.state.claude && ['queued', 'ready', 'failed'].includes(w.status)
+      S.state.ai.available && ['queued', 'ready', 'failed'].includes(w.status)
         ? h(
             'button',
             {
@@ -1775,7 +1775,7 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
                 }),
             },
             icon('spark'),
-            w.status === 'failed' ? 'Retry AI draft' : 'Run with Claude',
+            w.status === 'failed' ? 'Retry AI draft' : `Run with ${S.state.ai.label}`,
           )
         : null,
       !working && w.status !== 'applied'

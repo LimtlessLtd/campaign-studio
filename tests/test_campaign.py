@@ -117,6 +117,16 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual(log[:2], [self.studio.home, 'Elsewhere'])
         self.assertTrue(Path(self.studio.jobs, job['id'] + '.json').is_file())
 
+    def test_an_old_queued_map_job_stays_busy_after_many_newer_jobs(self):
+        with campaign.using(self.studio):
+            service = campaign_core.JOBS_SERVICE
+            service.new_job('forge', 'fixture', 'Old map', ['cmd'], slug='old-map')
+            for n in range(205):
+                Path(service.job_file(f'newer-{n:04d}')).write_text(
+                    json.dumps({'id': f'newer-{n:04d}', 'status': 'done'})
+                )
+            self.assertTrue(campaign_core.map_busy('old-map'))
+
 
 if __name__ == '__main__':
     unittest.main()

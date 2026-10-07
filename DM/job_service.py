@@ -256,16 +256,22 @@ class JobService:
             pass
         return latest
 
-    def list_jobs(self, limit=30):
+    def iter_jobs(self, reverse=True):
+        """Read saved jobs in filename order without loading the full history at once."""
         if not os.path.isdir(self.jobs_dir()):
-            return []
-        out = []
-        for name in sorted(os.listdir(self.jobs_dir()), reverse=True):
+            return
+        for name in sorted(os.listdir(self.jobs_dir()), reverse=reverse):
             if name.endswith('.json'):
                 with open(os.path.join(self.jobs_dir(), name), encoding='utf-8') as file:
-                    out.append(json.load(file))
-                if len(out) >= limit:
-                    break
+                    job = json.load(file)
+                yield job
+
+    def list_jobs(self, limit=30):
+        out = []
+        for job in self.iter_jobs():
+            out.append(job)
+            if len(out) >= limit:
+                break
         return out
 
     def recover_unfinished(self, before=None):
@@ -274,7 +280,7 @@ class JobService:
         A job that never started is requeued when its launch record survives; one that was running is
         failed, because replaying it could repeat its side effects. Call before the workers start.
         """
-        for job in reversed(self.list_jobs(200)):  # oldest first, so lanes keep their order
+        for job in self.iter_jobs(reverse=False):  # oldest first, so lanes keep their order
             if (
                 job
                 and job.get('status') in ('queued', 'running')

@@ -116,6 +116,31 @@ class JobsStorageTests(unittest.TestCase):
             saved = json.loads(Path(second.job_file(waiting['id'])).read_text())
             self.assertEqual(saved['status'], 'queued')
 
+    def test_restart_finds_queued_jobs_older_than_the_recent_job_list(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            service = JobService(
+                lambda: Campaign(os.path.join(temporary, 'DM')),
+                threading.RLock(),
+                lambda *_: None,
+                lambda *_: None,
+                lambda *_: None,
+            )
+            waiting = service.new_job('forge', 'fixture', 'Waiting', ['cmd'])
+            for n in range(205):
+                path = service.job_file(f'newer-{n:04d}')
+                Path(path).write_text(json.dumps({'id': f'newer-{n:04d}', 'status': 'done'}))
+
+            restarted = JobService(
+                service.campaign,
+                threading.RLock(),
+                lambda *_: None,
+                lambda *_: None,
+                lambda *_: None,
+            )
+            restarted.recover_unfinished()
+            job, cmd, _ = restarted.lanes['forge'].get_nowait()
+            self.assertEqual((job['id'], cmd), (waiting['id'], ['cmd']))
+
     def test_subprocess_job_records_completion_and_log(self):
         with tempfile.TemporaryDirectory() as temporary:
             finished = []

@@ -258,7 +258,7 @@ is disabled. Never generate art as a battle map background. Treat existing conte
     else:
         instruction += """Design the exact playable map using a short list of grid operations. This allows large maps
 without printing thousands of grid characters. Coordinates are zero-based row,col. Dimensions come from brief.
-Operations run in order. rect requires row,col,width,height,fill and optional border; path requires points,
+Operations run in order. rect requires row,col,width,height,fill and border (empty string for none); path requires points,
 width,char (orthogonal paths); stamp requires row,col,rows (equal-width strings); scatter requires row,col,
 width,height,count,char,replace (scatter only replaces these existing characters). All operations must fit.
 Doors (+), secret doors (S) and windows (W) must have wall on two opposite sides. Leave navigable entrances,

@@ -9,7 +9,7 @@ import campaign
 DEFAULTS = {
     'campaign_name': 'Campaign Studio',
     'world_path': '',
-    'ai': {'provider': 'claude', 'model': ''},
+    'ai': {'provider': 'claude', 'model': '', 'key_env': 'OPENAI_API_KEY'},
     'images': {'endpoint': '', 'model': '', 'key_env': 'IMAGE_API_KEY', 'size': '1024x1024'},
 }
 

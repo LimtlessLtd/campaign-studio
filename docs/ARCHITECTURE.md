@@ -10,7 +10,7 @@ flowchart LR
   Core --> Docs[JSON documents and history]
   Core --> WF[workflow.py: validate, stage, apply]
   Core --> Queue[job_service.py: job lanes]
-  Queue --> AI[Claude CLI: JSON proposals]
+  Queue --> AI[ai_provider: Claude CLI or OpenAI Responses]
   AI --> WF
   Queue --> Forge[forge: render plan and scene]
   Queue --> Art[image_worker: configured provider]
@@ -164,12 +164,14 @@ General Requests stage bounded JSON for codex entries, threads and session prep.
 before applying; stable request-prefixed IDs and a prep application marker make interrupted writes retryable.
 Editing request text or session after drafting invalidates the proposal.
 
-One worker runs per lane (forge, Claude, art). Lanes may run concurrently. `JobService` persists queue and
+One worker runs per lane (forge, structured drafts, art). The draft lane retains its `claude` key in saved jobs
+for compatibility. Lanes may run concurrently. `JobService` persists queue and
 process transitions through an injectable runner (`SubprocessRunner`: `start`, then `feed`, `wait`, `terminate`); application callbacks settle image, workflow and inbox documents. State postprocessing
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
 worker available. On restart, the server checks the data schema, completes interrupted changes and migrates
 before saved unfinished jobs are settled: a job that never started is requeued from its saved launch record
 (`<id>.launch`: command and stdin, never the environment); one that was running is marked failed.
+Recovery scans the full job history; the 30-job UI list remains bounded.
 `POST /api/jobs/<id>/cancel` fails a queued job at once and terminates a running one; either way the
 owning workflow, image brief or request is settled through the normal failure callback.
 A job reports progress by printing `PROGRESS <done>/<total> [label]` or `PROGRESS <n>% [label]`; the job
@@ -198,8 +200,13 @@ Read-only `Website/content` references are disabled by default; enable `legacy_r
 for an existing compatible site. Local reference notes can be added as `DM/data/notes.txt`.
 
 The image adapter posts `{model, prompt, size, n: 1}` and requires `data[0].b64_json`. It uses an environment
-variable for the key and permits HTTP only on loopback. Claude's structured runner uses no file/shell tools;
-exported prompt packs permit other assistants. Old `/api/claude` calls use the structured request runner.
+variable for the key and permits HTTP only on loopback. `ai_provider.py` selects Claude Code or OpenAI API
+for structured drafts. Claude runs without file/shell tools; `openai_worker.py` sends the existing schema
+through the Responses API with an empty tool list and `store: false`. The fixed HTTPS endpoint receives the
+prompt and an environment-provided API key; settings keep only the variable name. Both providers use the
+same validation, GM review, cancellation and retry flow. Exported prompt packs permit other assistants.
+Old `/api/claude` calls use the selected structured request runner. The OpenAI path has synthetic tests;
+it has not been exercised with a paid API call.
 
 ## Foundry boundary
 

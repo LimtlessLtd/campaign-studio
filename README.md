@@ -79,10 +79,15 @@ Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder t
 
 ## AI and images
 
-Install and authenticate Claude Code separately to use the built-in AI runner. The CLI must support
-`--json-schema`, `--restricted`, `--tools` and `--strict-mcp-config`. Optionally set its model in Settings.
-Structured workflows run with file and shell tools disabled. **Export prompt pack** and **Import proposal**
-let you use another assistant without the CLI. See `DM/AI_WORKFLOW.md`.
+For structured map and request drafts, choose Claude Code or OpenAI API in Settings. Claude Code must be
+installed and authenticated separately, with CLI support for `--json-schema`, `--restricted`, `--tools` and
+`--strict-mcp-config`; its model is optional. For OpenAI API, enter a model that supports
+[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses)
+and set `OPENAI_API_KEY` in the server environment before starting Studio (or configure another environment
+variable name in Settings). The key itself is never saved. OpenAI drafts use the Responses API and can incur
+API charges when you start a draft. No tools are supplied to either provider; each JSON proposal is validated
+and shown for GM review. **Export prompt pack** and **Import proposal** also work without a connected provider.
+See `DM/AI_WORKFLOW.md`.
 General Requests use the same draft, review and apply pattern for codex entries, threads and session prep.
 Link a session before requesting encounters or handouts. Applied requests keep their stable IDs; use a new
 follow-up request for more additions. Existing map requests open the map studio.
