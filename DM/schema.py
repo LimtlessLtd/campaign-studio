@@ -18,7 +18,7 @@ import shapes
 import storage
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 3
+CURRENT = 4
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -108,10 +108,26 @@ def fill_campaign(data, maps):
         yield path, normalize
 
 
+def hash_foundry_imports(data, maps):
+    """Replace each Foundry entry's copy of its imported values with their hash and the imported image."""
+    import foundry_library
+
+    def normalize(value, path):
+        for entry in value.get('entries', []):
+            link = entry.get('foundry')
+            if isinstance(link, dict) and isinstance(link.get('imported'), dict):
+                values = link.pop('imported')
+                link.setdefault('hash', foundry_library.imported_hash(values))
+                link.setdefault('image', values.get('image', ''))
+
+    yield os.path.join(data, 'codex.json'), normalize
+
+
 # From version -> (path, normalize) pairs reaching version + 1. Version 1 completed codex, thread, prep and
 # map key records; version 2 completed art, handout, checklist, loot, journal and event records too;
-# version 3 added world maps (a campaign without world-maps.json has nothing to fill).
-MIGRATIONS = {0: fill_campaign, 1: fill_campaign, 2: fill_campaign}
+# version 3 added world maps (a campaign without world-maps.json has nothing to fill); version 4 keeps a
+# hash of each Foundry-imported entry's values instead of a copy of them.
+MIGRATIONS = {0: fill_campaign, 1: fill_campaign, 2: fill_campaign, 3: hash_foundry_imports}
 
 
 def planned_changes(data, maps, start):

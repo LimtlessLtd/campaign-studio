@@ -14,8 +14,8 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Campaign memory and AI context** (W24, W30, W31). W23 now bounds drafts and prompt packs; they still
-   have no past session logs, and a large world still imports every actor and item into the codex. Every
+1. **Campaign memory and AI context** (W24, W30, W31). W23 now bounds drafts and prompt packs, and the world import
+   takes chosen folders; they still have no past session logs. Every
    AI feature depends on improving this context.
 2. **Session workflow** (W32–W37). Studio prepares maps and single records well. Nothing turns a pitch into
    a session, or a played session back into threads.
@@ -70,11 +70,10 @@ their row and finding say enough.
   compendium (`_stats.compendiumSource` in v12+, `flags.core.sourceId` before).
 - Everything else stays in the World Library snapshot as a **reference library**: searchable, linkable from
   a codex entry by Foundry UUID, and reaching prompts only as W23 search hits.
-- Store a hash of the imported values instead of the `foundry.imported` copy, which doubles the codex today.
-  The migration computes the hash from the stored copy.
 - Done: records carry a `compendium` flag, `import_into_codex` takes a folder list (default skips compendium
   copies) and `/api/foundry/world/import` accepts `folders`; the Foundry-macro snapshot sends the flag too.
-  The library page has a "Choose folders to import" picker (`library` returns `folders`). Left: the hash.
+  The library page has a "Choose folders to import" picker (`library` returns `folders`). Entries keep `foundry.hash` and `foundry.image`, not a copy of the imported
+  values (schema 4 migrates older entries).
 - The remaining picker work should identify folders by their Foundry IDs and show parent paths. The current
   name-only selection cannot distinguish two folders with the same name. Keep older name-only snapshots
   readable when adding those IDs.

@@ -200,6 +200,8 @@ class FoundryLibraryTests(unittest.TestCase):
             {'Mira': 'npc', 'Key': 'item', 'Keep': 'place'},
         )
         self.assertEqual(foundry_library.import_into_codex(snapshot, codex)['unchanged'], 3)
+        link = codex['entries'][1]['foundry']
+        self.assertEqual(set(link), {'uuid', 'world_key', 'hash', 'image'})  # no copy of the values
         mira = next(entry for entry in codex['entries'] if entry['name'] == 'Mira')
         key = next(entry for entry in codex['entries'] if entry['name'] == 'Key')
         mira['notes'] = 'Rewritten in Studio'

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Imported entries keep a hash, not a copy (W24):** a codex entry made by the Foundry import stores `foundry.hash` (a fingerprint of the imported name, folder, notes and image) and `foundry.image` instead of a full copy of those values, so imported entries no longer carry their text twice. Studio edits are still detected and kept on reimport. Campaign data moves to schema 4 on start-up, with the usual verified backup first.
 - **Bounded draft context:** map workflows and general requests now select linked and pinned codex records,
   active thread summaries, name matches and a compact index under a configurable character budget. Prompt
   packs and background jobs share the same selector. A preview shows counts and size, and the GM can pin

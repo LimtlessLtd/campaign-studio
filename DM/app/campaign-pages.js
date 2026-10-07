@@ -130,7 +130,7 @@ const plain = (t) => (t || '').replace(/<[^>]+>/g, '');
 function codexImageUrl(entry) {
   if (!entry.image) return null;
   const imported = entry.foundry;
-  if (imported?.imported?.image === entry.image) {
+  if (imported?.image === entry.image) {
     if (!imported.world_key || imported.world_key !== S.state.world_key) return null;
     return (
       '/api/foundry/asset?' +
@@ -1151,7 +1151,7 @@ async function codexEntry(c, id, main, context) {
         img,
         field(docName, e, 'image', {
           label:
-            e.foundry?.imported?.image === e.image
+            e.foundry?.image === e.image
               ? 'Foundry image (upload a Studio image to replace it)'
               : 'Image (path in the campaign folder)',
           placeholder: 'e.g. ' + S.state.uploads_dir + '/portrait.png',
