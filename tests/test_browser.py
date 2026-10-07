@@ -380,6 +380,15 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_role('heading', name='Draft context')).not_to_be_visible()
         self.assertEqual(self.stored('inbox')['items'][0]['context_pins'], ['mira'])
 
+        campaign_core.write_doc('codex', {'entries': []})
+        self.page.get_by_role('button', name='Preview context').click()
+        expect(
+            self.page.get_by_text('Previously pinned entries were deleted: mira.')
+        ).to_be_visible()
+        self.page.get_by_role('button', name='Save pinned entries').click()
+        expect(self.page.get_by_role('heading', name='Draft context')).not_to_be_visible()
+        self.assertEqual(self.stored('inbox')['items'][0]['context_pins'], [])
+
     def test_world_map_pin_links_a_battle_map(self):
         slug, _brief = self.studio.import_map()
         self.open('#/world')

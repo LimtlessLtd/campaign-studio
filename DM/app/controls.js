@@ -514,6 +514,13 @@ async function contextPreview(packUrl, saveUrl, onSaved = () => {}) {
             `${preview.omitted_entries} entries omitted after the budget filled.`,
           )
         : null,
+      preview.missing_pins.length
+        ? h(
+            'p',
+            {},
+            `Previously pinned entries were deleted: ${preview.missing_pins.join(', ')}. Save pinned entries to clear these old pins.`,
+          )
+        : null,
       h(
         'p',
         { class: 'muted' },

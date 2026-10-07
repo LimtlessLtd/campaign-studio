@@ -118,7 +118,9 @@ def build(
     threads = sorted((t for t in threads if isinstance(t, dict) and t.get('id')), key=_sort)
     by_id = {e['id']: e for e in entries}
     threads_by_id = {t['id']: t for t in threads}
-    pins = clean_pins(list(pins), entries)
+    stored_pins = list(pins)
+    missing_pins = [pin for pin in stored_pins if pin not in by_id]
+    pins = clean_pins([pin for pin in stored_pins if pin in by_id], entries)
     linked_ids = set(linked_ids) | set(pins)
     linked_threads = set(linked_threads)
     limit = (
@@ -258,5 +260,6 @@ def build(
         - len(matched)
         - len(data['codex_index']),
         'pinned': pins,
+        'missing_pins': missing_pins,
     }
     return prompt, preview

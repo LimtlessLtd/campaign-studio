@@ -6,7 +6,8 @@
   active thread summaries, name matches and a compact index under a configurable character budget. Prompt
   packs and background jobs share the same selector. A preview shows counts and size, and the GM can pin
   up to 20 entries before another draft. For a large map the preview shows the next AI batch. Provenance
-  and file paths stay out of the reference data.
+  and file paths stay out of the reference data. If an entry was deleted after it was pinned, the preview
+  names the stale pin and lets the GM clear it without blocking the next draft.
 - **World Library review fixes:** previously saved snapshots without a compendium flag still open in the folder picker and import. Macro exports also detect legacy `flags.core.sourceId` when `_stats.compendiumSource` is empty.
 - **Folder picker for the world import (W24):** the World Library page offers "Choose folders to import" before the one-click import. Folders made only of compendium copies start unticked; leaving the picker alone imports as before, and unticked documents stay searchable in the library.
 - **Relay record check (W45):** `tools/check_relay.py` fails CI when a commit has a `Reviewed-PR:` line that git does not read as a trailer (for example above a separate `Co-Authored-By` paragraph), so a review can no longer be lost silently. Run it locally with `python tools/check_relay.py origin/main..HEAD`.

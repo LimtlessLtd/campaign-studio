@@ -76,6 +76,24 @@ class ContextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '20'):
             prompt_context.clean_pins(['e-0'] * 21, entries)
 
+    def test_deleted_pin_can_be_previewed_and_cleared(self):
+        entries = [{'id': 'still-here', 'name': 'Survivor', 'type': 'npc'}]
+        prompt, preview = prompt_context.build(
+            'REFERENCE DATA:\n',
+            {},
+            {},
+            entries,
+            [],
+            '',
+            pins=['deleted-entry', 'still-here'],
+            budget_chars=16_000,
+        )
+        self.assertIn('still-here', prompt)
+        self.assertEqual(preview['pinned'], ['still-here'])
+        self.assertEqual(preview['missing_pins'], ['deleted-entry'])
+        with self.assertRaisesRegex(ValueError, 'no longer exists'):
+            prompt_context.clean_pins(['deleted-entry'], entries)
+
 
 if __name__ == '__main__':
     unittest.main()
