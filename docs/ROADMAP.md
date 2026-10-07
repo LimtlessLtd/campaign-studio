@@ -14,9 +14,9 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Campaign memory and AI context** (W23, W24, W30, W31). Prompts carry nothing about past sessions, and
-   after a large world import they carry the whole codex, about two million tokens. Every AI feature
-   depends on this.
+1. **Campaign memory and AI context** (W24, W30, W31). W23 now bounds drafts and prompt packs; they still
+   have no past session logs, and a large world still imports every actor and item into the codex. Every
+   AI feature depends on improving this context.
 2. **Session workflow** (W32–W37). Studio prepares maps and single records well. Nothing turns a pitch into
    a session, or a played session back into threads.
 3. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
@@ -54,32 +54,13 @@ into the threads.
 A synthetic campaign goes through the whole journey in Studio. A pitch becomes an outline the GM edits; two
 maps (one generated, one imported) are stocked; six NPCs get portraits, tokens and compendium bases; one
 bundle imports into the macro fixture; a wrap-up moves the threads; the next session's recap uses it. Rows
-W23–W26, W30, W32–W35 and W38–W42 cover it. Then the owner repeats it on their own campaign with W43.
+W24–W26, W30, W32–W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
 
 ## Design notes
 
 New work reuses the patterns in `AGENTS.md`: propose, validate, review, apply; `commit_docs` for
 multi-document changes; shapes with migrations; ownership tags in Foundry. W27 and W52–W56 need no note:
 their row and finding say enough.
-
-### W23 Context budget
-
-- One module (for example `DM/context.py`) builds the reference data for every structured prompt and
-  prompt pack: map workflows, requests, and later session and wrap-up drafts. Today `workflow.prompt` and
-  `request_workflow.prompt_pack` each serialise the whole codex and thread list.
-- Fill in this order until the budget is spent: campaign card (name, system, tone); party roster (W37); the
-  last few session logs (W30); open, planned and foreshadowed threads as one line each; records linked to
-  the task, in full; records whose names appear in the request text; an index of everything else
-  (`id · type · name · first sentence`).
-- Linked records: the map key's links, the focus entry and its `related` list, the prep's threads and scene
-  NPCs, the brief's selected threads.
-- Leave out provenance (`foundry`, `request`, `workflow`, `expanded_by`) and file paths. Shorten long notes
-  instead of dropping a linked record.
-- Count the budget in characters, estimating tokens as characters ÷ 4; the default lives in settings. Keep
-  the order stable so repeated drafts reuse provider prompt caches.
-- The browser shows what a draft will include (sections, counts, size) and lets the GM pin records.
-- Proposal validation still checks IDs against the whole codex, so a draft may link a record it saw only in
-  the index.
 
 ### W24 Selective import
 

@@ -480,7 +480,9 @@ def request_pack(item):
     campaign_info = {'name': cfg['campaign_name']}
     if cfg.get('world_path'):
         campaign_info['world'] = config.world_info(cfg['world_path'])
-    return request_workflow.prompt_pack(item, request_read, campaign_info)
+    return request_workflow.prompt_pack(
+        item, request_read, campaign_info, cfg['context_budget_chars']
+    )
 
 
 def start_request(rid):

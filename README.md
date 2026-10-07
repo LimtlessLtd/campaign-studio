@@ -104,9 +104,10 @@ journals, actors and items straight from the world's database files when you ope
 and without changing Foundry; it shows when they were read and re-reads after Foundry saves changes. If a
 world's files cannot be read, download the export Script macro, run it as GM in Foundry, and import the JSON
 snapshot instead. **Import world into Studio** adds actors, items and scenes to the codex in one action;
-first-run setup also runs it and reports failures. AI drafts currently include the whole codex, so a world
-with thousands of actors and items makes them exceed model limits until selective import and a context
-budget land (see the [roadmap](docs/ROADMAP.md)). Importing a macro snapshot uses the same rules. Studio
+first-run setup also runs it and reports failures. AI drafts use a configurable context budget (64,000
+characters by default) and keep linked records while indexing other entries as space allows. Preview the
+selection and pin up to 20 codex entries before drafting. Selective import is still planned for worlds with
+thousands of actors and items (see the [roadmap](docs/ROADMAP.md)). Importing a macro snapshot uses the same rules. Studio
 edits are kept on reimport, source worlds remain separate, and supported local Foundry images display while
 their world is connected. For a read from a running Foundry client, download the live bridge Script macro
 from World Library, run it as GM, and approve the connection in the Studio tab it opens. The bridge signals

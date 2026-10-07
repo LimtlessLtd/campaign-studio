@@ -280,7 +280,12 @@ class StudioIntegration(unittest.TestCase):
             }
 
         first = value['batches'][0]
-        prompt = json.loads(workflow.prompt(value, {}).partition('REFERENCE DATA:' + chr(10))[2])
+        pack = workflow.prompt_pack(value, {})
+        preview = pack['context_preview']
+        self.assertLessEqual(
+            preview['prompt_chars'] + preview['schema_chars'], preview['budget_chars']
+        )
+        prompt = json.loads(pack['prompt'].partition('REFERENCE DATA:' + chr(10))[2])
         self.assertEqual(prompt['batch']['areas'], first)
         outside = next(a for a in prompt['key']['areas'] if a['n'] not in first)
         self.assertEqual(sorted(outside), ['kind', 'n', 'name'])

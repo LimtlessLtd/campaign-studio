@@ -254,6 +254,18 @@ class BrowserSmoke(unittest.TestCase):
             requests, [{'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}]
         )
 
+    def test_handouts_keep_nested_folder_names(self):
+        for folder in ('set-a', 'set-b'):
+            target = self.studio.dm / 'uploads' / folder
+            target.mkdir(parents=True)
+            (target / 'portrait.png').write_bytes(PNG)
+        self.open('#/handouts')
+        captions = self.page.locator('.gallery figcaption')
+        expect(captions).to_have_count(2)
+        self.assertCountEqual(
+            captions.all_text_contents(), ['set-a/portrait.png', 'set-b/portrait.png']
+        )
+
     def test_live_library_pairs_with_a_foundry_tab_and_refreshes(self):
         world = self.studio.root / 'User Data' / 'Data' / 'worlds' / 'fixture-world'
         world.mkdir(parents=True)
@@ -346,6 +358,27 @@ class BrowserSmoke(unittest.TestCase):
         self.page.get_by_role('link', name='Campaign codex').click()
         expect(self.page.get_by_text('The Watcher').first).to_be_visible()
         self.assert_accessible('codex')
+
+    def test_request_context_preview_can_pin_a_codex_entry(self):
+        campaign_core.write_doc(
+            'codex',
+            {'entries': [{'id': 'mira', 'name': 'Mira', 'type': 'npc', 'notes': 'Keeps the clue'}]},
+        )
+        campaign_core.write_doc(
+            'inbox',
+            {'items': [{'id': 'req-context', 'kind': 'other', 'text': 'A gate', 'status': 'new'}]},
+        )
+        self.open('#/inbox')
+        self.page.get_by_role('button', name='Preview context').click()
+        expect(self.page.get_by_role('heading', name='Draft context')).to_be_visible()
+        self.assert_accessible('context preview')
+        self.page.get_by_role('searchbox', name='Search codex entries to pin').fill('Mir')
+        self.page.get_by_role('button', name='Pin Mira (npc)').click()
+        self.page.get_by_role('button', name='Update preview').click()
+        expect(self.page.get_by_text('Linked and pinned entries: 1')).to_be_visible()
+        self.page.get_by_role('button', name='Save pinned entries').click()
+        expect(self.page.get_by_role('heading', name='Draft context')).not_to_be_visible()
+        self.assertEqual(self.stored('inbox')['items'][0]['context_pins'], ['mira'])
 
     def test_world_map_pin_links_a_battle_map(self):
         slug, _brief = self.studio.import_map()

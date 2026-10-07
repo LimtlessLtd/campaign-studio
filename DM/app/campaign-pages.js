@@ -162,6 +162,7 @@ async function addRequest(fields) {
       to: 'claude',
       kind: 'other',
       status: 'new',
+      context_pins: [],
       text: '',
       result: '',
       created: Date.now(),
@@ -271,6 +272,26 @@ function requestCard(it, box, draw) {
                 it.status === 'review' ? 'Draft again' : `Draft with ${S.state.ai.label}`,
               )
             : null,
+        !isMap && it.status !== 'doing' && it.status !== 'done'
+          ? h(
+              'button',
+              {
+                onclick: () =>
+                  attempt(async () => {
+                    if (S.pending.inbox) await flush('inbox');
+                    await contextPreview(
+                      '/api/requests/' + it.id + '/pack',
+                      '/api/requests/' + it.id + '/context',
+                      async () => {
+                        await load('inbox', { items: [] });
+                        route(true);
+                      },
+                    );
+                  }),
+              },
+              'Preview context',
+            )
+          : null,
         !isMap && it.status !== 'doing' && it.status !== 'done'
           ? h(
               'a',
@@ -1213,6 +1234,7 @@ async function handoutsPage(_arg, context) {
   const main = context.view;
   render(main, h('h1', {}, 'Handouts'), h('p', { class: 'sub' }, 'Loading uploaded handouts…'));
   const imgs = await context.api('/api/images?dir=' + encodeURIComponent(S.state.uploads_dir));
+  const uploadsPrefix = S.state.uploads_dir + '/';
   let q = '';
   const gallery = h('div', { class: 'gallery' });
   const draw = () =>
@@ -1226,7 +1248,11 @@ async function handoutsPage(_arg, context) {
             'figure',
             { onclick: () => lightbox(i.path) },
             h('img', { src: fileUrl(i.path), loading: 'lazy', alt: '' }),
-            h('figcaption', {}, i.path.split('/').pop()),
+            h(
+              'figcaption',
+              {},
+              i.path.startsWith(uploadsPrefix) ? i.path.slice(uploadsPrefix.length) : i.path,
+            ),
           ),
         ),
     );

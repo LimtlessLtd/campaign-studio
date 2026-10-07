@@ -13,6 +13,7 @@ from pathlib import Path
 import campaign
 import ai_provider
 import config
+import context as prompt_context
 import foundry_backup
 import foundry_library
 import foundry_upgrade
@@ -71,6 +72,7 @@ ROUTES = {
         (lambda path: path == '/api/state', '_get_state'),
         (lambda path: path == '/api/shapes', '_get_shapes'),
         (lambda path: path == '/api/settings', '_get_settings'),
+        (lambda path: path == '/api/context/search', '_get_context_search'),
         (lambda path: path == '/api/foundry/backup/plan', '_get_backup_plan'),
         (lambda path: path == '/api/foundry/worlds', '_get_worlds'),
         (lambda path: path == '/api/foundry/library', '_get_library'),
@@ -357,6 +359,18 @@ class Handler(SimpleHTTPRequestHandler):
             )
         )
 
+    def _get_context_search(self, path, query, p):
+        needle = query.get('q', [''])[0].strip().casefold()[:100]
+        if len(needle) < 2:
+            return self.send_json([])
+        entries = read_json(doc_path('codex'), {'entries': []})['entries']
+        found = [
+            {'id': e['id'], 'name': e.get('name', ''), 'type': e.get('type', '')}
+            for e in entries
+            if needle in (e.get('name', '') + ' ' + e.get('id', '')).casefold()
+        ]
+        return self.send_json(sorted(found, key=lambda e: (e['name'].casefold(), e['id']))[:20])
+
     def _get_backup_plan(self, path, query, p):
         return self.send_json(foundry_backup.plan())
 
@@ -423,13 +437,7 @@ class Handler(SimpleHTTPRequestHandler):
             campaign_info = {'name': config.settings()['campaign_name']}
             if config.settings().get('world_path'):
                 campaign_info['world'] = config.world_info(config.settings()['world_path'])
-            return self.send_json(
-                {
-                    'workflow': value['id'],
-                    'prompt': workflow.prompt(value, campaign_info),
-                    'schema': workflow.schema(value['kind']),
-                }
-            )
+            return self.send_json(workflow.prompt_pack(value, campaign_info))
         return self.send_json(value)
 
     def _get_request_pack(self, path, query, p):
@@ -714,7 +722,7 @@ class Handler(SimpleHTTPRequestHandler):
         rid, action = parts[3:]
         if action == 'run':
             return self.send_json(start_request(rid))
-        if action not in ('stage', 'apply'):
+        if action not in ('stage', 'apply', 'context'):
             raise Invalid('Unknown request action.')
         with LOCK:
             box = read_json(doc_path('inbox'), {'items': []})
@@ -723,7 +731,11 @@ class Handler(SimpleHTTPRequestHandler):
                 raise NotFound('No such request.')
             if item.get('status') in ('doing', 'done') or item.get('applied'):
                 raise Conflict('Reopen or wait for this request before changing its draft.')
-            if action == 'stage':
+            if action == 'context':
+                entries = read_json(doc_path('codex'), {'entries': []})['entries']
+                item['context_pins'] = prompt_context.clean_pins(p.get('pins'), entries)
+                write_doc('inbox', box)
+            elif action == 'stage':
                 request_workflow.stage(item, p['draft'], request_read)
                 write_doc('inbox', box)
             else:
@@ -765,6 +777,9 @@ class Handler(SimpleHTTPRequestHandler):
         cfg.update(
             campaign_name=name,
             world_path=world_path,
+            context_budget_chars=prompt_context.budget(
+                p.get('context_budget_chars', cfg['context_budget_chars'])
+            ),
             ai=ai_provider.clean_settings(p.get('ai') or {}),
             images={
                 'endpoint': endpoint,
@@ -964,6 +979,17 @@ class Handler(SimpleHTTPRequestHandler):
                     else None
                 )
                 return self.send_json({'workflow': value, 'job': job})
+        if action == 'context':
+            if value['status'] in ('running', 'applied'):
+                raise Conflict('Wait for this workflow before changing its context.')
+            with LOCK:
+                value = workflow.get(value['id'])
+                if value['status'] in ('running', 'applied'):
+                    raise Conflict('Wait for this workflow before changing its context.')
+                entries = read_json(doc_path('codex'), {'entries': []})['entries']
+                value['context_pins'] = prompt_context.clean_pins(p.get('pins'), entries)
+                workflow.save(value)
+                return self.send_json(value)
         if action == 'run':
             if value['status'] in ('running', 'applied'):
                 raise Conflict('This workflow is already running or applied.')
