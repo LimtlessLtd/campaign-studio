@@ -457,7 +457,7 @@ class Handler(SimpleHTTPRequestHandler):
                 'has_plan': os.path.isfile(
                     os.path.join(campaign.active().map_folder(slug), 'plan.txt')
                 ),
-                'revisions': revisions.listing(slug)
+                'revisions': revisions.listing(slug, campaign.active())
                 if os.path.isdir(campaign.active().map_folder(slug))
                 else [],
             }
@@ -566,7 +566,7 @@ class Handler(SimpleHTTPRequestHandler):
         import forge
 
         forge.parse_plan(text)
-        revisions.checkpoint(slug, 'Before plan edit')
+        revisions.checkpoint(slug, 'Before plan edit', campaign.active())
         with LOCK:
             write_target('plan/' + slug, text)
         return self.send_json({'ok': True})
@@ -728,7 +728,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _post_map_import(self, path, query, p):
         with LOCK:
-            return self.send_json(maps_io.import_image(p, write_doc))
+            return self.send_json(maps_io.import_image(p, write_doc, campaign.active()))
 
     def _post_settings(self, path, query, p):
         cfg = config.settings()
@@ -837,11 +837,13 @@ class Handler(SimpleHTTPRequestHandler):
             if map_busy(slug):
                 raise Conflict('Wait for this map’s current job to finish before exporting.')
             with LOCK:
-                return self.send_json(maps_io.export(slug, write_doc))
+                return self.send_json(maps_io.export(slug, write_doc, campaign.active()))
         if action in ('populate', 'revise'):
             return self._post_map_workflow(slug, action, p)
         if action == 'checkpoint':
-            return self.send_json(revisions.checkpoint(slug, p.get('label') or 'Saved checkpoint'))
+            return self.send_json(
+                revisions.checkpoint(slug, p.get('label') or 'Saved checkpoint', campaign.active())
+            )
         if action == 'restore':
             if map_busy(slug):
                 raise Conflict(

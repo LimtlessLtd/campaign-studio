@@ -21,18 +21,19 @@ def read_json(path):
 sys.path.insert(0, os.path.join(campaign.INSTALL, 'forge'))
 
 
-def unique_slug(name):
+def unique_slug(name, here=None):
     import generate
 
     base = generate.slugify(name)[:54]
     slug, n = base, 2
-    here = campaign.active()
+    here = here or campaign.active()
     while os.path.exists(here.map_folder(slug)) or os.path.exists(here.map_brief(slug)):
         slug, n = base + '-' + str(n), n + 1
     return slug
 
 
-def import_image(p, save_doc):
+def import_image(p, save_doc, here=None):
+    here = here or campaign.active()
     name = str(p.get('name') or '').strip()[:60]
     if not name:
         raise ValueError('Give the map a name.')
@@ -40,8 +41,8 @@ def import_image(p, save_doc):
     if not 50 <= cell <= 300:
         raise ValueError('Pixels per square must be 50–300.')
     rel = str(p.get('image') or '').replace('\\', '/')
-    source = os.path.realpath(os.path.join(campaign.active().files, rel))
-    uploads = os.path.realpath(campaign.active().uploads)
+    source = os.path.realpath(os.path.join(here.files, rel))
+    uploads = os.path.realpath(here.uploads)
     if not source.startswith(uploads + os.sep) or not os.path.isfile(source):
         raise ValueError('Choose an image uploaded into this studio.')
     with Image.open(source) as image:
@@ -54,8 +55,8 @@ def import_image(p, save_doc):
         raise ValueError(
             'The imported map may have at most 320 squares per side. Adjust its grid scale.'
         )
-    slug = unique_slug(name)
-    folder = campaign.active().map_folder(slug)
+    slug = unique_slug(name, here)
+    folder = here.map_folder(slug)
     os.makedirs(folder)
     ext = os.path.splitext(source)[1].lower()
     local = os.path.join(folder, slug + ext)
@@ -101,13 +102,13 @@ def import_image(p, save_doc):
         theme='imported',
         imported=True,
         cells=[w, h],
-        image=campaign.active().relative(local),
-        scene=campaign.active().relative(os.path.join(folder, slug + '.foundry.json')),
+        image=here.relative(local),
+        scene=here.relative(os.path.join(folder, slug + '.foundry.json')),
         check='',
         plan='',
         da='',
         roofs_preview='',
-        key=campaign.active().relative(os.path.join(folder, 'key.json')),
+        key=here.relative(os.path.join(folder, 'key.json')),
         in_foundry=False,
         session='',
         stocked=False,
@@ -119,7 +120,7 @@ def import_image(p, save_doc):
         roofs=0,
         railings=0,
     )
-    index_path = campaign.active().map_index
+    index_path = here.map_index
     storage.update_json(
         index_path,
         {'items': []},
@@ -144,39 +145,40 @@ def import_image(p, save_doc):
         auto_content=False,
     )
     save_doc('mapbrief/' + slug, brief)
-    if config.foundry_data():
-        export(slug, save_doc)
+    if config.foundry_data(here):
+        export(slug, save_doc, here)
     return {'slug': slug}
 
 
-def export(slug, save_doc):
-    with storage.file_lock(campaign.active().map_index):
+def export(slug, save_doc, here=None):
+    here = here or campaign.active()
+    with storage.file_lock(here.map_index):
         import forge
 
-        data_path = config.foundry_data()
+        data_path = config.foundry_data(here)
         if not data_path or not os.path.isdir(data_path):
             raise ValueError('Choose a local Foundry world in Settings before exporting.')
-        index_path = campaign.active().map_index
+        index_path = here.map_index
         index = read_json(index_path)
         entry = next((m for m in index['items'] if m['slug'] == slug), None)
         if not entry:
             raise ValueError('Map not found.')
-        folder = campaign.active().map_folder(slug)
+        folder = here.map_folder(slug)
         scene_path = os.path.join(folder, slug + '.foundry.json')
         scene = read_json(scene_path)
         key_path = os.path.join(folder, 'key.json')
         key = read_json(key_path) if os.path.isfile(key_path) else None
         tag = scene.setdefault('flags', {}).setdefault('world', {}).setdefault('wotgForge', {})
-        tag['key'] = forge.key_for_foundry(slug, key)
+        tag['key'] = forge.key_for_foundry(slug, key, here=here)
         tag['targetWorld'] = (
-            config.world_info(config.settings()['world_path'])['id']
-            if config.settings().get('world_path')
+            config.world_info(config.settings(here)['world_path'])['id']
+            if config.settings(here).get('world_path')
             else ''
         )
         storage.atomic_json(scene_path, scene)
         target = os.path.join(data_path, 'wotg-maps')
         os.makedirs(target, exist_ok=True)
-        image_path = os.path.join(campaign.active().files, entry['image'])
+        image_path = os.path.join(here.files, entry['image'])
         shutil.copy2(image_path, os.path.join(target, slug + os.path.splitext(image_path)[1]))
         shutil.copy2(scene_path, os.path.join(target, slug + '.json'))
         roofs = os.path.join(folder, slug + '.roofs')

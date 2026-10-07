@@ -92,7 +92,8 @@ def main():
     seed = a.seed if a.seed is not None else int.from_bytes(os.urandom(3), 'big')
     name = a.name or f'{spec["title"]} {seed}'
     slug = slugify(a.slug or name)
-    folder = campaign.active().map_folder(slug)
+    here = campaign.active()
+    folder = here.map_folder(slug)
     if os.path.exists(folder):
         sys.exit(
             f'DM/maps/{slug} already exists; choose a different name to preserve its plan and DM key'
@@ -146,7 +147,7 @@ def main():
     if a.forge:
         import forge
 
-        forge.forge(os.path.join(folder, 'plan.txt'), True, a.jobs)
+        forge.forge(os.path.join(folder, 'plan.txt'), True, a.jobs, here)
     print(f'SLUG {slug}', flush=True)
 
 
