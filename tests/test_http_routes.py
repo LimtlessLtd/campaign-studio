@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 
 import campaign
 import http_routes
+import workflow
 
 
 class RouteTests(unittest.TestCase):
@@ -62,6 +63,67 @@ class RouteTests(unittest.TestCase):
         with patch.object(http_routes, 'map_busy', return_value=True):
             status, _, _ = self.request('/api/maps/fixture/export', 'POST')
         self.assertEqual(status, 409)
+
+    def test_context_preview_search_and_pins_match_exported_packs(self):
+        settings = http_routes.config.settings()
+        settings['context_budget_chars'] = 16_000
+        self.assertEqual(self.request('/api/settings', 'POST', settings)[0], 200)
+        self.assertEqual(
+            self.request('/api/settings', 'POST', {**settings, 'context_budget_chars': 100})[0],
+            400,
+        )
+        http_routes.write_doc(
+            'codex',
+            {
+                'entries': [
+                    {'id': 'mira', 'name': 'Mira', 'type': 'npc', 'notes': 'Keeps the clue'},
+                    {'id': 'orm', 'name': 'Orm', 'type': 'npc', 'notes': 'Knows the gate'},
+                ]
+            },
+        )
+        http_routes.write_doc(
+            'inbox',
+            {
+                'items': [
+                    {'id': 'req-one', 'kind': 'other', 'text': 'Find the gate', 'status': 'new'}
+                ]
+            },
+        )
+        status, found, _ = self.request('/api/context/search?q=mir')
+        self.assertEqual((status, [entry['id'] for entry in found]), (200, ['mira']))
+        status, pack, _ = self.request('/api/requests/req-one/pack')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(pack['prompt'].split('REFERENCE DATA:\n', 1)[1])['codex'], [])
+        self.assertEqual(pack['context_preview']['pinned'], [])
+        self.assertEqual(
+            self.request('/api/requests/req-one/context', 'POST', {'pins': ['mira']})[0],
+            200,
+        )
+        _, pack, _ = self.request('/api/requests/req-one/pack')
+        self.assertIn('Keeps the clue', pack['prompt'])
+        self.assertEqual(
+            json.loads(pack['prompt'].split('REFERENCE DATA:\n', 1)[1])['codex'][0]['id'],
+            'mira',
+        )
+        self.assertEqual(pack['context_preview']['pinned'], ['mira'])
+        self.assertEqual(pack['context_preview']['budget_chars'], 16_000)
+        self.assertEqual(
+            self.request('/api/requests/req-one/context', 'POST', {'pins': ['missing']})[0],
+            400,
+        )
+
+        value = workflow.create('fixture', {'name': 'Fixture', 'prompt': 'A gate'})
+        url = '/api/workflow/' + value['id']
+        self.assertEqual(self.request(url + '/context', 'POST', {'pins': ['orm']})[0], 200)
+        _, pack, _ = self.request(url + '/pack')
+        self.assertIn('Knows the gate', pack['prompt'])
+        self.assertEqual(pack['context_preview']['pinned'], ['orm'])
+        self.assertLessEqual(
+            pack['context_preview']['prompt_chars']
+            + pack['context_preview']['schema_chars']
+            + 2_048,
+            pack['context_preview']['budget_chars'],
+        )
 
     def test_forge_scripts_come_from_the_install_folder_not_the_campaign(self):
         with urllib.request.urlopen(

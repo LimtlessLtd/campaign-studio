@@ -7,6 +7,7 @@ import time
 from copy import deepcopy
 
 import shapes
+import context as prompt_context
 import workflow
 
 REQUEST_ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
@@ -118,17 +119,17 @@ def validate_request(item, read_doc):
     return session
 
 
-def prompt_pack(item, read_doc, campaign):
+def prompt_pack(item, read_doc, campaign, budget_chars=prompt_context.DEFAULT_BUDGET):
     session = validate_request(item, read_doc)
-    context = {
+    codex = read_doc('codex') or {'entries': []}
+    threads = read_doc('threads') or {'threads': []}
+    prep = read_doc('prep/' + session) if session else None
+    focus = next((e for e in codex['entries'] if e.get('id') == item.get('codex')), None)
+    base = {
         'campaign': campaign,
         'request': {key: item.get(key, '') for key in ('kind', 'text', 'session')},
-        'codex': read_doc('codex') or {'entries': []},
-        'focus_entry': next(
-            (e for e in codex_entries(read_doc) if e.get('id') == item.get('codex')), None
-        ),
-        'threads': read_doc('threads') or {'threads': []},
-        'prep': read_doc('prep/' + session) if session else None,
+        'focus_entry': {'id': focus['id'], 'name': focus.get('name', '')} if focus else None,
+        'prep': prep,
     }
     instruction = (
         'You are drafting one request for a tabletop GM. Return only JSON matching the supplied schema. '
@@ -155,10 +156,36 @@ def prompt_pack(item, read_doc, campaign):
         )
     else:
         instruction += 'There is no linked session. Leave scenes, handouts, goals, loot, checklist and notes empty. '
+    linked = {item['codex']} if focus else set()
+    linked.update(
+        rid for rid in ((focus.get('related') or []) if focus else []) if isinstance(rid, str)
+    )
+    linked_threads = set()
+    if prep:
+        linked_threads.update(rid for rid in prep.get('threads', []) if isinstance(rid, str))
+        linked.update(
+            npc
+            for scene in prep.get('scenes', [])
+            for npc in scene.get('npcs', [])
+            if isinstance(npc, str)
+        )
+    built, preview = prompt_context.build(
+        instruction + '\nREFERENCE DATA:\n',
+        base,
+        SCHEMA,
+        codex['entries'],
+        threads['threads'],
+        item['text'],
+        linked_ids=linked,
+        linked_threads=linked_threads,
+        pins=item.get('context_pins', []),
+        budget_chars=budget_chars,
+    )
     return {
         'request': item['id'],
-        'prompt': instruction + '\nREFERENCE DATA:\n' + json.dumps(context, ensure_ascii=False),
+        'prompt': built,
         'schema': SCHEMA,
+        'context_preview': preview,
     }
 
 

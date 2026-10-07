@@ -475,3 +475,126 @@ function modal(title, description, body, onSubmit, button = 'Save') {
   dialog.addEventListener('cancel', () => dialog.remove());
   return dialog;
 }
+
+async function contextPreview(packUrl, saveUrl, onSaved = () => {}) {
+  let pack = await api(packUrl);
+  const pins = new Set(pack.context_preview.pinned);
+  const summary = h('div');
+  const chosen = h('div');
+  const results = h('div');
+  const search = h('input', { type: 'search', placeholder: 'Search codex entries by name or ID' });
+  search.setAttribute('aria-label', 'Search codex entries to pin');
+
+  const drawSummary = () => {
+    const preview = pack.context_preview;
+    render(
+      summary,
+      h(
+        'p',
+        {},
+        `${preview.prompt_chars.toLocaleString()} prompt characters · about ${preview.estimated_tokens.toLocaleString()} tokens · ${preview.budget_chars.toLocaleString()} character budget (including schema)`,
+      ),
+      h(
+        'ul',
+        {},
+        preview.sections.map((section) => h('li', {}, `${section.name}: ${section.count}`)),
+      ),
+      preview.full_entries.length
+        ? h(
+            'p',
+            {},
+            'Full entries: ' +
+              preview.full_entries.map((entry) => `${entry.name} (${entry.id})`).join(', '),
+          )
+        : null,
+      preview.omitted_entries
+        ? h(
+            'p',
+            { class: 'muted' },
+            `${preview.omitted_entries} entries omitted after the budget filled.`,
+          )
+        : null,
+      preview.missing_pins.length
+        ? h(
+            'p',
+            {},
+            `Previously pinned entries were deleted: ${preview.missing_pins.join(', ')}. Save pinned entries to clear these old pins.`,
+          )
+        : null,
+      h(
+        'p',
+        { class: 'muted' },
+        'Full linked records are kept; long notes are shortened. Other entries appear as brief index lines when space allows.',
+      ),
+    );
+  };
+  const drawChosen = () => {
+    render(
+      chosen,
+      h('b', {}, `Pinned entries (${pins.size}/20)`),
+      ...[...pins].map((id) =>
+        h(
+          'button',
+          {
+            class: 'small',
+            onclick: () => {
+              pins.delete(id);
+              drawChosen();
+            },
+          },
+          `Remove ${id}`,
+        ),
+      ),
+    );
+  };
+  const doSearch = async () => {
+    const query = search.value.trim();
+    if (query.length < 2)
+      return render(results, h('p', { class: 'muted' }, 'Type at least two characters.'));
+    const found = await api('/api/context/search?q=' + encodeURIComponent(query));
+    if (query !== search.value.trim()) return;
+    render(
+      results,
+      ...found.map((entry) =>
+        h(
+          'button',
+          {
+            class: 'small',
+            onclick: () => {
+              if (pins.has(entry.id)) pins.delete(entry.id);
+              else if (pins.size < 20) pins.add(entry.id);
+              else return toast('Pin at most 20 entries.', true);
+              drawChosen();
+              doSearch();
+            },
+          },
+          `${pins.has(entry.id) ? 'Unpin' : 'Pin'} ${entry.name} (${entry.type})`,
+        ),
+      ),
+    );
+  };
+  search.addEventListener('input', () => attempt(doSearch));
+  drawSummary();
+  drawChosen();
+  const savePins = async (refreshPage) => {
+    await post(saveUrl, { pins: [...pins] });
+    pack = await api(packUrl);
+    drawSummary();
+    if (refreshPage) await onSaved();
+  };
+  modal(
+    'Draft context',
+    'Review what the next AI draft or exported prompt pack will include. Pin up to 20 codex entries.',
+    h(
+      'div',
+      {},
+      summary,
+      chosen,
+      search,
+      results,
+      h('button', { onclick: () => attempt(() => savePins(false)) }, 'Update preview'),
+    ),
+    () => savePins(true),
+    'Save pinned entries',
+  );
+}

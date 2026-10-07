@@ -1780,6 +1780,23 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
         : null,
       !working && w.status !== 'applied'
         ? h(
+            'button',
+            {
+              class: 'small',
+              onclick: () =>
+                attempt(() =>
+                  contextPreview(
+                    '/api/workflow/' + w.id + '/pack?for_run=1',
+                    '/api/workflow/' + w.id + '/context',
+                    () => route(true),
+                  ),
+                ),
+            },
+            'Preview context',
+          )
+        : null,
+      !working && w.status !== 'applied'
+        ? h(
             'a',
             {
               class: 'btn small',

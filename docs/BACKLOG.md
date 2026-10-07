@@ -14,7 +14,6 @@ Next ID: W57
 
 | ID  | Priority | Work                                                                                                        | Acceptance criteria                                                            |
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| W23 | 1        | Context budget: every AI prompt and prompt pack built from linked records under a budget, with a preview    | 2,000-entry codex stays under budget with every linked record kept             |
 | W24 | 1        | Selective Foundry import: chosen folders become codex entries, the rest a searchable reference library      | A large world imports only chosen folders; reimport keeps Studio edits         |
 | W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate        |
 | W29 | 2        | Delete, rename and archive maps, preps and world maps; show where a record is used before deleting it       | Deleting an entry used by an area, a scene and a link leaves no dangling ID    |

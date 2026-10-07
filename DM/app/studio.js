@@ -665,6 +665,13 @@ async function studioSettings(_arg, context) {
             ? 'For OpenAI API. Environment key detected; only this variable name is saved.'
             : 'For OpenAI API. Set this variable before starting Studio; only its name is saved.',
         }),
+        formInput(f, 'context_budget_chars', 'Draft context budget (characters)', {
+          type: 'number',
+          min: 16000,
+          max: 200000,
+          step: 1000,
+          help: 'About four characters per token. Includes the draft prompt and schema; default 64,000.',
+        }),
         h(
           'p',
           { class: 'muted' },

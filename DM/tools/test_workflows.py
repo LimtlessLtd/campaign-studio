@@ -256,6 +256,10 @@ class StudioIntegration(unittest.TestCase):
         ]
         campaign_core.write_doc('mapkey/' + slug, key)
         value = workflow.create(slug, brief)
+        run_preview = workflow.prompt_pack(value, {}, for_run=True)
+        planned = json.loads(run_preview['prompt'].partition('REFERENCE DATA:' + chr(10))[2])
+        self.assertEqual(planned['batch']['areas'], [n for n in range(1, 312) if n % 5 == 4][:25])
+        self.assertNotIn('batches', value)
         workflow.begin(value)
         notable = [n for n in range(1, 312) if n % 5 == 4]
         self.assertEqual([n for b in value['batches'] for n in b], notable)
@@ -280,7 +284,12 @@ class StudioIntegration(unittest.TestCase):
             }
 
         first = value['batches'][0]
-        prompt = json.loads(workflow.prompt(value, {}).partition('REFERENCE DATA:' + chr(10))[2])
+        pack = workflow.prompt_pack(value, {})
+        preview = pack['context_preview']
+        self.assertLessEqual(
+            preview['prompt_chars'] + preview['schema_chars'], preview['budget_chars']
+        )
+        prompt = json.loads(pack['prompt'].partition('REFERENCE DATA:' + chr(10))[2])
         self.assertEqual(prompt['batch']['areas'], first)
         outside = next(a for a in prompt['key']['areas'] if a['n'] not in first)
         self.assertEqual(sorted(outside), ['kind', 'n', 'name'])

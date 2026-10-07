@@ -33,6 +33,7 @@ flowchart LR
 | `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results        |
 | `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |
+| `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                     |
 | `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts        |
 | `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review    |
 | `DM/foundry_compat.py`                | Shared build, version and package relationship rules                               |
@@ -163,6 +164,14 @@ journals, events, threads and art briefs. The model never calls persistence dire
 General Requests stage bounded JSON for codex entries, threads and session prep. The GM reviews additions
 before applying; stable request-prefixed IDs and a prep application marker make interrupted writes retryable.
 Editing request text or session after drafting invalidates the proposal.
+
+Map and request drafts share `DM/context.py`. It reserves identity for linked and pinned codex records,
+summarises active threads, then fills the remaining budget with linked details, name matches and a compact
+codex index. Prompt/schema size is bounded by `context_budget_chars` in settings (64,000 by default); a
+brief, plan or prep that alone exceeds it reports an error before provider launch. Provenance and file paths
+are omitted from references. Proposal validation still checks IDs against the full codex. Both exported
+packs and background jobs use this selector; `/api/context/search` and per-draft `context` actions support
+the browser preview and pins.
 
 One worker runs per lane (forge, structured drafts, art). The draft lane retains its `claude` key in saved jobs
 for compatibility. Lanes may run concurrently. `JobService` persists queue and
