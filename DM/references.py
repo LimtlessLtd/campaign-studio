@@ -100,3 +100,52 @@ def remove(docs, entry_id):
             owner[field] = ''
             changed.add(name)
     return sorted(changed, key=lambda name: (name != CODEX, name))
+
+
+def _map_links(docs, slug, name):
+    """Records that point at a map: prep scenes (by name or slug) and request or art items (by slug)."""
+    for doc_name, doc in docs.items():
+        if doc_name.startswith('prep/'):
+            for scene in _rows(doc, 'scenes'):
+                if scene.get('map') and scene['map'] in (slug, name):
+                    yield doc_name, scene
+        elif doc_name in ('inbox', 'art'):
+            for item in _rows(doc, 'items'):
+                if item.get('map') == slug:
+                    yield doc_name, item
+
+
+def map_uses(docs, slug, name):
+    """Where a map is used: [{doc, where}]."""
+    return [
+        {'doc': doc_name, 'where': f'{doc_name}: {owner.get("title") or owner.get("id")}'}
+        for doc_name, owner in _map_links(docs, slug, name)
+    ]
+
+
+def unlink_map(docs, slug, name):
+    """Clear every reference to the map in memory.
+
+    Returns (changed document names, links) where each link is {doc, id, value} so that restoring the
+    map can put the same values back.
+    """
+    links = []
+    for doc_name, owner in _map_links(docs, slug, name):
+        links.append({'doc': doc_name, 'id': owner.get('id'), 'value': owner['map']})
+        owner['map'] = ''
+    return sorted({link['doc'] for link in links}), links
+
+
+def relink_map(docs, links):
+    """Undo unlink_map where the record still exists and has no map set. Returns changed document names."""
+    changed = set()
+    for link in links:
+        doc = docs.get(link['doc'])
+        field_rows = (
+            _rows(doc, 'scenes' if link['doc'].startswith('prep/') else 'items') if doc else []
+        )
+        for row in field_rows:
+            if row.get('id') == link['id'] and not row.get('map'):
+                row['map'] = link['value']
+                changed.add(link['doc'])
+    return sorted(changed)

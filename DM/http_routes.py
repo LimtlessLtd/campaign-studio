@@ -17,6 +17,7 @@ import context as prompt_context
 import foundry_backup
 import foundry_library
 import foundry_upgrade
+import map_trash
 import maps_io
 import packaging_source
 import references
@@ -25,6 +26,7 @@ import remote_access
 import request_workflow
 import revisions
 import shapes
+import storage
 import workflow
 from campaign_core import (
     APP,
@@ -94,6 +96,7 @@ ROUTES = {
         (lambda path: path == '/api/revs', '_get_revs'),
         (lambda path: path.startswith('/api/plan/'), '_get_plan'),
         (lambda path: path == '/api/usage', '_get_usage'),
+        (lambda path: path == '/api/maps/trash', '_get_map_trash'),
         (lambda path: path.startswith('/api/codex/') and path.endswith('/uses'), '_get_codex_uses'),
         (lambda path: path == '/api/jobs', '_get_jobs'),
         (lambda path: path.startswith('/api/jobs/'), '_get_job'),
@@ -137,6 +140,10 @@ ROUTES = {
         (lambda path: path == '/api/settings', '_post_settings'),
         (lambda path: path == '/api/art/generate', '_post_art_generate'),
         (lambda path: path == '/api/maps/create', '_post_map_create'),
+        (
+            lambda path: path.startswith('/api/maps/trash/') and path.endswith('/restore'),
+            '_post_map_untrash',
+        ),
         (lambda path: path.startswith('/api/maps/'), '_post_map'),
         (lambda path: path.startswith('/api/workflow/'), '_post_workflow'),
         (lambda path: path == '/api/generate', '_post_generate'),
@@ -904,6 +911,8 @@ class Handler(SimpleHTTPRequestHandler):
                 raise Conflict('Wait for this map’s current job to finish before exporting.')
             with LOCK:
                 return self.send_json(maps_io.export(slug, write_doc, campaign.active()))
+        if action == 'delete':
+            return self._post_map_trash(slug)
         if action in ('populate', 'revise'):
             return self._post_map_workflow(slug, action, p)
         if action == 'checkpoint':
@@ -917,6 +926,62 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             return self.send_json(restore_revision(slug, p.get('revision', '')))
         raise NotFound('Unknown map action.')
+
+    def _get_map_trash(self, path, query, p):
+        return self.send_json({'items': map_trash.listing(campaign.active())})
+
+    def _post_map_trash(self, slug):
+        if map_busy(slug):
+            raise Conflict('Wait for this map’s current job to finish before deleting it.')
+        here = campaign.active()
+        with LOCK:
+            index = read_json(doc_path('maps/index'), {'items': []})
+            entry = next((m for m in index['items'] if m.get('slug') == slug), None)
+            if not entry:
+                raise NotFound('No such map.')
+            docs = self._reference_docs()
+            changed, links = references.unlink_map(docs, slug, entry.get('name', ''))
+            index['items'] = [m for m in index['items'] if m is not entry]
+            brief = read_json(doc_path('mapbrief/' + slug), {})
+            trash_id = map_trash.put(here, slug, entry, brief, links)
+            try:
+                commit_docs(
+                    f'Delete map {slug}',
+                    [(name, docs[name]) for name in changed] + [('maps/index', index)],
+                )
+            except Exception:
+                map_trash.take_back(here, trash_id, slug)
+                map_trash.discard(here, trash_id)
+                raise
+            storage.remove(here.map_brief(slug))
+            return self.send_json({'ok': True, 'trash': trash_id, 'changed': changed})
+
+    def _post_map_untrash(self, path, query, p):
+        trash_id = path[len('/api/maps/trash/') : -len('/restore')]
+        here = campaign.active()
+        with LOCK:
+            try:
+                meta = map_trash.read(here, trash_id)
+            except (KeyError, ValueError):
+                raise NotFound('Nothing in the trash with that id.') from None
+            slug = meta['slug']
+            index = read_json(doc_path('maps/index'), {'items': []})
+            if os.path.exists(here.map_folder(slug)) or any(
+                m.get('slug') == slug for m in index['items']
+            ):
+                raise Conflict('A map with this id exists; rename or delete it before restoring.')
+            docs = self._reference_docs()
+            changed = references.relink_map(docs, meta.get('links', []))
+            index['items'].append(meta['entry'])
+            map_trash.take_back(here, trash_id, slug)
+            commit_docs(
+                f'Restore map {slug}',
+                [(name, docs[name]) for name in changed]
+                + [('maps/index', index)]
+                + ([('mapbrief/' + slug, meta['brief'])] if meta.get('brief') else []),
+            )
+            map_trash.discard(here, trash_id)
+            return self.send_json({'ok': True, 'slug': slug})
 
     def _map_brief(self, slug):
         brief = read_json(doc_path('mapbrief/' + slug), {})
