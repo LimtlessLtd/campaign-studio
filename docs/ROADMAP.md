@@ -94,6 +94,9 @@ their row and finding say enough.
 - Done: records carry a `compendium` flag, `import_into_codex` takes a folder list (default skips compendium
   copies) and `/api/foundry/world/import` accepts `folders`; the Foundry-macro snapshot sends the flag too.
   The library page has a "Choose folders to import" picker (`library` returns `folders`). Left: the hash.
+- The remaining picker work should identify folders by their Foundry IDs and show parent paths. The current
+  name-only selection cannot distinguish two folders with the same name. Keep older name-only snapshots
+  readable when adding those IDs.
 
 ### W25 Linked Foundry documents
 

@@ -22,7 +22,7 @@ const common = (doc) => ({
   type: doc.type ?? '',
   image: doc.img ?? '',
   // Copies of compendium documents rarely need campaign notes; the import skips them by default.
-  compendium: Boolean(doc._stats?.compendiumSource ?? doc.flags?.core?.sourceId),
+  compendium: Boolean(doc._stats?.compendiumSource || doc.flags?.core?.sourceId),
 });
 const readable = (doc) =>
   doc.testUserPermission?.(game.user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER) === true;

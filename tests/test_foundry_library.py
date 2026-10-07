@@ -246,6 +246,19 @@ class FoundryLibraryTests(unittest.TestCase):
         self.assertTrue(folders['Allies']['suggested'])
         self.assertEqual(foundry_library.import_folders(None), [])
 
+    def test_saved_snapshot_before_compendium_flag_still_lists_and_imports(self):
+        snapshot = foundry_library.normalize_snapshot(
+            self.snapshot(), foundry_library.selected_world()
+        )
+        for documents in snapshot['documents'].values():
+            for document in documents:
+                document.pop('compendium')
+        self.assertTrue(foundry_library.library(snapshot)['folders'])
+        codex = {'entries': []}
+        report = foundry_library.import_into_codex(snapshot, codex)
+        self.assertEqual(report['added'], 3)
+        self.assertEqual(report['skipped'], 0)
+
     def test_read_world_marks_compendium_copies(self):
         self.database(
             'items',

@@ -21,7 +21,11 @@ const game = {
   scenes: { contents: [] }, journal: { contents: [
     { ...doc('journal', true), pages: { contents: [doc('readable-page', true), doc('hidden-page', false)] } },
   ] },
-  actors: { contents: [doc('visible', true), doc('secret', false)] },
+  actors: { contents: [
+    doc('visible', true),
+    { ...doc('old-compendium', true), _stats: { compendiumSource: '' }, flags: { core: { sourceId: 'Compendium.dnd5e.monsters.test' } } },
+    doc('secret', false),
+  ] },
   items: { contents: [] },
 };
 const sent = [];
@@ -61,7 +65,8 @@ class DOMParser {
   assert.equal(sent.length, 1);
   listeners.get('message')({ source: studioTab, origin: 'http://127.0.0.1:8766', data: request });
   assert.equal(sent[1].data.type, 'snapshot');
-  assert.deepEqual(sent[1].data.snapshot.documents.actors.map((actor) => actor.id), ['visible']);
+  assert.deepEqual(sent[1].data.snapshot.documents.actors.map((actor) => actor.id), ['visible', 'old-compendium']);
+  assert.equal(sent[1].data.snapshot.documents.actors[1].compendium, true);
   assert.deepEqual(sent[1].data.snapshot.documents.journals[0].pages.map((page) => page.id), ['readable-page']);
   hooks.get('updateActor')();
   assert.equal(sent[2].data.type, 'changed');
