@@ -245,12 +245,70 @@ class StudioIntegration(unittest.TestCase):
             len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 2
         )
 
+    def test_big_map_is_stocked_in_batches_with_one_retry(self):
+        slug, brief = self.import_map()
+        brief['content'].update(npcs=6, items=3, journals=0, events=0, threads=False)
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
+        kinds = ['house'] * 4 + ['tavern']
+        key['areas'] = [
+            shapes.AREA.new(n=n, name=f'Place {n}', kind=kinds[n % 5], at=[1, 1])
+            for n in range(1, 312)
+        ]
+        campaign_core.write_doc('mapkey/' + slug, key)
+        value = workflow.create(slug, brief)
+        workflow.begin(value)
+        notable = [n for n in range(1, 312) if n % 5 == 4]
+        self.assertEqual([n for b in value['batches'] for n in b], notable)
+        self.assertTrue(all(len(b) <= workflow.BATCH for b in value['batches']))
+        self.assertEqual(len(value['plain']) + len(notable), 311)
+
+        def draft(batch, npcs, items=0):
+            return {
+                'summary': 'Part.',
+                'areas': [{'n': n, 'text': f'Text {n}', 'creatures': ''} for n in batch],
+                'npcs': [
+                    dict(self.proposal()['npcs'][0], id=f'npc-{batch[0]}-{i}', area=batch[0])
+                    for i in range(npcs)
+                ],
+                'items': [
+                    dict(self.proposal()['items'][0], id=f'item-{batch[0]}-{i}', area=batch[0])
+                    for i in range(items)
+                ],
+                'journals': [],
+                'events': [],
+                'threads': [],
+            }
+
+        first = value['batches'][0]
+        prompt = json.loads(workflow.prompt(value, {}).partition('REFERENCE DATA:' + chr(10))[2])
+        self.assertEqual(prompt['batch']['areas'], first)
+        outside = next(a for a in prompt['key']['areas'] if a['n'] not in first)
+        self.assertEqual(sorted(outside), ['kind', 'n', 'name'])
+        # A draft over the count is rejected, retried once with the message, then fails.
+        too_many = draft(first, 9)
+        with self.assertRaises(ValueError) as caught:
+            workflow.advance(value, too_many)
+        self.assertTrue(workflow.refine(value, too_many, str(caught.exception)))
+        retry = json.loads(workflow.prompt(value, {}).partition('REFERENCE DATA:' + chr(10))[2])
+        self.assertIn('at most', retry['rejected']['error'])
+        self.assertFalse(workflow.refine(value, too_many, 'again'))
+        while workflow.advance(value, draft(value['batches'][value['batch']], 1)):
+            pass
+        self.assertEqual(value['status'], 'review')
+        self.assertLessEqual(len(value['draft']['npcs']), 6)
+        self.assertIn('Note:', value['draft']['summary'])  # items: 3 requested, fewer drafted
+        self.assertEqual(
+            {a['n'] for a in value['draft']['areas']}, {n for b in value['batches'] for n in b}
+        )
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
+        self.assertEqual(len(key['areas']), 311)
+
     def test_invalid_content_and_stale_drafts_are_refused(self):
         slug, brief = self.import_map()
         value = workflow.create(slug, brief)
         for mutate in (
             lambda d: d['npcs'][0].update(area=7),
-            lambda d: d['npcs'].clear(),
+            lambda d: d['npcs'].append(dict(d['npcs'][0], id='second')),
             lambda d: d['items'][0].update(id='watcher'),
             lambda d: d['events'][0].update(area=True),
         ):
