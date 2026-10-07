@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / 'DM'))
 import campaign
 import campaign_core
 import migrate
+import foundry_library
 import schema
 import shapes
 
@@ -214,6 +215,35 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual((world['name'], world['image']), ('Realm', ''))
         self.assertEqual(
             world['pins'][0], {'id': 'p1', 'label': '', 'map': '', 'x': 0.5, 'y': 0.5, 'note': ''}
+        )
+
+    def test_version_three_campaign_hashes_foundry_imports_instead_of_copying_them(self):
+        self.migrate()
+        schema.write_marker(self.data, 3, 'Synthetic version 3 campaign')
+        values = {'name': 'Mira', 'group': 'Allies', 'notes': 'Summary', 'image': 'a.png'}
+        codex = self.read('data/codex.json')
+        codex['entries'].append(
+            {
+                'id': 'fvtt-a1',
+                'type': 'npc',
+                'name': 'Mira',
+                'foundry': {'uuid': 'Actor.a1', 'world_key': 'w', 'imported': values},
+            }
+        )
+        (self.dm / 'data/codex.json').write_text(json.dumps(codex))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (3, schema.CURRENT))
+        link = self.read('data/codex.json')['entries'][-1]['foundry']
+        self.assertEqual(
+            link,
+            {
+                'uuid': 'Actor.a1',
+                'world_key': 'w',
+                'hash': foundry_library.imported_hash(values),
+                'image': 'a.png',
+            },
         )
 
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):

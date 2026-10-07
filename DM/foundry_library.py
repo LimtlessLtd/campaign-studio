@@ -560,6 +560,16 @@ CODEX_IMPORTS = (
 IMPORTED_FIELDS = ('name', 'group', 'notes', 'image')
 
 
+def imported_hash(values):
+    """Fingerprint of the values an import wrote, so an entry need not keep a copy of them."""
+    text = json.dumps(
+        [values.get(field, '') for field in IMPORTED_FIELDS],
+        ensure_ascii=False,
+        separators=(',', ':'),
+    )
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
 def import_folders(snapshot):
     """Folders of importable documents for the picker: name, document count and how many are compendium copies.
 
@@ -587,8 +597,9 @@ def import_into_codex(snapshot, codex, folders=None):
     except documents copied from a compendium is imported. Skipped documents stay in the snapshot, which
     is the searchable reference library, and existing entries for them are left alone.
 
-    Each entry remembers its source world, canonical Foundry UUID and last imported values. A later import
-    refreshes an entry only while it still holds those values, so anything edited in Studio is kept.
+    Each entry remembers its source world, canonical Foundry UUID, a hash of the last imported values and
+    the image among them. A later import refreshes an entry only while it still hashes the same, so
+    anything edited in Studio is kept.
     Legacy entries without a source world are left alone rather than guessed from a reusable UUID.
     """
     entries = codex.setdefault('entries', [])
@@ -636,18 +647,23 @@ def import_into_codex(snapshot, codex, folders=None):
                     id=identity,
                     type=entry_type(document),
                     **values,
-                    foundry={'uuid': uuid, 'world_key': source_key, 'imported': values},
+                    foundry={
+                        'uuid': uuid,
+                        'world_key': source_key,
+                        'hash': imported_hash(values),
+                        'image': image,
+                    },
                 )
                 entries.append(entry)
                 known[uuid] = entry
                 report['added'] += 1
                 continue
-            last = entry['foundry'].get('imported') or {}
-            if values == last:
+            fresh = imported_hash(values)
+            if fresh == entry['foundry'].get('hash'):
                 report['unchanged'] += 1
-            elif all(entry.get(field) == last.get(field) for field in IMPORTED_FIELDS):
+            elif imported_hash(entry) == entry['foundry'].get('hash'):
                 entry.update(values)
-                entry['foundry']['imported'] = values
+                entry['foundry'].update(hash=fresh, image=image)
                 report['updated'] += 1
             else:
                 report['kept'] += 1
