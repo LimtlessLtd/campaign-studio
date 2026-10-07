@@ -237,6 +237,7 @@ def list_docs(prefix):
 
 def list_images(rel):
     full = campaign_path(rel)
+    file_root = os.path.realpath(campaign.active().files)
     out = []
     for dirpath, dirs, files in os.walk(full):
         dirs[:] = sorted(d for d in dirs if not d.startswith('.'))
@@ -245,7 +246,7 @@ def list_images(rel):
                 p = os.path.join(dirpath, f)
                 out.append(
                     dict(
-                        path=os.path.relpath(p, campaign.active().files).replace('\\', '/'),
+                        path=os.path.relpath(p, file_root).replace('\\', '/'),
                         size=os.path.getsize(p),
                         mtime=int(os.path.getmtime(p)),
                     )
