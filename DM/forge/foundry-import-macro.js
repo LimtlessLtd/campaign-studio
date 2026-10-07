@@ -8,6 +8,15 @@
 // Run it again for a map that is already a scene to replace the forged parts; tokens and your own notes stay.
 const TAG = 'wotgForge';
 const esc = (s) => foundry.utils.escapeHTML(String(s ?? ''));
+// An entry imported from this world carries its Foundry UUID: link to that document, never copy it.
+const original = (e) => {
+  if (!e.uuid) return null;
+  try {
+    return fromUuidSync(e.uuid) ?? null;
+  } catch {
+    return null;
+  }
+};
 if (!game.user.isGM) return ui.notifications.warn('Run Campaign Studio imports as the GM.');
 
 // The exported scene uses the v12 shape. Keep version and system differences here so the import
@@ -204,7 +213,7 @@ if (choice.journal && key?.areas?.length) {
   const details = (entries) =>
     entries.map(
       (e) =>
-        `<li><strong>${esc(e.name)}</strong>` +
+        `<li><strong>${original(e) ? `@UUID[${e.uuid}]{${esc(e.name)}}` : esc(e.name)}</strong>` +
         (e.public ? `<br>${esc(e.public)}` : '') +
         (e.secrets ? `<br><em>Secret:</em> ${esc(e.secrets)}` : '') +
         (e.notes ? `<br>${esc(e.notes)}` : '') +
@@ -348,6 +357,7 @@ if (choice.entities && systemAdapter.entityDoc && key) {
         .map((e) => [e.id, e]),
     );
     for (const e of unique.values()) {
+      if (original(e)) continue;
       const doc = {
         ...systemAdapter.entityDoc(e, type),
         flags: { world: { [TAG]: { entry: e.id, sourceMap: choice.slug } } },

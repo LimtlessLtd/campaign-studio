@@ -111,7 +111,7 @@ def selected_world():
     return config.world_info(path) if path else None
 
 
-def _media_path(relative, world):
+def media_path(relative, world):
     parts = storage.posix_parts(relative, 'Invalid Foundry asset path.')
     if parts[0].lower() in ('systems', 'modules'):
         raise ValueError('System and module files are outside this world library.')
@@ -143,7 +143,7 @@ def media_file(relative, expected_world_key=''):
         raise ValueError('Connect a Foundry world first.')
     if expected_world_key and expected_world_key != world_key(world):
         raise ValueError('This image belongs to a different connected world.')
-    path = _media_path(relative, world)
+    path = media_path(relative, world)
     return path, MEDIA[path.suffix.lower()]
 
 
@@ -577,7 +577,7 @@ def import_into_codex(snapshot, codex):
             image = document['image']
             if image:
                 try:
-                    _media_path(image, snapshot['world'])
+                    media_path(image, snapshot['world'])
                 except (OSError, ValueError):
                     image = ''  # Remote, missing and unsupported Foundry assets cannot be served.
             values = {
