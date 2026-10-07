@@ -93,7 +93,7 @@ their row and finding say enough.
   The migration computes the hash from the stored copy.
 - Done: records carry a `compendium` flag, `import_into_codex` takes a folder list (default skips compendium
   copies) and `/api/foundry/world/import` accepts `folders`; the Foundry-macro snapshot sends the flag too.
-  Left: the folder picker and the hash.
+  The library page has a "Choose folders to import" picker (`library` returns `folders`). Left: the hash.
 
 ### W25 Linked Foundry documents
 

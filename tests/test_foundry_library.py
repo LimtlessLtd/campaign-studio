@@ -232,6 +232,20 @@ class FoundryLibraryTests(unittest.TestCase):
         )
         self.assertEqual(report['skipped'], 1)
 
+    def test_import_folders_summarise_each_folder(self):
+        payload = self.snapshot()
+        payload['documents']['items'][0]['compendium'] = True
+        payload['documents']['items'][0]['folder'] = 'Gear'
+        payload['documents']['actors'][0]['folder'] = 'Allies'
+        snapshot = foundry_library.normalize_snapshot(payload, foundry_library.selected_world())
+        folders = {row['name']: row for row in foundry_library.import_folders(snapshot)}
+        self.assertEqual(
+            (folders['Gear']['count'], folders['Gear']['compendium'], folders['Gear']['suggested']),
+            (1, 1, False),
+        )
+        self.assertTrue(folders['Allies']['suggested'])
+        self.assertEqual(foundry_library.import_folders(None), [])
+
     def test_read_world_marks_compendium_copies(self):
         self.database(
             'items',

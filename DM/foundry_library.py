@@ -546,6 +546,7 @@ def library(saved, kind='scenes', query='', offset=0, limit=60):
             category: len((snapshot or {}).get('documents', {}).get(category, []))
             for category in KINDS
         },
+        'folders': import_folders(snapshot),
         **listing,
     }
 
@@ -557,6 +558,26 @@ CODEX_IMPORTS = (
     ('scenes', lambda document: 'place'),
 )
 IMPORTED_FIELDS = ('name', 'group', 'notes', 'image')
+
+
+def import_folders(snapshot):
+    """Folders of importable documents for the picker: name, document count and how many are compendium copies.
+
+    `suggested` matches what an import without a folder list brings in: folders holding any document that
+    is not a compendium copy.
+    """
+    found = {}
+    for kind, _ in CODEX_IMPORTS:
+        for document in (snapshot or {}).get('documents', {}).get(kind, []):
+            row = found.setdefault(
+                document['folder'], {'name': document['folder'], 'count': 0, 'compendium': 0}
+            )
+            row['count'] += 1
+            row['compendium'] += 1 if document['compendium'] else 0
+    return [
+        {**row, 'suggested': row['compendium'] < row['count']}
+        for row in sorted(found.values(), key=lambda row: row['name'].casefold())
+    ]
 
 
 def import_into_codex(snapshot, codex, folders=None):

@@ -215,6 +215,41 @@ function importSummary(report) {
   return `Imported the world's NPCs, items and scenes into the codex: ${parts.join(', ')}. ${media} media files are available in Media${report.media_truncated ? ' (listing limit reached)' : ''}.`;
 }
 
+// Optional step before the one-click import: choose which folders become codex entries. Folders made only
+// of compendium copies start unticked; leaving the picker alone imports the default selection.
+function folderPicker(folders, getPicked, setPicked) {
+  const picked = getPicked() || new Set(folders.filter((f) => f.suggested).map((f) => f.name));
+  const tick = (folder) =>
+    h('input', {
+      type: 'checkbox',
+      checked: picked.has(folder.name),
+      onchange: (event) => {
+        if (event.target.checked) picked.add(folder.name);
+        else picked.delete(folder.name);
+        setPicked(picked);
+      },
+    });
+  return h(
+    'details',
+    { class: 'library-fallback' },
+    h('summary', {}, 'Choose folders to import'),
+    h(
+      'p',
+      { class: 'muted' },
+      'Ticked folders become codex entries. Everything else stays searchable in this library.',
+    ),
+    ...folders.map((folder) =>
+      h(
+        'label',
+        { class: 'row' },
+        tick(folder),
+        `${folder.name || 'Unfiled'} · ${folder.count}` +
+          (folder.compendium ? ` (${folder.compendium} from compendiums)` : ''),
+      ),
+    ),
+  );
+}
+
 async function studioLibrary(_arg, context) {
   let kind = S.libraryKind || 'scenes';
   let query = '';
@@ -232,6 +267,8 @@ async function studioLibrary(_arg, context) {
   let readError = '';
   let importNotice = S.worldImportNotice || null;
   S.worldImportNotice = null;
+  // Folder names the GM unticked; undefined until they open the picker, so the default import is untouched.
+  let pickedFolders = null;
   const readFolder = async () => {
     render(status, h('p', { class: 'muted' }, 'Reading documents from the Foundry world folder…'));
     try {
@@ -409,7 +446,10 @@ async function studioLibrary(_arg, context) {
           disabled: !result.readable,
           onclick: () =>
             attempt(async () => {
-              const report = await post('/api/foundry/world/import');
+              const report = await post(
+                '/api/foundry/world/import',
+                pickedFolders ? { folders: [...pickedFolders] } : undefined,
+              );
               importNotice = null;
               toast(importSummary(report));
               await refresh();
@@ -417,6 +457,13 @@ async function studioLibrary(_arg, context) {
         },
         'Import world into Studio',
       ),
+      result.readable && result.folders?.length
+        ? folderPicker(
+            result.folders,
+            () => pickedFolders,
+            (picked) => (pickedFolders = picked),
+          )
+        : null,
       h(
         'details',
         { class: 'library-fallback', open: !result.readable || !!readError },
