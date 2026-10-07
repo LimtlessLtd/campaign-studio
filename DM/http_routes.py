@@ -314,7 +314,6 @@ class Handler(SimpleHTTPRequestHandler):
             world = foundry_library.selected_world() if cfg.get('world_path') else None
         except (OSError, ValueError):
             world = None
-        sys.path.insert(0, FORGE)
         import generate
 
         return self.send_json(
@@ -324,6 +323,7 @@ class Handler(SimpleHTTPRequestHandler):
                 ai=ai_provider.status(),
                 campaign=cfg['campaign_name'],
                 world_key=foundry_library.world_key(world) if world else '',
+                uploads_dir=campaign.active().relative(campaign.active().uploads),
                 onboarding_needed=not os.path.isfile(campaign.active().settings),
                 generators={k: v['title'] for k, v in generate.GENERATORS.items()},
                 notes=Path(notes).read_text(encoding='utf-8', errors='replace')
@@ -562,7 +562,6 @@ class Handler(SimpleHTTPRequestHandler):
         text = json.loads(self.body(2 * 1024 * 1024).decode('utf-8'))['text']
         if map_busy(slug):
             raise Conflict("Wait for this map's current job to finish before editing its plan.")
-        sys.path.insert(0, FORGE)
         import forge
 
         forge.parse_plan(text)
@@ -805,7 +804,6 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _post_map_create(self, path, query, p):
         brief = normal_brief(p)
-        sys.path.insert(0, FORGE)
         import generate
 
         slug = generate.slugify(brief['name'])
