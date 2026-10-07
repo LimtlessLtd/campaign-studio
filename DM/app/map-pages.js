@@ -989,8 +989,8 @@ async function mapStudio(slugArg, context) {
             ? h(
                 'a',
                 { href: '#/codex/' + id },
-                e.image
-                  ? h('img', { src: fileUrl(e.image), alt: '' })
+                codexImageUrl(e)
+                  ? h('img', { src: codexImageUrl(e), alt: '' })
                   : icon(e.type === 'item' ? 'folder' : 'people'),
                 h('span', {}, h('b', {}, e.name), h('small', {}, e.type)),
                 icon('arrow'),

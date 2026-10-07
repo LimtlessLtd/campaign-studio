@@ -18,7 +18,6 @@ Next ID: W57
 | W24 | 1        | Selective Foundry import: chosen folders become codex entries, the rest a searchable reference library      | A large world imports only chosen folders; reimport keeps Studio edits         |
 | W25 | 1        | Export links Foundry-imported actors and items by UUID instead of creating duplicates                       | Macro fixture with an existing actor ends with one actor, sheet unchanged      |
 | W26 | 1        | Stock big maps in batches: notable areas first, counts as maximums, one automatic retry                     | A 160 × 120 generated city stocks without a rejected draft                     |
-| W27 | 1        | Audit fixes: inspector thumbnails for Foundry images, Handouts under any `DM_HOME`, `sys.path` once         | Browser check, uploads route test and repeated `/api/state` test pass          |
 | W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate        |
 | W29 | 2        | Delete, rename and archive maps, preps and world maps; show where a record is used before deleting it       | Deleting an entry used by an area, a scene and a link leaves no dangling ID    |
 | W30 | 2        | Session log for each played session, shown on its prep and read by recaps and the context budget            | Shape, migration and browser flow; recent logs appear in the context           |
