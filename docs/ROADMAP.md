@@ -220,12 +220,6 @@ their row and finding say enough.
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.
 
-### W45 Relay check
-
-- Review commits for #32, #33, #36 and #37 put `Reviewed-PR:` lines in a paragraph before
-  `Co-Authored-By`, and git ignored them until the audit restated them. A CI step reads the PR's commit
-  messages and fails when a `Reviewed-PR:` line sits outside the final trailer paragraph.
-
 ### W48–W50 Maps
 
 - W48: each generator follows the city generator's contract (`generate(W, H, seed, **params)` returns the

@@ -100,6 +100,7 @@
   "tests/test_foundry_upgrade.py",
   "tests/test_http_routes.py",
   "tests/test_jobs_storage.py",
+  "tests/test_relay_check.py",
   "tests/test_release.py",
   "tests/test_remote_access.py",
   "tests/test_schema.py",
@@ -108,6 +109,7 @@
   "tools/check_foundry_import.cjs",
   "tools/check_foundry_live.cjs",
   "tools/check_merge.cjs",
+  "tools/check_relay.py",
   "tools/check_routes.cjs",
   "tools/check_source.py"
 ]

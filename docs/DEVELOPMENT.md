@@ -35,6 +35,7 @@ python -m ruff format DM tools tests
 python -m ruff check DM tools tests
 npm run format
 python tools/check_source.py
+python tools/check_relay.py origin/main..HEAD
 python -m compileall -q DM tools tests
 npm run check:js
 python DM/tools/test_workflows.py
