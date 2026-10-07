@@ -27,9 +27,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))  # the application's modules
 import campaign
 import config
+import foundry_library
 import storage
 
 FOUNDRY_DIR = 'wotg-maps'
+
+
+def _target_world(here):
+    """(world, key) of the Foundry world exports go to, or None when none is chosen or it is unreadable."""
+    path = config.settings(here).get('world_path')
+    if not path:
+        return None
+    try:
+        world = config.world_info(path)
+        return world, foundry_library.world_key(world)
+    except (OSError, ValueError, KeyError):
+        return None
 
 
 def key_for_foundry(slug, key, copy_art=True, here=None):
@@ -48,6 +61,7 @@ def key_for_foundry(slug, key, copy_art=True, here=None):
     files = os.path.realpath(here.files)
     foundry_data = config.foundry_data(here)
     art_dir = os.path.join(foundry_data, FOUNDRY_DIR, slug, 'art')
+    target = _target_world(here)
 
     def art_path(path):
         if not path or not isinstance(path, str):
@@ -65,6 +79,25 @@ def key_for_foundry(slug, key, copy_art=True, here=None):
             shutil.copy2(source, os.path.join(art_dir, name))
         return f'{FOUNDRY_DIR}/{slug}/art/{name}'
 
+    def linked(entry):
+        """The entry's Foundry origin, when the export goes to the world it was imported from."""
+        origin = entry.get('foundry')
+        if not (target and isinstance(origin, dict)):
+            return None
+        if origin.get('world_key') != target[1] or not isinstance(origin.get('uuid'), str):
+            return None
+        return origin
+
+    def entry_image(entry, origin):
+        image = entry.get('image', '')
+        if origin and isinstance(image, str) and image:
+            try:  # already in Foundry's Data folder: pass the path through
+                foundry_library.media_path(image, target[0])
+                return image
+            except (OSError, ValueError):
+                return ''
+        return art_path(image)
+
     result['images'] = [p for p in (art_path(path) for path in result.get('images', [])) if p]
     for area in result.get('areas', []):
         area['images'] = [p for p in (art_path(path) for path in area.get('images', [])) if p]
@@ -73,6 +106,7 @@ def key_for_foundry(slug, key, copy_art=True, here=None):
             for entry_id in area.get(field, []):
                 entry = entries.get(entry_id)
                 if entry:
+                    origin = linked(entry)
                     area[dest].append(
                         {
                             k: v
@@ -83,7 +117,8 @@ def key_for_foundry(slug, key, copy_art=True, here=None):
                                 public=entry.get('public', ''),
                                 secrets=entry.get('secrets', ''),
                                 notes=entry.get('notes', ''),
-                                image=art_path(entry.get('image', '')),
+                                image=entry_image(entry, origin),
+                                uuid=origin['uuid'] if origin else '',
                             ).items()
                             if v
                         }

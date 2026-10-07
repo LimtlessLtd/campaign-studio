@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Linked Foundry documents (W25):** when an export goes to the world an entry was imported from, the export carries the entry's Foundry UUID and Foundry-relative image path. The import macro links GM pages with `@UUID[...]` and leaves the existing actor or item untouched instead of creating a description-only copy. Entries from another world, or made in Studio, are created as before.
 - **Audit fixes (W27):** linked entries in the map inspector show Foundry-imported portraits through the asset route, Handouts lists the campaign's real uploads folder under any `DM_HOME` name, and the forge folder joins `sys.path` once instead of on every request.
 - **OpenAI API drafting:** Settings can choose Claude Code or an OpenAI Responses model for structured map and request proposals. The OpenAI worker uses the same cancellable job lane and GM review, sends no tools, and reads its API key from a named environment variable rather than saved settings. Restart recovery now scans every job record, so older queued jobs are not stranded after many newer jobs.
 - **Foundry macros from any campaign location:** the import macro and upgrade scripts are served from the application folder at `/forge-scripts/<name>.js`; their download links no longer assume the campaign sits beside `DM/`.

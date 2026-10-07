@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / 'DM'))
 import campaign
 import campaign_core
 import config
+import foundry_library
 import maps_io
 import revisions
 
@@ -80,6 +81,45 @@ class CampaignTests(unittest.TestCase):
         self.assertIn('Given Ogre', json.dumps(snapshot))
         self.assertEqual(json.loads(Path(other.map_index).read_text())['items'][0]['slug'], 'hall')
         self.assertFalse(Path(self.studio.map_index).exists())
+
+    def test_export_links_entries_imported_from_the_target_world(self):
+        world = Path(self.temp.name) / 'Foundry' / 'Data' / 'worlds' / 'w1'
+        world.mkdir(parents=True)
+        (world / 'world.json').write_text(json.dumps({'id': 'w1', 'title': 'W'}))
+        (world / 'hero.webp').write_bytes(b'x')
+        Path(self.studio.settings).write_text(json.dumps({'world_path': str(world)}))
+        mine = foundry_library.world_key(config.world_info(str(world)))
+        origin = {'uuid': 'Actor.abc', 'world_key': mine}
+        Path(self.studio.data, 'codex.json').write_text(
+            json.dumps(
+                {
+                    'entries': [
+                        {
+                            'id': 'hero',
+                            'name': 'Hero',
+                            'type': 'npc',
+                            'image': 'worlds/w1/hero.webp',
+                            'foundry': origin,
+                        },
+                        {
+                            'id': 'far',
+                            'name': 'Far',
+                            'type': 'npc',
+                            'foundry': dict(origin, world_key='other'),
+                        },
+                        {'id': 'own', 'name': 'Own', 'type': 'npc'},
+                    ]
+                }
+            )
+        )
+        key = {'areas': [{'n': 1, 'name': 'Hall', 'npcs': ['hero', 'far', 'own']}]}
+        with campaign.using(self.studio):
+            details = forge.key_for_foundry('hall', key, copy_art=False)['areas'][0]['npcs_detail']
+        by_id = {d['id']: d for d in details}
+        self.assertEqual(by_id['hero']['uuid'], 'Actor.abc')
+        self.assertEqual(by_id['hero']['image'], 'worlds/w1/hero.webp')
+        self.assertNotIn('uuid', by_id['far'])
+        self.assertNotIn('uuid', by_id['own'])
 
     def test_revisions_use_the_campaign_they_are_given(self):
         other = campaign.Campaign(Path(self.temp.name) / 'Other')
