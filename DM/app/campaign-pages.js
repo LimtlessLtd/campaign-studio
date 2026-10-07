@@ -1133,7 +1133,7 @@ async function codexEntry(c, id, main, context) {
             e.foundry?.imported?.image === e.image
               ? 'Foundry image (upload a Studio image to replace it)'
               : 'Image (path in the campaign folder)',
-          placeholder: 'e.g. DM/uploads/portrait.png',
+          placeholder: 'e.g. ' + S.state.uploads_dir + '/portrait.png',
           onchange: drawImg,
         }),
         imagePicker((path) => {
@@ -1212,7 +1212,7 @@ async function codexEntry(c, id, main, context) {
 async function handoutsPage(_arg, context) {
   const main = context.view;
   render(main, h('h1', {}, 'Handouts'), h('p', { class: 'sub' }, 'Loading uploaded handouts…'));
-  const imgs = await context.api('/api/images?dir=DM/uploads');
+  const imgs = await context.api('/api/images?dir=' + encodeURIComponent(S.state.uploads_dir));
   let q = '';
   const gallery = h('div', { class: 'gallery' });
   const draw = () =>
@@ -1226,7 +1226,7 @@ async function handoutsPage(_arg, context) {
             'figure',
             { onclick: () => lightbox(i.path) },
             h('img', { src: fileUrl(i.path), loading: 'lazy', alt: '' }),
-            h('figcaption', {}, i.path.replace(/^DM\/uploads\//, '')),
+            h('figcaption', {}, i.path.split('/').pop()),
           ),
         ),
     );

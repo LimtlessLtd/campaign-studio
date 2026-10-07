@@ -23,6 +23,10 @@ from job_service import JobService
 
 APP = os.path.join(campaign.INSTALL, 'app')
 FORGE = os.path.join(campaign.INSTALL, 'forge')
+if (
+    FORGE not in sys.path
+):  # the forge modules (forge, generate) import by name, so add the folder once
+    sys.path.insert(0, FORGE)
 PORT = int(os.environ.get('DM_PORT', 8766))
 
 # campaign folders the site may show files from (read-only)
@@ -423,7 +427,6 @@ list_jobs = JOBS_SERVICE.list_jobs
 
 
 def generate_cmd(p):
-    sys.path.insert(0, FORGE)
     import generate  # The generator registry lives here.
 
     kind = p.get('type')

@@ -97,6 +97,19 @@ class RouteTests(unittest.TestCase):
         for ai in ({'provider': 'other'}, {'provider': 'openai', 'model': ''}):
             self.assertEqual(self.request('/api/settings', 'POST', {'ai': ai})[0], 400)
 
+    def test_state_names_the_uploads_folder_and_repeated_calls_keep_sys_path_stable(self):
+        import sys
+
+        status, state, _ = self.request('/api/state')
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            state['uploads_dir'], campaign.active().relative(campaign.active().uploads)
+        )
+        before = list(sys.path)
+        for _ in range(3):
+            self.request('/api/state')
+        self.assertEqual(sys.path, before)
+
     def test_cancel_route_distinguishes_bad_missing_and_finished_jobs(self):
         status, _, _ = self.request('/api/jobs/NOT-HEX/cancel', 'POST')
         self.assertEqual(status, 400)
