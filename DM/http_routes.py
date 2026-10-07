@@ -627,12 +627,17 @@ class Handler(SimpleHTTPRequestHandler):
         world = foundry_library.selected_world()
         if not world:
             raise Invalid('Connect a Foundry world before importing it.')
+        folders = (p or {}).get('folders')
+        if folders is not None and (
+            not isinstance(folders, list) or not all(isinstance(name, str) for name in folders)
+        ):
+            raise Invalid('Choose folders as a list of names.')
         snapshot = foundry_library.read_world(world)
-        return self._save_foundry_import(snapshot, world)
+        return self._save_foundry_import(snapshot, world, folders)
 
-    def _save_foundry_import(self, snapshot, world):
+    def _save_foundry_import(self, snapshot, world, folders=None):
         media = foundry_library.assets(world, '', 0, 1)
-        report = import_foundry_snapshot(snapshot)
+        report = import_foundry_snapshot(snapshot, folders)
         report.update(self._library_counts(snapshot))
         report['media'] = media['total']
         report['media_truncated'] = media['truncated']

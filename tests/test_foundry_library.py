@@ -192,7 +192,9 @@ class FoundryLibraryTests(unittest.TestCase):
         snapshot = foundry_library.normalize_snapshot(self.snapshot(), world)
         codex = {'entries': [{'id': 'mine', 'type': 'npc', 'name': 'Mine'}]}
         report = foundry_library.import_into_codex(snapshot, codex)
-        self.assertEqual(report, {'added': 3, 'updated': 0, 'kept': 0, 'unchanged': 0})
+        self.assertEqual(
+            report, {'added': 3, 'updated': 0, 'kept': 0, 'unchanged': 0, 'skipped': 0}
+        )
         self.assertEqual(
             {entry['name']: entry['type'] for entry in codex['entries'][1:]},
             {'Mira': 'npc', 'Key': 'item', 'Keep': 'place'},
@@ -208,6 +210,44 @@ class FoundryLibraryTests(unittest.TestCase):
         self.assertEqual(mira['notes'], 'Rewritten in Studio')
         self.assertEqual(key['notes'], 'Changed in Foundry')
         self.assertEqual(len({entry['id'] for entry in codex['entries']}), 4)
+
+    def test_import_selection_skips_compendium_copies_and_unchosen_folders(self):
+        payload = self.snapshot()
+        payload['documents']['items'][0]['compendium'] = True
+        payload['documents']['actors'][0]['folder'] = 'Allies'
+        snapshot = foundry_library.normalize_snapshot(payload, foundry_library.selected_world())
+        self.assertTrue(snapshot['documents']['items'][0]['compendium'])
+        codex = {'entries': []}
+        report = foundry_library.import_into_codex(snapshot, codex)
+        self.assertEqual((report['added'], report['skipped']), (2, 1))
+        self.assertEqual({entry['name'] for entry in codex['entries']}, {'Mira', 'Keep'})
+        codex = {'entries': []}
+        report = foundry_library.import_into_codex(snapshot, codex, ['Allies'])
+        self.assertEqual(
+            ([entry['name'] for entry in codex['entries']], report['skipped']), (['Mira'], 2)
+        )
+        report = foundry_library.import_into_codex(snapshot, codex, [''])
+        self.assertEqual(
+            sorted(entry['name'] for entry in codex['entries']), ['Keep', 'Key', 'Mira']
+        )
+        self.assertEqual(report['skipped'], 1)
+
+    def test_read_world_marks_compendium_copies(self):
+        self.database(
+            'items',
+            {
+                'i2': {
+                    '_id': 'i2',
+                    'name': 'Rope',
+                    'flags': {'core': {'sourceId': 'Compendium.x.y'}},
+                },
+                'i3': {'_id': 'i3', 'name': 'Own', '_stats': {}},
+            },
+        )
+        items = foundry_library.read_world(foundry_library.selected_world())['documents']['items']
+        self.assertEqual(
+            {item['name']: item['compendium'] for item in items}, {'Own': False, 'Rope': True}
+        )
 
     def test_import_provenance_separates_worlds_and_legacy_entries(self):
         first = foundry_library.normalize_snapshot(
