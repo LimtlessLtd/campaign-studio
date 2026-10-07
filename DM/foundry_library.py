@@ -111,7 +111,7 @@ def selected_world():
     return config.world_info(path) if path else None
 
 
-def _media_path(relative, world):
+def media_path(relative, world):
     parts = storage.posix_parts(relative, 'Invalid Foundry asset path.')
     if parts[0].lower() in ('systems', 'modules'):
         raise ValueError('System and module files are outside this world library.')
@@ -143,7 +143,7 @@ def media_file(relative, expected_world_key=''):
         raise ValueError('Connect a Foundry world first.')
     if expected_world_key and expected_world_key != world_key(world):
         raise ValueError('This image belongs to a different connected world.')
-    path = _media_path(relative, world)
+    path = media_path(relative, world)
     return path, MEDIA[path.suffix.lower()]
 
 
@@ -241,6 +241,7 @@ def normalize_snapshot(payload, world, origin='macro', stamp='', omitted=None):
                     'type': _short(item.get('type'), 80),
                     'image': _short(item.get('image'), 1000),
                     'summary': _short(item.get('summary'), 20000),
+                    'compendium': item.get('compendium') is True,
                     'pages': [
                         {
                             'id': _short(page.get('id'), 128),
@@ -427,6 +428,10 @@ def _record(kind, document, children, folders):
         'type': document.get('type') if isinstance(document.get('type'), str) else '',
         'image': document.get('img') or '',
         'summary': '',
+        # Copies of compendium documents (gear, spells, stock monsters) rarely need campaign notes.
+        'compendium': bool(
+            _dig(document, ('_stats', 'compendiumSource'), ('flags', 'core', 'sourceId'))
+        ),
     }
     if kind == 'scenes':
         record['image'] = _dig(document, ('background', 'src'), ('thumb',)) or ''
@@ -541,6 +546,7 @@ def library(saved, kind='scenes', query='', offset=0, limit=60):
             category: len((snapshot or {}).get('documents', {}).get(category, []))
             for category in KINDS
         },
+        'folders': import_folders(snapshot),
         **listing,
     }
 
@@ -554,8 +560,32 @@ CODEX_IMPORTS = (
 IMPORTED_FIELDS = ('name', 'group', 'notes', 'image')
 
 
-def import_into_codex(snapshot, codex):
+def import_folders(snapshot):
+    """Folders of importable documents for the picker: name, document count and how many are compendium copies.
+
+    `suggested` matches what an import without a folder list brings in: folders holding any document that
+    is not a compendium copy.
+    """
+    found = {}
+    for kind, _ in CODEX_IMPORTS:
+        for document in (snapshot or {}).get('documents', {}).get(kind, []):
+            row = found.setdefault(
+                document['folder'], {'name': document['folder'], 'count': 0, 'compendium': 0}
+            )
+            row['count'] += 1
+            row['compendium'] += 1 if document['compendium'] else 0
+    return [
+        {**row, 'suggested': row['compendium'] < row['count']}
+        for row in sorted(found.values(), key=lambda row: row['name'].casefold())
+    ]
+
+
+def import_into_codex(snapshot, codex, folders=None):
     """Add or refresh codex entries for the snapshot's actors, items and scenes.
+
+    `folders` is the list of folder names to import ('' is the unfiled documents). Without it, everything
+    except documents copied from a compendium is imported. Skipped documents stay in the snapshot, which
+    is the searchable reference library, and existing entries for them are left alone.
 
     Each entry remembers its source world, canonical Foundry UUID and last imported values. A later import
     refreshes an entry only while it still holds those values, so anything edited in Studio is kept.
@@ -571,13 +601,17 @@ def import_into_codex(snapshot, codex):
         and isinstance(entry['foundry'].get('uuid'), str)
     }
     taken = {entry.get('id') for entry in entries}
-    report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0}
+    chosen = None if folders is None else set(folders)
+    report = {'added': 0, 'updated': 0, 'kept': 0, 'unchanged': 0, 'skipped': 0}
     for kind, entry_type in CODEX_IMPORTS:
         for document in snapshot['documents'].get(kind, []):
+            if document['folder'] not in chosen if chosen is not None else document['compendium']:
+                report['skipped'] += 1
+                continue
             image = document['image']
             if image:
                 try:
-                    _media_path(image, snapshot['world'])
+                    media_path(image, snapshot['world'])
                 except (OSError, ValueError):
                     image = ''  # Remote, missing and unsupported Foundry assets cannot be served.
             values = {

@@ -187,11 +187,11 @@ def commit_docs(label, changes, after=()):
     return JOURNAL.commit(label, changes, after)
 
 
-def import_foundry_snapshot(snapshot):
+def import_foundry_snapshot(snapshot, folders=None):
     """Commit a World Library snapshot and its codex changes as one recoverable operation."""
     with LOCK:
         codex = read_json(doc_path('codex'), {'entries': []})
-        report = foundry_library.import_into_codex(snapshot, codex)
+        report = foundry_library.import_into_codex(snapshot, codex, folders)
         commit_docs('Import Foundry world', [('foundry-library', snapshot), ('codex', codex)])
         return report
 
@@ -356,7 +356,16 @@ def finish_job(job, code, tail):
                 except (ValueError, AttributeError):
                     message = None
                 raise ValueError(message or tail[-1500:] or 'The AI command failed.')
-            workflow.stage(value, workflow.parse_output(raw))
+            draft = workflow.parse_output(raw)
+            try:
+                more = workflow.advance(value, draft)
+            except ValueError as e:
+                # One automatic retry per batch, with the validation message as the instruction.
+                if not workflow.refine(value, draft, str(e)):
+                    raise
+                more = True
+            if more:
+                start_workflow(value)
         except (ValueError, KeyError, TypeError, OSError) as e:
             value.update(status='failed', error=str(e))
             workflow.save(value)
@@ -510,6 +519,8 @@ def start_workflow(value):
         if value['status'] in ('running', 'applied'):
             raise ValueError('This workflow is already running or applied.')
         workflow.check_base(value)
+        if workflow.needs_plan(value):
+            workflow.begin(value)
         cmd = ai_provider.command(value['kind'], workflow.schema(value['kind']))
         cfg = config.settings()
         campaign_info = {'name': cfg['campaign_name']}

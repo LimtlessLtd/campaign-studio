@@ -16,8 +16,6 @@ Next ID: W57
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | W23 | 1        | Context budget: every AI prompt and prompt pack built from linked records under a budget, with a preview    | 2,000-entry codex stays under budget with every linked record kept             |
 | W24 | 1        | Selective Foundry import: chosen folders become codex entries, the rest a searchable reference library      | A large world imports only chosen folders; reimport keeps Studio edits         |
-| W25 | 1        | Export links Foundry-imported actors and items by UUID instead of creating duplicates                       | Macro fixture with an existing actor ends with one actor, sheet unchanged      |
-| W26 | 1        | Stock big maps in batches: notable areas first, counts as maximums, one automatic retry                     | A 160 × 120 generated city stocks without a rejected draft                     |
 | W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate        |
 | W29 | 2        | Delete, rename and archive maps, preps and world maps; show where a record is used before deleting it       | Deleting an entry used by an area, a scene and a link leaves no dangling ID    |
 | W30 | 2        | Session log for each played session, shown on its prep and read by recaps and the context budget            | Shape, migration and browser flow; recent logs appear in the context           |
@@ -35,7 +33,6 @@ Next ID: W57
 | W42 | 2        | Art pipeline: style guide, templates per kind, batch per prep, token cut-outs, adapters                     | One action fills every missing image for a prep; fake-provider tests           |
 | W43 | 2        | Live Foundry check with the owner on their v12 dnd5e versions (owner-assisted)                              | Exact versions and results recorded; failures become backlog rows              |
 | W44 | 2        | AI usage ledger: tokens, cost and time per job; ask before prompts over a set size                          | A fake-provider job records usage; a large prompt asks first                   |
-| W45 | 2        | Relay record check: fail CI when a `Reviewed-PR:` line sits outside the final trailer paragraph             | A fixture commit with a misplaced trailer fails the check                      |
 | W10 | 3        | Installer and performance budgets for very large maps                                                       | Clean-machine install test and measured time/memory at documented map sizes    |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped) | Services receive their `Campaign` explicitly (no process-wide active campaign) |
 | W46 | 3        | Structured stat blocks mapped to D&D 5e actor data for NPCs without a compendium base                       | A fixture actor matches its stat block; malformed blocks are rejected          |

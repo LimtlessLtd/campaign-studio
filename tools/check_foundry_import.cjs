@@ -13,6 +13,7 @@ const macro = new AsyncFunction(
   'Actor',
   'Item',
   'CONST',
+  'fromUuidSync',
   fs.readFileSync('DM/forge/foundry-import-macro.js', 'utf8'),
 );
 
@@ -49,6 +50,13 @@ const fixture = () => ({
                   notes: 'Keeps the key.',
                   secrets: 'Hidden door.',
                 },
+                {
+                  id: 'fvtt-hero',
+                  name: 'Hero',
+                  public: 'Already in the world.',
+                  uuid: 'Actor.hero',
+                  image: 'worlds/fixture-world/hero.webp',
+                },
               ],
               items_detail: [{ id: 'item-1', name: 'Key', public: 'Iron key.' }],
             },
@@ -62,7 +70,7 @@ const fixture = () => ({
 function world(generation, systemId) {
   const scenes = [];
   const journal = [];
-  const actors = [];
+  const actors = [{ id: 'hero', name: 'Hero', flags: {} }]; // imported from Foundry, not by the macro
   const items = [];
   const notices = [];
   const data = fixture();
@@ -173,6 +181,7 @@ function world(generation, systemId) {
       { create: makeEntity(actors) },
       { create: makeEntity(items) },
       { OCCLUSION_MODES: { FADE: 3 }, DOCUMENT_OWNERSHIP_LEVELS: { NONE: 0 } },
+      (uuid) => actors.find((actor) => `Actor.${actor.id}` === uuid) ?? null,
     );
   return { game, data, notices, run };
 }
@@ -201,11 +210,11 @@ async function check(generation, systemId) {
     assert.equal(scene.tiles[0].elevation, 20);
     assert.equal(scene.tiles[0].restrictions.weather, true);
   }
-  assert.equal(game.actors.length, systemId === 'dnd5e' ? 1 : 0);
+  assert.equal(game.actors.length, systemId === 'dnd5e' ? 2 : 1);
   assert.equal(game.items.length, systemId === 'dnd5e' ? 1 : 0);
   if (systemId === 'dnd5e') {
-    assert.equal(game.actors[0].type, 'npc');
-    assert.match(game.actors[0].system.details.biography.value, /Hidden door/);
+    assert.equal(game.actors[1].type, 'npc');
+    assert.match(game.actors[1].system.details.biography.value, /Hidden door/);
     assert.equal(game.items[0].type, 'loot');
   }
 
@@ -214,7 +223,7 @@ async function check(generation, systemId) {
   const old = {
     scene: scene.id,
     journal: game.journal[0].id,
-    actor: game.actors[0]?.id,
+    actor: game.actors[1]?.id,
     item: game.items[0]?.id,
   };
   const custom = { id: 'custom', flags: {}, name: 'GM content' };
@@ -269,14 +278,21 @@ async function check(generation, systemId) {
   assert.equal(game.actors.find((actor) => actor.id === 'custom').name, 'GM actor');
   assert.equal(game.items.find((item) => item.id === 'custom').name, 'GM item');
   if (systemId === 'dnd5e') {
-    assert.equal(game.actors.length, 2);
+    assert.equal(game.actors.length, 3);
     assert.equal(game.items.length, 2);
     assert.equal(game.actors.find((actor) => actor.id === old.actor).name, 'Keeper');
     assert.equal(game.items.find((item) => item.id === old.item).name, 'Key');
   } else {
-    assert.equal(game.actors.length, 1);
+    assert.equal(game.actors.length, 2);
     assert.equal(game.items.length, 1);
   }
+  // The linked actor stays the only Hero, unchanged, and the GM page links to it.
+  assert.deepEqual(
+    game.actors.filter((actor) => actor.name === 'Hero'),
+    [{ id: 'hero', name: 'Hero', flags: {} }],
+  );
+  const areaPage = game.journal[0].pages.find((page) => tag(page)?.page === 'area-1');
+  assert.match(areaPage.text.content, /@UUID\[Actor\.hero\]\{Hero\}/);
 }
 
 async function main() {

@@ -91,6 +91,9 @@ their row and finding say enough.
   a codex entry by Foundry UUID, and reaching prompts only as W23 search hits.
 - Store a hash of the imported values instead of the `foundry.imported` copy, which doubles the codex today.
   The migration computes the hash from the stored copy.
+- Done: records carry a `compendium` flag, `import_into_codex` takes a folder list (default skips compendium
+  copies) and `/api/foundry/world/import` accepts `folders`; the Foundry-macro snapshot sends the flag too.
+  The library page has a "Choose folders to import" picker (`library` returns `folders`). Left: the hash.
 
 ### W25 Linked Foundry documents
 
@@ -101,17 +104,6 @@ their row and finding say enough.
   documents only for entries with no Foundry origin.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
-
-### W26 Big-map stocking
-
-- `workflow.validate` needs every numbered area described in one response. Generated districts have 44
-  areas at 60 × 60 squares and 311 at 160 × 120.
-- A content brief gets a scope: notable areas (anything but plain houses, plus areas with linked threads or
-  entries) or an explicit list. Draft about 25 areas per batch; remaining houses take rollable templates
-  like `STARTER_LOOT`.
-- Count targets become maximums, and a short draft applies with a note.
-- After a validation failure, run one refinement through the existing `feedback` path with the validation
-  message as the instruction, then stop and show the error.
 
 ### W28 Per-record storage
 
@@ -227,12 +219,6 @@ their row and finding say enough.
 - W51: an opt-in script runs drafts against synthetic campaigns and checks that links resolve, canon is
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.
-
-### W45 Relay check
-
-- Review commits for #32, #33, #36 and #37 put `Reviewed-PR:` lines in a paragraph before
-  `Co-Authored-By`, and git ignored them until the audit restated them. A CI step reads the PR's commit
-  messages and fails when a `Reviewed-PR:` line sits outside the final trailer paragraph.
 
 ### W48–W50 Maps
 
