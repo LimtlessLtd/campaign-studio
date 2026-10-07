@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
 import campaign
 import campaign_core
+import config
+import maps_io
+import revisions
+
+sys.path.insert(0, str(ROOT / 'DM' / 'forge'))
+import forge
 from job_service import JobService
 
 FOLDERS = re.compile(r"""os\.path\.join\([^)]*'(data|maps|uploads|backups)'""")
@@ -46,6 +52,48 @@ class CampaignTests(unittest.TestCase):
             self.assertEqual(campaign_core.campaign_path(stored), str(upload.resolve()))
         self.assertTrue((Path(self.studio.data) / 'codex.json').is_file())
         self.assertNotEqual(campaign.active(), self.studio)
+
+    def test_settings_and_slugs_use_the_campaign_they_are_given(self):
+        other = campaign.Campaign(Path(self.temp.name) / 'Other')
+        Path(other.data).mkdir(parents=True)
+        Path(other.settings).write_text(json.dumps({'campaign_name': 'Given'}))
+        Path(self.studio.settings).write_text(json.dumps({'campaign_name': 'Active'}))
+        Path(other.map_folder('keep')).mkdir(parents=True)
+        with campaign.using(self.studio):
+            self.assertEqual(config.settings()['campaign_name'], 'Active')
+            self.assertEqual(config.settings(other)['campaign_name'], 'Given')
+            self.assertEqual(maps_io.unique_slug('Keep', other), 'keep-2')
+            self.assertEqual(maps_io.unique_slug('Keep'), 'keep')
+
+    def test_forge_exports_use_the_campaign_they_are_given(self):
+        other = campaign.Campaign(Path(self.temp.name) / 'Other')
+        Path(other.data).mkdir(parents=True)
+        Path(other.data, 'codex.json').write_text(
+            json.dumps({'entries': [{'id': 'ogre', 'name': 'Given Ogre', 'type': 'npc'}]})
+        )
+        Path(other.map_index).parent.mkdir(parents=True, exist_ok=True)
+        Path(other.map_index).write_text(json.dumps({'items': []}))
+        key = {'areas': [{'n': 1, 'name': 'Hall', 'npcs': ['ogre']}]}
+        with campaign.using(self.studio):
+            snapshot = forge.key_for_foundry('hall', key, copy_art=False, here=other)
+            forge.update_index({'slug': 'hall', 'name': 'Hall'}, other)
+        self.assertIn('Given Ogre', json.dumps(snapshot))
+        self.assertEqual(json.loads(Path(other.map_index).read_text())['items'][0]['slug'], 'hall')
+        self.assertFalse(Path(self.studio.map_index).exists())
+
+    def test_revisions_use_the_campaign_they_are_given(self):
+        other = campaign.Campaign(Path(self.temp.name) / 'Other')
+        folder = Path(other.map_folder('keep'))
+        folder.mkdir(parents=True)
+        (folder / 'plan.txt').write_text('plan')
+        with campaign.using(self.studio):
+            made = revisions.checkpoint('keep', 'Saved', other)
+            listed = revisions.listing('keep', other)
+            with self.assertRaises(ValueError):
+                revisions.listing('keep')
+        self.assertEqual([r['id'] for r in listed], [made['id']])
+        self.assertTrue((folder / 'revisions' / made['id'] / 'plan.txt').is_file())
+        self.assertFalse(Path(self.studio.map_folder('keep')).exists())
 
     def test_jobs_run_in_the_campaign_that_started_them(self):
         Path(self.studio.settings).write_text(json.dumps({'campaign_name': 'Elsewhere'}))

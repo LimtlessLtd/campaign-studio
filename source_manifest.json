@@ -81,6 +81,7 @@
   "docs/FOUNDRY_IMPORT.md",
   "docs/FOUNDRY_LIBRARY.md",
   "docs/RELEASE_NOTES.md",
+  "docs/ROADMAP.md",
   "package-lock.json",
   "package.json",
   "pyproject.toml",

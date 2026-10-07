@@ -14,9 +14,10 @@ DEFAULTS = {
 }
 
 
-def settings():
+def settings(here=None):
+    """Settings of campaign `here` (default: the active campaign)."""
     result = deepcopy(DEFAULTS)
-    path = campaign.active().settings
+    path = (here or campaign.active()).settings
     if os.path.exists(path):
         with open(path, encoding='utf-8') as f:
             saved = json.load(f)
@@ -52,10 +53,10 @@ def world_info(path):
     }
 
 
-def foundry_data():
+def foundry_data(here=None):
     if os.environ.get('FOUNDRY_DATA'):
         return os.path.realpath(os.environ['FOUNDRY_DATA'])
-    path = settings().get('world_path')
+    path = settings(here).get('world_path')
     if path:
         return world_info(path)['data_path']
     return ''

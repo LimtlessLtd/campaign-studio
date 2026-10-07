@@ -74,6 +74,8 @@ Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder t
   the selected pin by one percent without dragging. **Add location** on a battle map also uses a map tap.
 - A new map can automatically queue a content draft after rendering. Content drafts respect your selected
   counts and thread connections. Apply them after review. Per-location Generate buttons use the same workflow.
+- A whole-map content draft describes every numbered location in one AI response, which large generated
+  districts exceed. On those maps, use the per-location Generate buttons until batched stocking lands.
 
 ## AI and images
 
@@ -102,7 +104,9 @@ journals, actors and items straight from the world's database files when you ope
 and without changing Foundry; it shows when they were read and re-reads after Foundry saves changes. If a
 world's files cannot be read, download the export Script macro, run it as GM in Foundry, and import the JSON
 snapshot instead. **Import world into Studio** adds actors, items and scenes to the codex in one action;
-first-run setup also runs it and reports failures. Importing a macro snapshot uses the same rules. Studio
+first-run setup also runs it and reports failures. AI drafts currently include the whole codex, so a world
+with thousands of actors and items makes them exceed model limits until selective import and a context
+budget land (see the [roadmap](docs/ROADMAP.md)). Importing a macro snapshot uses the same rules. Studio
 edits are kept on reimport, source worlds remain separate, and supported local Foundry images display while
 their world is connected. For a read from a running Foundry client, download the live bridge Script macro
 from World Library, run it as GM, and approve the connection in the Studio tab it opens. The bridge signals
@@ -164,7 +168,8 @@ to `DM/exports`. This does not publish a repository.
 This initial alpha supports the map-driven preparation workflow and a read-only view of selected world
 documents. It does not yet live-sync or edit existing Foundry documents from Studio.
 The [code review](docs/CODE_REVIEW.md) and [backlog](docs/BACKLOG.md) describe the remaining work toward
-managing an entire campaign. Live AI availability depends on your provider; live Foundry compatibility
+managing an entire campaign, and the [roadmap](docs/ROADMAP.md) sets out the goal and the order of work.
+Live AI availability depends on your provider; live Foundry compatibility
 needs version-specific verification. Existing inbox requests remain readable and can be drafted through
 the structured workflow.
 
