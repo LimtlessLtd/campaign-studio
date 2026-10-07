@@ -116,5 +116,57 @@ class DeleteRouteTests(unittest.TestCase):
         self.assertEqual(threads['threads'][0]['pcs'], ['bram'])
 
 
+class MapTrashTests(DeleteRouteTests):
+    test_delete_removes_the_entry_and_every_link_in_one_commit = None
+
+    def seed(self):
+        here = campaign.active()
+        folder = Path(here.map_folder('docks'))
+        folder.mkdir(parents=True)
+        (folder / 'key.json').write_text('{"areas": []}', encoding='utf-8')
+        with campaign_core.LOCK:
+            campaign_core.write_doc(
+                'maps/index', {'items': [{'slug': 'docks', 'name': 'Nogratis Docks'}]}
+            )
+            campaign_core.write_doc('mapbrief/docks', {'name': 'Nogratis Docks'})
+            campaign_core.write_doc(
+                'prep/s1',
+                {
+                    'n': 1,
+                    'scenes': [
+                        {'id': 'a', 'map': 'Nogratis Docks'},
+                        {'id': 'b', 'map': 'other'},
+                    ],
+                },
+            )
+            campaign_core.write_doc('inbox', {'items': [{'id': 'r', 'map': 'docks'}]})
+        return folder
+
+    def test_delete_leaves_no_dangling_name_and_restore_brings_it_back(self):
+        folder = self.seed()
+        status, body = self.call('/api/maps/docks/delete', 'POST')
+        self.assertEqual(status, 200)
+        self.assertFalse(folder.exists())
+        index = campaign_core.read_json(campaign_core.doc_path('maps/index'))
+        self.assertEqual(index['items'], [])
+        prep = campaign_core.read_json(campaign_core.doc_path('prep/s1'))
+        self.assertEqual([s['map'] for s in prep['scenes']], ['', 'other'])
+        self.assertEqual(
+            campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]['map'], ''
+        )
+        self.assertEqual(self.call('/api/maps/docks/delete', 'POST')[0], 404)
+        status, listing = self.call('/api/maps/trash')
+        self.assertEqual([i['slug'] for i in listing['items']], ['docks'])
+        status, _ = self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')
+        self.assertEqual(status, 200)
+        self.assertTrue((folder / 'key.json').is_file())
+        index = campaign_core.read_json(campaign_core.doc_path('maps/index'))
+        self.assertEqual([m['slug'] for m in index['items']], ['docks'])
+        prep = campaign_core.read_json(campaign_core.doc_path('prep/s1'))
+        self.assertEqual([s['map'] for s in prep['scenes']], ['Nogratis Docks', 'other'])
+        self.assertEqual(self.call('/api/maps/trash')[1]['items'], [])
+        self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')[0], 404)
+
+
 if __name__ == '__main__':
     unittest.main()

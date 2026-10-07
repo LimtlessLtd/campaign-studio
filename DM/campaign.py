@@ -51,6 +51,11 @@ class Campaign:
         return os.path.join(self.home, 'uploads')
 
     @property
+    def map_trash(self):
+        """Deleted maps wait here until restored."""
+        return os.path.join(self.home, 'trash', 'maps')
+
+    @property
     def backups(self):
         """Verified copies made before a schema migration."""
         return os.path.join(self.home, 'backups')
