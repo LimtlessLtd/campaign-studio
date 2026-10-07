@@ -10,6 +10,8 @@ user. Follow the same development workflow whether you are a human contributor o
 - `docs/DEVELOPMENT.md`: implementation, review and verification workflow.
 - `docs/CODE_REVIEW.md`: design findings and known gaps.
 - `docs/BACKLOG.md`: prioritized work items, including the owner's feature requests.
+- `docs/ROADMAP.md`: the owner's product goal, focus areas, and a design note under each backlog row's ID.
+  Read a row's note before claiming the row.
 - `DM/AI_WORKFLOW.md`: the separate workflow for models generating campaign content.
 
 ## Before changing code

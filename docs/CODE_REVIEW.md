@@ -118,9 +118,39 @@ report after more than 200 later log lines and ignores oversized numeric reports
    bypasses environment proxies because a proxy could resolve the target again; networks requiring a proxy
    cannot fetch package metadata through this path.
 
+## Product and scale audit (2026-10-07)
+
+An audit of `fe14a0c` against the owner's goal of planning a whole session from a few prompts (see
+`docs/ROADMAP.md`). Every required check passed. The evidence comes from reading the code, the synthetic
+preview fixture, synthetic reproductions, and one read of a large real v12 dnd5e world through the
+read-only World Library reader. Only aggregate counts from that world are recorded here.
+
+The safety patterns hold up; the gaps are in the product layer above them. Prompts grow with the whole
+campaign, nothing works at the level of a session, and the Foundry write side covers one map per run with
+description-only sheets. Code size shows where effort went: backup, upgrade and cutover tooling is 3,721
+lines; session prep, codex, threads and requests are 1,713; the Foundry import macro is 374.
+
+| Finding                                                                                 | Evidence                                                                                                                                                                                          | Backlog  |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| Every structured prompt and prompt pack serialises the whole codex and thread list      | A world of about 500 actors, 1,400 items and 90 scenes imports about 1,950 entries; each prompt then carries about 8 MB of codex (about 2 million tokens), half of it the `foundry.imported` copy | W23, W24 |
+| Exporting a map duplicates a linked actor or item that was imported from Foundry        | `key_for_foundry` drops `foundry.uuid` and the macro matches only Studio-tagged documents. Reproduced in the macro harness: the original actor plus a description-only copy                       | W25      |
+| Whole-map content drafts must describe every numbered area in one response              | Generated districts have 44 areas at 60 × 60 squares, 97 at 80 × 80, 146 at 120 × 80 and 311 at 160 × 120                                                                                         | W26      |
+| Content drafts must match each requested count exactly                                  | A draft one NPC short is rejected after the model has run; the schema sent to the model carries no counts                                                                                         | W26      |
+| Autosave sends whole documents and the server keeps 50 copies of each                   | Editing one codex entry PUTs the whole codex: about 8 MB per save at the size above, and about 400 MB of history                                                                                  | W28      |
+| Maps, session preps and world maps cannot be deleted; deleting an entry leaves its ID   | IDs stay in areas, scenes, briefs and `related` lists; the map inspector hides them but still counts them                                                                                         | W29      |
+| The map inspector loads Foundry-imported portraits through `/files/`                    | 403 there and 200 through `/api/foundry/asset` for the same path; exports also drop these images                                                                                                  | W27, W25 |
+| Handouts asks for `DM/uploads` by name                                                  | Empty when `DM_HOME` is a folder with another name; reproduced                                                                                                                                    | W27      |
+| Four routes add the forge folder to `sys.path` on every call                            | `/api/state`, plan saves, map creation and generator commands                                                                                                                                     | W27      |
+| Map checkpoints copy the full image of maps without roofs, and nothing prunes old files | About 17 MB per checkpoint at 80 × 80 squares; revisions, job logs and history grow without limit                                                                                                 | W54      |
+| Single-campaign names remain in source                                                  | Folder names in `FILE_ROOTS` and temple names in `gen_city`                                                                                                                                       | W56      |
+| Restart recovery and the map busy check read only the newest 200 job records            | An older queued job stays stuck after a restart                                                                                                                                                   | #43      |
+| Open PR #43 sends the layout schema to OpenAI in strict mode                            | Strict mode requires every property in `required`, but layout operations require only `type`; content and request schemas comply. Not checked live                                                | #43      |
+| The relay lost the reviews of #32, #33, #36 and #37                                     | Their `Reviewed-PR:` lines sat before a separate `Co-Authored-By` paragraph, where git reads no trailers; restated in this audit's PR                                                             | W45      |
+
 ## Prioritized development work
 
-The work these findings call for, with the owner's feature requests, is tracked in `docs/BACKLOG.md`.
+The work these findings call for, with the owner's feature requests, is tracked in `docs/BACKLOG.md`. The
+owner's product goal and the design notes behind the rows are in `docs/ROADMAP.md`.
 
 ## Remaining limitations
 
@@ -138,6 +168,10 @@ The work these findings call for, with the owner's feature requests, is tracked 
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
   macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
   rejected before import.
+- Foundry receives one map per macro run. Tokens are not placed, and session prep, scenes and handouts are
+  not exported (W38–W41).
+- AI prompts include the whole codex and thread list and no session history, so a large imported world
+  exceeds model limits (W23, W24, W30). Whole-map content drafts need every area in one response (W26).
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
