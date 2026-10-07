@@ -1130,13 +1130,7 @@ async function codexEntry(c, id, main, context) {
           'button',
           {
             class: 'danger',
-            onclick: () => {
-              if (confirm(`Delete ${e.name} from the codex?`)) {
-                c.entries.splice(c.entries.indexOf(e), 1);
-                save(docName);
-                go('#/codex');
-              }
-            },
+            onclick: () => deleteCodexEntry(e, docName),
           },
           'Delete',
         ),
@@ -1338,4 +1332,37 @@ function notesPage(_arg, context) {
     ),
     h('pre', { class: 'notes' }, S.state.notes),
   );
+}
+
+/* Delete a codex entry on the server, which also unlinks it from every thread, scene, area and request. */
+async function deleteCodexEntry(e, docName) {
+  try {
+    await flush(docName); // so the server sees the edits made so far
+    const id = encodeURIComponent(e.id);
+    const { uses } = await api(`/api/codex/${id}/uses`);
+    const shown = uses.slice(0, 8).map(
+      (u) => `
+- ${u.where}`,
+    );
+    const more =
+      uses.length > 8
+        ? `
+…and ${uses.length - 8} more`
+        : '';
+    const used = uses.length
+      ? `
+
+It is used in ${uses.length} place(s); those links will be removed:${shown.join('')}${more}`
+      : '';
+    if (!confirm(`Delete ${e.name} from the codex?${used}`)) return;
+    const { changed } = await post(`/api/codex/${id}/delete`);
+    for (const name of changed) {
+      delete S.docs[name];
+      delete S.base[name];
+      delete S.revs[name];
+    }
+    go('#/codex');
+  } catch (error) {
+    alert('Not deleted: ' + error.message);
+  }
 }
