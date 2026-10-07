@@ -33,7 +33,6 @@ Next ID: W57
 | W42 | 2        | Art pipeline: style guide, templates per kind, batch per prep, token cut-outs, adapters                     | One action fills every missing image for a prep; fake-provider tests           |
 | W43 | 2        | Live Foundry check with the owner on their v12 dnd5e versions (owner-assisted)                              | Exact versions and results recorded; failures become backlog rows              |
 | W44 | 2        | AI usage ledger: tokens, cost and time per job; ask before prompts over a set size                          | A fake-provider job records usage; a large prompt asks first                   |
-| W45 | 2        | Relay record check: fail CI when a `Reviewed-PR:` line sits outside the final trailer paragraph             | A fixture commit with a misplaced trailer fails the check                      |
 | W10 | 3        | Installer and performance budgets for very large maps                                                       | Clean-machine install test and measured time/memory at documented map sizes    |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped) | Services receive their `Campaign` explicitly (no process-wide active campaign) |
 | W46 | 3        | Structured stat blocks mapped to D&D 5e actor data for NPCs without a compendium base                       | A fixture actor matches its stat block; malformed blocks are rejected          |
