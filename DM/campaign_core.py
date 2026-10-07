@@ -19,6 +19,7 @@ import revisions
 import schema
 import shapes
 import storage
+import usage
 from job_service import JobService
 
 APP = os.path.join(campaign.INSTALL, 'app')
@@ -306,6 +307,12 @@ def finish_job(job, code, tail):
         # Keep the finished result (often a paid draft). The pending change completes later; if this
         # result touches one of its documents, that change is set aside for GM review, not overwritten.
         sys.stderr.write(f'An interrupted change is still pending: {pending}\n')
+    if job['kind'] in usage.DRAFT_KINDS:
+        try:
+            with open(job_file(job['id'], 'log'), encoding='utf-8', errors='replace') as file:
+                usage.record(job, file.read())
+        except OSError:
+            pass  # no log, no usage: the job itself still settles
     if job['kind'] == 'request-draft':
         finish_request(job, code, tail)
     if job.get('art'):
@@ -434,6 +441,10 @@ execute_job = JOBS_SERVICE.execute_job
 log_tail = JOBS_SERVICE.log_tail
 job_progress = JOBS_SERVICE.progress
 list_jobs = JOBS_SERVICE.list_jobs
+
+
+def usage_totals():
+    return usage.totals(JOBS_SERVICE.iter_jobs())
 
 
 def generate_cmd(p):
