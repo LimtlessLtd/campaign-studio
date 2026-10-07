@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / 'DM' / 'tools'))
 import ai_provider
 import openai_worker
 import request_workflow
+import workflow
 
 
 class FakeOpener:
@@ -29,6 +30,56 @@ class FakeOpener:
 
 
 class AIProviderTests(unittest.TestCase):
+    def test_openai_schemas_require_every_object_field(self):
+        def check_strict(schema):
+            if 'anyOf' in schema:
+                for option in schema['anyOf']:
+                    check_strict(option)
+            if schema.get('type') == 'object':
+                self.assertEqual(set(schema['properties']), set(schema['required']))
+                self.assertIs(schema['additionalProperties'], False)
+                for property_schema in schema['properties'].values():
+                    check_strict(property_schema)
+            if schema.get('type') == 'array':
+                check_strict(schema['items'])
+
+        for kind in ('request', 'content', 'layout', 'revision'):
+            with self.subTest(kind=kind):
+                check_strict(openai_worker.draft_schema(kind))
+
+        layout = openai_worker.draft_schema('layout')
+        self.assertEqual(layout, openai_worker.draft_schema('revision'))
+        operation = layout['properties']['operations']['items']
+        original = workflow.LAYOUT_SCHEMA['properties']['operations']['items']
+        examples = (
+            {
+                'type': 'rect',
+                'row': 0,
+                'col': 0,
+                'width': 2,
+                'height': 2,
+                'fill': '.',
+                'border': '',
+            },
+            {'type': 'path', 'points': [[0, 0], [0, 1]], 'width': 1, 'char': ':'},
+            {'type': 'stamp', 'row': 0, 'col': 0, 'rows': ['.']},
+            {
+                'type': 'scatter',
+                'row': 0,
+                'col': 0,
+                'width': 2,
+                'height': 2,
+                'count': 1,
+                'char': '&',
+                'replace': ' ',
+            },
+        )
+        self.assertEqual(len(operation['anyOf']), len(examples))
+        for variant, example in zip(operation['anyOf'], examples):
+            self.assertEqual(variant['properties']['type']['enum'], [example['type']])
+            self.assertEqual(set(variant['required']), set(example))
+            workflow.validate_schema(example, original)
+
     def test_settings_choose_provider_without_saving_a_secret(self):
         clean = ai_provider.clean_settings(
             {

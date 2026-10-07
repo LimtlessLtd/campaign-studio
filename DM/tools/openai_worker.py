@@ -5,6 +5,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from copy import deepcopy
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import request_workflow
@@ -25,8 +26,30 @@ def draft_schema(kind):
     if kind == 'content':
         return workflow.CONTENT_SCHEMA
     if kind in ('layout', 'revision'):
-        return workflow.LAYOUT_SCHEMA
+        return strict_layout_schema()
     raise ValueError('Unknown structured draft kind.')
+
+
+def strict_layout_schema():
+    """Constrain each operation to its own complete strict-output object."""
+    schema = deepcopy(workflow.LAYOUT_SCHEMA)
+    fields = schema['properties']['operations']['items']['properties']
+    variants = {
+        'rect': ('row', 'col', 'width', 'height', 'fill', 'border'),
+        'path': ('points', 'width', 'char'),
+        'stamp': ('row', 'col', 'rows'),
+        'scatter': ('row', 'col', 'width', 'height', 'count', 'char', 'replace'),
+    }
+    schema['properties']['operations']['items'] = {
+        'anyOf': [
+            workflow.obj(
+                {'type': {'type': 'string', 'enum': [kind]}}
+                | {field: fields[field] for field in names}
+            )
+            for kind, names in variants.items()
+        ]
+    }
+    return schema
 
 
 def parse_response(payload):
