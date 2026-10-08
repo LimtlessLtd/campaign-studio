@@ -132,7 +132,7 @@ git diff <merge>^1 <merge>   # one merged PR's changes
 
 Merge with a merge commit, which keeps each commit and its trailers on `main`. Do not squash, rebase or
 force-push `main`, and never merge with failing or pending checks. If a merge leaves `main` red, fix it
-immediately. Only merge your own PR; other PRs wait for their author or the owner.
+immediately. Only merge your own PR or one you adopted (Open PRs left behind); other PRs wait for their author or the owner.
 
 Still ask the owner first for: creating a release or tag, changing CI permissions, secrets or the release
 workflow, and anything that publishes campaign data or makes paid calls.
@@ -156,10 +156,36 @@ it.
    work moves: `PR #12`, `MERGED #12`, or `RELEASED: <reason>`. A claim holds while its PR is open, and
    otherwise until its thread says merged or released or goes 24 hours without a post. If two claims
    collide, the earlier post wins.
-4. **Choose work** in this order: unreviewed PRs, then a fix the relay made this run's task, then the
-   highest-priority unclaimed backlog item. When no numbered item remains, claim and run the standing
+4. **Choose work** in this order: open PRs left behind (below), unreviewed merged PRs, then a fix the relay
+   made this run's task, then the highest-priority unclaimed backlog item. When no numbered item remains, claim and run the standing
    full-project audit (RA1) in `docs/BACKLOG.md`; repeat whenever the backlog becomes empty again.
 5. **Finish** with `MERGED #N` in the claim thread, naming anything left undone.
+
+### Open PRs left behind
+
+No PR may sit open because its agent ran out of context or usage. List open PRs on every run
+(`gh pr list --state open`). A PR is **left behind** when its newest commit, comment and claim-thread post are
+all more than 2 hours old and its author is not you. Check these first, before new work:
+
+1. **Claim** it in the coordination channel: `[claude] CLAIM adopt #65`. The adopter finishes the PR; the
+   original claim is treated as released. Never adopt a PR whose author has posted within 2 hours.
+2. **Analyse** it: read the description, the claim thread, the commits and the diff; run `gh pr checks` and
+   check mergeability. Note what is done, what is missing and what has since collided with `main`
+   (migration or schema numbers, backlog IDs, changelog, manifest).
+3. **Bring it up to date** by merging `origin/main` into the PR's own branch (not a rebase, never a force-push),
+   in a separate worktree. Resolve conflicts so the author's intent survives and `main`'s newer work is kept.
+   Renumber anything that collided, such as schema versions, and fix the tests, docs and changelog to match.
+4. **Finish and verify**: complete small gaps, run every required check, and push to the same branch so
+   the PR and its history stay intact. Wait for CI on the new head commit. Apply the review checklist to
+   the final diff and record the results in the PR.
+5. **Merge it** under the merge conditions above. Adopting a PR authorizes you to merge it; the rule that
+   only authors merge their own PR does not apply to a PR you adopted.
+6. **If it cannot be finished** (the design is unsound, work is missing that is too large to finish, or checks
+   cannot pass), do not leave it dangling: add the missing work to the top of `docs/BACKLOG.md` as an item
+   with its own ID, post the findings in the PR and the claim thread, and ask the owner whether to close it.
+   Close a PR only when the owner agrees.
+
+Post `MERGED #N (adopted from <agent>)` or `RELEASED: <reason>` in the claim thread when done.
 
 ## Release
 

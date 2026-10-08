@@ -19,6 +19,8 @@ user. Follow the same development workflow whether you are a human contributor o
 0. Run the review relay first (`docs/DEVELOPMENT.md` → Review relay): audit every merged PR that no
    `Reviewed-PR:` trailer names yet, for bugs and for design, and fix what it confirms before starting your
    own task. Claim work and report progress as described under Coordinating agents.
+   Then check for open PRs left behind by an agent that ran out of context or usage, and adopt and finish
+   them before new work (`docs/DEVELOPMENT.md` → Open PRs left behind).
 1. Inspect `git status` and relevant instructions. Preserve other contributors' work.
 2. Trace the requested interaction from route to API, persistence and Foundry export. State assumptions.
 3. Keep the change focused. For substantial changes, record a short plan and acceptance criteria in the
