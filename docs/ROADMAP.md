@@ -20,9 +20,9 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Session recordings to next session** (W68–W73). The owner's main use. Recordings are transcribed
-   locally, split into real play and table banter, folded into a thread ledger, and turned into reviewed arc
-   proposals and a next-session draft. Take these rows before the rest.
+1. **Session recordings to next session** (W69–W73; W68 transcription is done). The owner's main use.
+   Recordings are transcribed locally, split into real play and table banter, folded into a thread ledger, and
+   turned into reviewed arc proposals and a next-session draft. Take these rows before the rest.
 2. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
@@ -98,7 +98,7 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W68–W73 Session recordings to next session
+### W69–W73 Session recordings to next session
 
 - Owner feedback (8 Oct): point AI at local session videos, transcribe the audio, work out which threads are
   still loose, then help create arcs and resolutions and the next session. The table's jokes and invented gags
@@ -109,13 +109,9 @@ their row and finding say enough.
   or required for any step here. A hosted transcription or API provider is out of scope. Long runs are costly
   against subscription limits: process one session at a time, chunk under `context_budget_chars`, estimate
   before a run and ask first (W44), and never resend settled sessions (the ledger and logs carry them).
-- **W68 transcription.** A job behind a provider adapter that runs a local Whisper model (faster-whisper or
-  whisper.cpp, the owner's choice in Settings; no model download without asking). The GM picks a file or a
-  folder; Studio never copies or uploads a recording and stores only a bounded, timestamped transcript as
-  reference data, never instructions. Extract the audio with ffmpeg when the container needs it. Speaker
-  labels are optional; the table is small enough that a name pass in W69 may do. Tests use a fake adapter and
-  a tiny synthetic clip; real model runs are owner-assisted.
-- **W69 classification.** Chunk the transcript and mark each passage **in-game**, **table banter** or
+- **W69 classification.** A transcript is already stored (`transcripts/<id>`, `shapes.TRANSCRIPT`, each
+  segment `{start, end, text}`); this step adds the classification to each segment (a shape change with a
+  migration). Chunk the transcript and mark each passage **in-game**, **table banter** or
   **unclear**, quoting it. The GM confirms in a review list; banter and invented gags are saved as table
   lore (a small stored list) so later sessions skip them. Only confirmed in-game passages leave this step.
 - **W70 thread ledger.** From confirmed play, a proposal updates threads (open, resolved, foreshadowed), the
@@ -127,7 +123,7 @@ their row and finding say enough.
   members it uses. Accepted options become thread changes, hooks and a seed for the next pitch. Reviewed with
   W33; nothing applies unreviewed.
 - **W72 automatic run.** One action, and a scheduled Claude task, takes a folder of new recordings through
-  W68–W71 and then Session Forge (W32), leaving only reviews: banter confirmations, the ledger and the next
+  transcription (W68), W69–W71 and then Session Forge (W32), leaving only reviews: banter confirmations, the ledger and the next
   draft. It runs on the owner's computer with their signed-in CLI, skips recordings already processed (a
   stored fingerprint), reports usage, and stops cleanly if a limit is reached. The scheduled-task prompt and
   folder paths are the owner's private configuration, not source.
@@ -215,7 +211,7 @@ their row and finding say enough.
 - W44: record tokens, cost and time per AI job from the provider's output (the Claude CLI's JSON result
   reports usage and cost). Show totals per session and month, and ask before running a prompt above a
   configurable size. Subscription users have limits, not a bill: report usage against them and ask before a
-  transcript-sized run (W68–W72).
+  transcript-sized run (W69–W72).
 - W51: an opt-in script runs drafts against synthetic campaigns and checks that links resolve, canon is
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.

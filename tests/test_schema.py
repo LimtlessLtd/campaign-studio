@@ -342,6 +342,30 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(migrated['handouts'][0]['player_text'], 'Keep this.')
         self.assertEqual(migrated['handouts'][0]['image_prompt'], '')
 
+    def test_version_nine_campaign_gains_transcripts_and_keeps_its_documents(self):
+        self.migrate()
+        schema.write_marker(self.data, 9, 'Synthetic version 9 campaign')
+        before = self.snapshot()
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (9, schema.CURRENT))
+        self.assertEqual(self.snapshot(), before)  # nothing existed to fill, so nothing changed
+
+    def test_a_stored_transcript_is_completed_from_its_shape_without_losing_segments(self):
+        self.migrate()
+        path = self.dm / 'data/transcripts/rec-0123456789abcdef.json'
+        path.parent.mkdir()
+        older = {'id': 'rec-0123456789abcdef', 'segments': [{'start': 1, 'end': 2, 'text': 'Hi'}]}
+        path.write_text(json.dumps(older))
+
+        filled = dict(schema.planned_changes(self.data, self.maps, 9))[str(path)]
+
+        self.assertEqual(filled['segments'], older['segments'])
+        self.assertEqual(
+            (filled['truncated'], filled['session'], filled['source']['size']), (False, '', 0)
+        )
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

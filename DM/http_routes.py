@@ -29,6 +29,7 @@ import records
 import revisions
 import shapes
 import storage
+import transcription
 import workflow
 from campaign_core import (
     APP,
@@ -42,6 +43,7 @@ from campaign_core import (
     campaign_path,
     cancel_job,
     commit_docs,
+    default_recordings,
     delete_record,
     doc_path,
     editable_doc_path,
@@ -67,7 +69,9 @@ from campaign_core import (
     restore_revision,
     rev_of,
     start_request,
+    start_transcription,
     start_workflow,
+    transcript_busy,
     usage_totals,
     write_doc,
     write_target,
@@ -103,6 +107,9 @@ ROUTES = {
         (lambda path: path == '/api/revs', '_get_revs'),
         (lambda path: path.startswith('/api/plan/'), '_get_plan'),
         (lambda path: path == '/api/usage', '_get_usage'),
+        (lambda path: path == '/api/recordings', '_get_recordings'),
+        (lambda path: path == '/api/transcripts', '_get_transcripts'),
+        (lambda path: path.startswith('/api/transcripts/'), '_get_transcript'),
         (lambda path: path == '/api/maps/trash', '_get_map_trash'),
         (lambda path: path.startswith('/api/codex/') and path.endswith('/uses'), '_get_codex_uses'),
         (lambda path: path == '/api/jobs', '_get_jobs'),
@@ -147,6 +154,11 @@ ROUTES = {
             '_post_cancel_job',
         ),
         (lambda path: path.startswith('/api/requests/'), '_post_request'),
+        (lambda path: path == '/api/transcripts/start', '_post_transcript_start'),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/remove'),
+            '_post_transcript_remove',
+        ),
         (lambda path: path == '/api/maps/import', '_post_map_import'),
         (lambda path: path == '/api/settings', '_post_settings'),
         (lambda path: path == '/api/art/generate', '_post_art_generate'),
@@ -398,6 +410,7 @@ class Handler(SimpleHTTPRequestHandler):
                 error=error,
                 claude=bool(shutil.which('claude')),  # retained for older local clients
                 ai=ai_provider.status(),
+                transcription=transcription.status(cfg['transcription']),
                 image_key_available=bool(os.environ.get(cfg['images']['key_env'])),
             )
         )
@@ -680,6 +693,70 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _get_usage(self, path, query, p):
         return self.send_json(usage_totals())
+
+    def _get_recordings(self, path, query, p):
+        """The recordings in a folder (default: the campaign's recordings folder), or one named file."""
+        folder = query.get('path', [''])[0].strip() or default_recordings()
+        have = set(list_docs('transcripts'))
+        files = transcription.recordings(folder) if folder else []
+        return self.send_json(
+            {
+                'path': folder,
+                'files': [dict(f, transcript=f['id'] if f['id'] in have else '') for f in files],
+                'engine': transcription.status(),
+            }
+        )
+
+    def _get_transcripts(self, path, query, p):
+        items = [
+            transcription.summary(read_json(doc_path('transcripts/' + name), {}))
+            for name in list_docs('transcripts')
+        ]
+        items.sort(key=lambda item: -item.get('created', 0))
+        return self.send_json({'items': items, 'engine': transcription.status()})
+
+    @staticmethod
+    def _transcript_id(path, suffix=''):
+        ident = path[len('/api/transcripts/') : len(path) - len(suffix)]
+        if not transcription.ID.fullmatch(ident):
+            raise Invalid('bad transcript id')
+        return ident
+
+    def _get_transcript(self, path, query, p):
+        """One transcript with a window of its segments, so a long session loads in pieces."""
+        ident = self._transcript_id(path)
+        document = read_json(doc_path('transcripts/' + ident))
+        if document is None:
+            raise NotFound('no such transcript')
+        offset = max(0, int(query.get('offset', ['0'])[0]))
+        limit = max(1, min(500, int(query.get('limit', ['200'])[0])))
+        return self.send_json(
+            dict(
+                transcription.summary(document),
+                offset=offset,
+                segments=document['segments'][offset : offset + limit],
+            )
+        )
+
+    def _post_transcript_start(self, path, query, p):
+        """Queue a local transcription. The recording is read where it lies and never copied."""
+        rec = transcription.recording(p.get('path'))
+        with LOCK:
+            if transcript_busy(rec['id']):
+                raise Conflict('This recording is already being transcribed.')
+            return self.send_json(start_transcription(rec, str(p.get('session') or '')))
+
+    def _post_transcript_remove(self, path, query, p):
+        """Remove Studio's transcript. The recording itself is never opened for writing."""
+        ident = self._transcript_id(path, '/remove')
+        name = 'transcripts/' + ident
+        with LOCK:
+            if rev_of(doc_path(name)) == '0':
+                raise NotFound('no such transcript')
+            if transcript_busy(ident):
+                raise Conflict('This recording is being transcribed. Cancel the job first.')
+            commit_docs('Remove transcript ' + ident, [(name, None)])
+        return self.send_json({'ok': True})
 
     def _get_jobs(self, path, query, p):
         return self.send_json(list_jobs())
@@ -1056,6 +1133,9 @@ class Handler(SimpleHTTPRequestHandler):
                 p.get('context_budget_chars', cfg['context_budget_chars'])
             ),
             ai=ai_provider.clean_settings(p.get('ai') or {}),
+            transcription=transcription.clean_settings(
+                p['transcription'] if 'transcription' in p else cfg['transcription']
+            ),
             images={
                 'endpoint': endpoint,
                 'model': str(images.get('model') or '')[:100],

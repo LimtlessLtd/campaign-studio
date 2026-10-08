@@ -33,6 +33,7 @@ const context = {
   studioWelcome: emptyPage,
   studioLibrary: emptyPage,
   memoryPage: emptyPage,
+  recordingsPage: emptyPage,
   prepPage: emptyPage,
   threadsPage: emptyPage,
   codexPage: emptyPage,

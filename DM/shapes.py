@@ -175,6 +175,25 @@ MAP_KEY = Shape(
     {'areas': AREA, 'events': EVENT},
 )
 
+TRANSCRIPT_SEGMENT = Shape('transcript_segment', [], dict(start=0, end=0, text=''))
+TRANSCRIPT = Shape(
+    'transcript',
+    ['id'],
+    dict(
+        title='',
+        session='',
+        source=dict(name='', path='', size=0, modified=0),
+        provider='',
+        model='',
+        language='',
+        duration=0,
+        created=0,
+        truncated=False,
+        segments=[],
+    ),
+    {'segments': TRANSCRIPT_SEGMENT},
+)
+
 WORLD_PIN = Shape('world_pin', ['id'], dict(label='', map='', x=0.5, y=0.5, note=''))
 WORLD_MAP = Shape('world_map', ['id', 'name'], dict(image='', pins=[]), {'pins': WORLD_PIN})
 WORLD_MAPS = Shape('world_maps', [], dict(maps=[]), {'maps': WORLD_MAP})
@@ -201,6 +220,8 @@ SHAPES = {
         WORLD_PIN,
         WORLD_MAP,
         WORLD_MAPS,
+        TRANSCRIPT_SEGMENT,
+        TRANSCRIPT,
     )
 }
 

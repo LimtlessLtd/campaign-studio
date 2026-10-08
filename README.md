@@ -101,6 +101,19 @@ prep or create one. Foundry journal text stays GM reference material in lore ent
 Foundry world are read only; images and other media are not copied. If a source changes after preview, Studio
 asks you to review it again. A source is limited to 5,000 files and 40 MB for one preview.
 
+**Recordings** turns a session recording (video or audio) into a timestamped transcript on this computer. No
+account, API key or upload is involved: choose a folder or file, pick the session it belongs to, and press
+**Transcribe**. Studio reads the recording where it lies and never copies it; extracted audio, if an engine
+needs it, goes to a temporary folder that is removed when the job ends. In Settings choose the engine:
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper) (`python -m pip install faster-whisper`, which
+decodes video itself) or a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) program with a ggml model
+file and ffmpeg. A faster-whisper model that is not already on this computer is downloaded only if you allow
+it in Settings. A job is cancellable and can be started again; the transcript is stored as reference text
+(up to 20,000 segments) and **Remove transcript** deletes only Studio's copy. Transcription speed depends
+on your hardware and model. Reading a transcript is all this step does; telling play from table banter and
+finding loose threads are separate planned steps (W69 onward in the [roadmap](docs/ROADMAP.md)). Tests
+fake the engines; a real model run has not been checked yet.
+
 From a session prep, **Plan whole session** turns one pitch into a reviewable proposal for a recap, goals,
 three to six scenes, cast, thread changes, handouts, loot and a checklist. Choose the session length, combat
 and social focus, and threads to push. Applying the reviewed draft links the records and queues up to two

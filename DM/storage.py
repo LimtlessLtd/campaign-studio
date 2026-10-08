@@ -152,6 +152,22 @@ def update_json(path, default, mutate, save=None):
         return value
 
 
+def local_path(value, directory=True):
+    """The resolved existing local folder (or file) a person typed. A linked path is refused."""
+    if not isinstance(value, str) or not value.strip() or len(value) > 2048:
+        raise ValueError('Choose a local path.')
+    original = Path(value).expanduser()
+    if original.is_symlink():
+        raise ValueError('Linked paths are not supported.')
+    try:
+        path = original.resolve(strict=True)
+    except OSError:
+        path = None
+    if path is None or not (path.is_dir() if directory else path.is_file()):
+        raise ValueError('Choose an existing local ' + ('folder.' if directory else 'file.'))
+    return path
+
+
 def sha256_file(path):
     digest = hashlib.sha256()
     with open(path, 'rb') as source:

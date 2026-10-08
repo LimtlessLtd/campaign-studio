@@ -26,6 +26,7 @@ function initStudio() {
         ['memory', 'folder', 'Import memory'],
         ['maps', 'map', 'Maps & locations'],
         ['prep', 'book', 'Session prep'],
+        ['recordings', 'mic', 'Recordings'],
         ['codex', 'people', 'Campaign codex'],
         ['threads', 'threads', 'Story threads'],
         ['art', 'image', 'Image studio'],
@@ -769,6 +770,52 @@ async function studioSettings(_arg, context) {
           'p',
           { class: 'small-note' },
           'AI drafts are reviewed before they become campaign content.',
+        ),
+      ),
+      h(
+        'section',
+        { class: 'card' },
+        h('div', { class: 'section-icon' }, icon('mic')),
+        h('h2', {}, 'Session recordings'),
+        badge(
+          result.transcription.available
+            ? `${result.transcription.label} ready`
+            : `${result.transcription.label} not ready`,
+          result.transcription.available ? 'good' : '',
+        ),
+        result.transcription.available
+          ? null
+          : h('p', { class: 'small-note' }, result.transcription.problem),
+        formInput(f.transcription, 'provider', 'Transcription engine', {
+          options: [
+            ['faster-whisper', 'faster-whisper (Python package)'],
+            ['whisper-cpp', 'whisper.cpp (separate program)'],
+          ],
+        }),
+        formInput(f.transcription, 'model', 'Whisper model', {
+          placeholder: 'small',
+          help: 'faster-whisper: a size such as small, or the folder of a downloaded model. whisper.cpp: the path of a ggml model file.',
+        }),
+        formInput(f.transcription, 'language', 'Language code', {
+          placeholder: 'Detect automatically',
+          help: 'For example en. Leave blank to detect it.',
+        }),
+        formInput(f.transcription, 'executable', 'whisper.cpp program', {
+          placeholder: 'whisper-cli',
+          help: 'Only for whisper.cpp. Leave blank to find whisper-cli on the PATH.',
+        }),
+        formInput(f.transcription, 'ffmpeg', 'ffmpeg program', {
+          placeholder: 'ffmpeg',
+          help: 'Only for whisper.cpp, which needs it to read video. Leave blank to find ffmpeg on the PATH.',
+        }),
+        formInput(f.transcription, 'allow_download', 'Allow a one-time model download', {
+          type: 'checkbox',
+          help: 'faster-whisper fetches a model it does not have from the internet. Off by default; recordings are never uploaded either way.',
+        }),
+        h(
+          'p',
+          { class: 'small-note' },
+          'Transcription runs on this computer. No account or API key is used.',
         ),
       ),
       h(

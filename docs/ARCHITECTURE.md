@@ -14,6 +14,8 @@ flowchart LR
   AI --> WF
   Queue --> Forge[forge: render plan and scene]
   Queue --> Art[image_worker: configured provider]
+  Queue --> Speech[transcribe_worker: local Whisper engine]
+  Speech --> Transcripts[transcription.py: bounded transcript documents]
   Forge --> Maps[Local maps and keys]
   HTTP --> Export[maps_io: Foundry export]
   Export --> Macro[GM runs import macro in Foundry]
@@ -58,6 +60,8 @@ flowchart LR
 | `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                            |
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                               |
 | `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                      |
+| `DM/transcription.py`                 | Local Whisper engines, recording checks, transcript bounds and the transcript shape |
+| `DM/tools/transcribe_worker.py`       | One local transcription in a child process; leaves segments for the server to store |
 | `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge      |
 | `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                     |
 | `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                              |
@@ -66,6 +70,7 @@ flowchart LR
 | `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                            |
 | `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                             |
 | `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                    |
+| `DM/app/recordings-page.js`           | Recordings page: choose a file, watch the job, read and remove transcripts          |
 | `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                      |
 | `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation               |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                               |
@@ -195,7 +200,7 @@ are omitted from references. Proposal validation still checks IDs against the fu
 packs and background jobs use this selector; `/api/context/search` and per-draft `context` actions support
 the browser preview and pins.
 
-One worker runs per lane (forge, structured drafts, art). The draft lane retains its `claude` key in saved jobs
+One worker runs per lane (forge, structured drafts, art, transcribe). The draft lane retains its `claude` key in saved jobs
 for compatibility. Lanes may run concurrently. `JobService` persists queue and
 process transitions through an injectable runner (`SubprocessRunner`: `start`, then `feed`, `wait`, `terminate`); application callbacks settle image, workflow and inbox documents. State postprocessing
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
@@ -206,7 +211,8 @@ Recovery scans the full job history; the 30-job UI list remains bounded.
 `POST /api/jobs/<id>/cancel` fails a queued job at once and terminates a running one; either way the
 owning workflow, image brief or request is settled through the normal failure callback.
 A job reports progress by printing `PROGRESS <done>/<total> [label]` or `PROGRESS <n>% [label]`; the job
-API returns the last such line as `progress`.
+API returns the last such line as `progress`. Cancelling stops the job's whole process tree, so a worker's
+own children (ffmpeg, a whisper.cpp program) end with it.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 
@@ -240,7 +246,30 @@ Old `/api/claude` calls use the selected structured request runner. The OpenAI p
 it has not been exercised with a paid API call.
 
 The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
-recordings are transcribed locally (planned, W68–W73 in `docs/ROADMAP.md`). The OpenAI provider is optional.
+recordings are transcribed locally (W68; classification and the thread ledger are W69–W73 in
+`docs/ROADMAP.md`). The OpenAI provider is optional.
+
+## Session recordings
+
+`GET /api/recordings?path=` lists the media files in a folder (not its subfolders; default: the campaign's
+`Session recordings` folder) or describes one file, and marks those that already have a transcript.
+`POST /api/transcripts/start {path, session?}` queues a job on the `transcribe` lane; a recording already
+being transcribed answers 409. `GET /api/transcripts` lists transcripts without their segments, `GET
+/api/transcripts/<id>?offset=&limit=` reads a window of segments (at most 500), and `POST
+/api/transcripts/<id>/remove` deletes only Studio's transcript.
+
+A recording is identified by `rec-` plus a hash of its path, size and modification time, so starting the same
+file again replaces one transcript instead of adding another, and a changed or moved file is a new one. The
+server validates the path (`storage.local_path`: an existing local, unlinked file with a media extension),
+then the job's stdin carries a JSON request (recording, engine settings, result and scratch paths) to
+`tools/transcribe_worker.py`. The worker runs the engine selected in settings (`transcription.PROVIDERS`:
+`faster-whisper` in-process, or `whisper-cpp` with ffmpeg), prints progress and writes its segments to
+`jobs/<id>.transcript`. It writes no campaign document. When the job finishes the server validates the
+segments (ordered, finite, text bounded to 2,000 characters a segment, 20,000 segments and 2 MB of text; a
+longer recording keeps its start and says so), writes `transcripts/<id>` (`shapes.TRANSCRIPT`, schema 10),
+and removes the staged result and the scratch audio, also after a failure, cancel or restart. A model is
+downloaded only when `transcription.allow_download` is set. Transcript text is what was said at the table:
+reference data, never instructions. The recording is only read; nothing is uploaded.
 
 ## Foundry boundary
 

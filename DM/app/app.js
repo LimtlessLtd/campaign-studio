@@ -37,6 +37,7 @@ async function route(soft) {
         library: studioLibrary,
         memory: memoryPage,
         prep: prepPage,
+        recordings: recordingsPage,
         threads: threadsPage,
         codex: codexPage,
         maps: studioMaps,
