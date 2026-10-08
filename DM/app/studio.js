@@ -492,6 +492,29 @@ async function studioLibrary(_arg, context) {
         },
         'Import world into Studio',
       ),
+      S.state.world_key
+        ? h(
+            'button',
+            {
+              onclick: () =>
+                attempt(async () => {
+                  if (
+                    !confirm(
+                      'Remove everything Studio imported from this world: its codex entries, their links, and the World Library snapshot? ' +
+                        'The Foundry world itself is never touched.',
+                    )
+                  )
+                    return;
+                  const result = await post('/api/foundry/world/remove', {
+                    world_key: S.state.world_key,
+                  });
+                  toast(`Removed ${result.removed} imported entries.`);
+                  await refresh();
+                }),
+            },
+            'Remove imported data',
+          )
+        : null,
       result.readable && result.folders?.length
         ? folderPicker(
             result.folders,

@@ -283,7 +283,7 @@ their row and finding say enough.
 
 - Rule: Studio never deletes anything from Foundry. It may remove links, nominations and detail it generated.
   Give every linked record (world map nomination, pin, scene or entry link) an unlink or remove action that
-  states what stays in Foundry. Shipped so far: remove a world map (nomination and pins).
+  states what stays in Foundry. Shipped so far: remove a world map (nomination and pins); remove an imported world (its codex entries, their links and the library snapshot).
 
 ## Deprioritised
 
