@@ -35,7 +35,9 @@ class JournalTests(unittest.TestCase):
 
     def write(self, name, value):
         self.writes.append(name)
-        if isinstance(value, str):
+        if value is None:
+            Path(self.path_of(name)).unlink()
+        elif isinstance(value, str):
             storage.atomic_text(self.path_of(name), value)
         else:
             storage.atomic_json(self.path_of(name), value)
@@ -116,6 +118,21 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(len(self.journal.entries(commits.DISMISSED)), 1)
         with self.assertRaises(ValueError):
             self.journal.dismiss('../escape')
+
+    def test_deletion_replays_after_the_other_document_was_written(self):
+        changes = [('status', {'state': 'deleted'}), ('codex', None)]
+        self.journal.write = self.crash_after(1)
+        with self.assertRaises(Crash):
+            self.journal.commit('Delete entry', changes)
+        self.assertTrue(Path(self.path_of('codex')).exists())
+
+        self.journal.write = self.write
+        report = self.journal.recover()
+
+        self.assertEqual(len(report['completed']), 1)
+        self.assertEqual(self.read('status'), {'state': 'deleted'})
+        self.assertFalse(Path(self.path_of('codex')).exists())
+        self.assertEqual(self.journal.entries(), [])
 
     def test_temporary_write_failure_is_retried_once(self):
         failures = [OSError('Synthetic sharing violation')]

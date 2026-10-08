@@ -17,6 +17,7 @@ import campaign_core
 import http_routes
 import map_trash
 import references
+import records
 
 
 def sample():
@@ -84,10 +85,10 @@ class DeleteRouteTests(unittest.TestCase):
         self.addCleanup(self.server.shutdown)
         self.url = f'http://127.0.0.1:{self.server.server_port}'
 
-    def call(self, path, method='GET'):
+    def call(self, path, method='GET', body=None):
         request = urllib.request.Request(
             self.url + path,
-            data=b'{}' if method == 'POST' else None,
+            data=json.dumps(body or {}).encode() if method == 'POST' else None,
             method=method,
             headers={'X-DM-Site': '1', 'Content-Type': 'application/json'},
         )
@@ -102,19 +103,29 @@ class DeleteRouteTests(unittest.TestCase):
         with campaign_core.LOCK:
             for name, value in sample().items():
                 if name != 'mapkey/docks':
-                    campaign_core.write_doc(name, value)
+                    if name in records.FIELDS:
+                        for row in value[records.FIELDS[name]]:
+                            campaign_core.write_doc(records.document_name(name, row['id']), row)
+                    else:
+                        campaign_core.write_doc(name, value)
         status, body = self.call('/api/codex/mira/uses')
         self.assertEqual(status, 200)
         self.assertEqual(len(body['uses']), 5)
-        status, body = self.call('/api/codex/mira/delete', 'POST')
+        self.assertEqual(self.call('/api/records/codex/item?id=mira', 'DELETE')[0], 400)
+        stale_rev = body['rev']
+        entry = records.read(campaign.active().data, 'codex', 'mira')
+        entry['notes'] = 'A newer edit'
+        campaign_core.write_doc('codex/mira', entry)
+        self.assertEqual(self.call('/api/codex/mira/delete', 'POST', {'rev': stale_rev})[0], 409)
+        body = self.call('/api/codex/mira/uses')[1]
+        status, body = self.call('/api/codex/mira/delete', 'POST', {'rev': body['rev']})
         self.assertEqual(status, 200)
-        self.assertEqual(body['changed'][0], 'codex')
-        entries = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+        self.assertIn('codex/mira', body['changed'])
+        entries = records.all_records(campaign.active().data, 'codex')
         self.assertEqual([e['id'] for e in entries], ['bram', 'sword'])
         self.assertEqual(self.call('/api/codex/mira/uses')[0], 404)
         self.assertEqual(self.call('/api/codex/mira/delete', 'POST')[0], 404)
-        threads = campaign_core.read_json(campaign_core.doc_path('threads'))
-        self.assertEqual(threads['threads'][0]['pcs'], ['bram'])
+        self.assertEqual(records.read(campaign.active().data, 'threads', 't1')['pcs'], ['bram'])
 
 
 class MapTrashTests(DeleteRouteTests):

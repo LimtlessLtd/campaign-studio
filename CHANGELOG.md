@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Per-record codex and thread storage (W28):** schema 6 migrates legacy collection files into individual records after a verified backup. Codex and thread pages now list bounded pages, and an edit PUTs only its record with revision conflict handling and per-record history. Foundry import and AI applies keep multi-record changes in the recovery journal; codex deletion also unlinks references through that journal. Review of PR #60 fixed interrupted map trash moves so restart or the next write reconciles map folders with the catalogue.
 - **Prep action spacing (W60):** the add-scene, add-handout and add-loot controls now clear the next section heading at desktop and phone widths.
 - **Prep archive review:** starting a new session now skips every existing session number, including archived preps, so archiving the last active prep cannot reopen an archived one.
 - **Archive session preps (W29, fourth slice):** a prep page has "Archive session" and "Restore session" (a prep's `archived` flag; nothing is deleted). Archived preps leave the session-prep navigation, the dashboard's next session and the default prep opened, and are listed as "Archived sessions" on the other prep pages; `GET /api/state` returns `prep_archived`. Session numbers still count archived preps, and map/request session pickers still list them. Prep titles were already editable. Campaign data moves to schema 5 on start-up, with the usual verified backup first. World maps still have no rename.

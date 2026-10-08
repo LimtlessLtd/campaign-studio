@@ -8,6 +8,7 @@ const S = {
   revs: {},
   pending: {},
   jobs: [],
+  recordIndex: { codex: [], threads: [] },
   route: 0,
 };
 
@@ -40,8 +41,45 @@ async function uploadImage(file) {
 }
 
 /* ---------- documents: load, save, and merge when Claude (or another tab) changed them meanwhile ---------- */
+const recordName = (kind, id) => kind + '/' + id;
+const isRecord = (name) => name.startsWith('codex/') || name.startsWith('threads/');
+const docUrl = (name) =>
+  isRecord(name)
+    ? '/api/records/' +
+      name.split('/', 1)[0] +
+      '/item?id=' +
+      encodeURIComponent(name.split('/').slice(1).join('/'))
+    : '/api/doc/' + name;
+async function recordChoices(kind, signal) {
+  const rows = await api('/api/records/' + kind + '/choices', { signal });
+  S.recordIndex[kind] = rows;
+  return rows;
+}
+async function createRecord(kind, value) {
+  const name = recordName(kind, value.id);
+  S.docs[name] = value;
+  S.base[name] = {};
+  S.revs[name] = '0';
+  save(name);
+  await flush(name);
+  await recordChoices(kind);
+}
+async function removeRecord(kind, id) {
+  const name = recordName(kind, id);
+  if (S.pending[name]) await flush(name);
+  if (!(name in S.docs)) await load(name, null);
+  const response = await fetch(docUrl(name), {
+    method: 'DELETE',
+    headers: { 'X-DM-Site': '1', 'X-Rev': S.revs[name] || '0' },
+  });
+  if (!response.ok) throw new Error((await response.json()).error || 'Could not delete record.');
+  delete S.docs[name];
+  delete S.base[name];
+  delete S.revs[name];
+  await recordChoices(kind);
+}
 async function load(name, fallback, signal) {
-  const r = await fetch('/api/doc/' + name, { cache: 'no-store', signal });
+  const r = await fetch(docUrl(name), { cache: 'no-store', signal });
   const value = r.ok ? await r.json() : clone(fallback);
   if (signal?.aborted) throw new DOMException('Page load cancelled', 'AbortError');
   if (r.ok) {
@@ -82,7 +120,7 @@ async function flush(name) {
   for (let attempt = 0; attempt < 4; attempt++) {
     // Edits can continue while the request is in flight: only what was sent becomes the saved base.
     const sent = JSON.stringify(S.docs[name]);
-    const r = await fetch('/api/doc/' + name, {
+    const r = await fetch(docUrl(name), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -127,11 +165,12 @@ async function poll() {
   try {
     const names = Object.keys(S.docs);
     let changed = false;
-    if (names.length) {
-      const revs = await api('/api/revs?names=' + names.join(','));
-      for (const n of names) {
+    for (let i = 0; i < names.length; i += 80) {
+      const batch = names.slice(i, i + 80);
+      const revs = await api('/api/revs?' + new URLSearchParams({ names: batch.join(',') }));
+      for (const n of batch) {
         if (S.pending[n] || revs[n] === S.revs[n] || revs[n] === '0') continue;
-        const r = await fetch('/api/doc/' + n, { cache: 'no-store' });
+        const r = await fetch(docUrl(n), { cache: 'no-store' });
         if (!r.ok) continue;
         const server = await r.json();
         mergeInto(S.base[n], S.docs[n], server);

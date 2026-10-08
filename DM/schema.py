@@ -16,9 +16,10 @@ import shutil
 
 import shapes
 import storage
+import records
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 5
+CURRENT = 6
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -87,6 +88,9 @@ def shaped_documents(data, maps):
     """(path, shape) for each stored document built from shapes."""
     yield os.path.join(data, 'codex.json'), shapes.CODEX
     yield os.path.join(data, 'threads.json'), shapes.THREADS
+    for kind, shape in (('codex', shapes.CODEX_ENTRY), ('threads', shapes.THREAD)):
+        for path in sorted(glob.glob(os.path.join(glob.escape(data), kind, '*.json'))):
+            yield path, shape
     yield os.path.join(data, 'art.json'), shapes.ART
     yield os.path.join(data, 'world-maps.json'), shapes.WORLD_MAPS
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'prep', '*.json'))):
@@ -125,8 +129,8 @@ def hash_foundry_imports(data, maps):
 
 # From version -> (path, normalize) pairs reaching version + 1. Version 1 completed codex, thread, prep and
 # map key records; version 2 completed art, handout, checklist, loot, journal and event records too;
-# version 3 added world maps (a campaign without world-maps.json has nothing to fill); version 4 keeps a
-# hash of each Foundry-imported entry's values instead of a copy of them.
+# version 3 added world maps; version 4 hashes Foundry-imported values; version 5 adds prep archive;
+# version 6 splits codex and thread collections into individual documents.
 MIGRATIONS = {
     0: fill_campaign,
     1: fill_campaign,
@@ -140,6 +144,40 @@ def planned_changes(data, maps, start):
     """[(path, new value)] for each document the migrations from start would change."""
     changes = {}
     for step in range(start, CURRENT):
+        if step == 5:
+            for kind, field in records.FIELDS.items():
+                legacy = os.path.join(data, kind + '.json')
+                if legacy in changes:
+                    value = changes[legacy]
+                elif os.path.isfile(legacy):
+                    with open(legacy, encoding='utf-8') as file:
+                        value = json.load(file)
+                else:
+                    continue
+                if not isinstance(value, dict) or not isinstance(value.get(field), list):
+                    raise SchemaError(f'{legacy} is not a valid {kind} document.')
+                changes[legacy] = value  # back up even an empty collection before removing it
+                seen = set()
+                for item in value[field]:
+                    if not isinstance(item, dict):
+                        raise SchemaError(f'{legacy} contains an invalid record.')
+                    try:
+                        path = records.record_path(data, kind, item.get('id'))
+                    except ValueError as error:
+                        raise SchemaError(f'{legacy}: {error}') from error
+                    if path in seen:
+                        raise SchemaError(f'{legacy} contains duplicate record IDs.')
+                    seen.add(path)
+                    if os.path.isfile(path):
+                        with open(path, encoding='utf-8') as file:
+                            saved = json.load(file)
+                        if saved.get('id') != item['id']:
+                            raise SchemaError(f'Record storage key collision: {path}')
+                    else:
+                        saved = None
+                    if saved != item:
+                        changes[path] = item
+            continue
         for path, normalize in MIGRATIONS[step](data, maps):
             if path in changes:
                 value = changes[path]
@@ -243,6 +281,29 @@ def restore(backup_path, data, maps):
         if storage.sha256_file(copy) != entry['sha256']:
             raise SchemaError('Backup copy changed since it was made: ' + entry['path'])
         restores.append((copy, destination))
+    # A schema-3 backup predates the record folders. Remove newer records before
+    # restoring it, or they would be mistaken for entries in the old campaign.
+    if manifest['version'] < 5:
+        for kind in records.FIELDS:
+            folder = os.path.join(data, kind)
+            if os.path.lexists(folder):
+                if (
+                    os.path.islink(folder)
+                    or os.path.commonpath((root, os.path.realpath(folder))) != root
+                ):
+                    raise SchemaError(f'Unsafe record folder: {folder}')
+                if not os.path.isdir(folder):
+                    raise SchemaError(f'Unsafe record folder: {folder}')
+                with os.scandir(folder) as contents:
+                    unsafe = any(
+                        item.is_symlink()
+                        or not item.is_file()
+                        or not item.name.endswith(('.json', '.json.lock'))
+                        for item in contents
+                    )
+                if unsafe:
+                    raise SchemaError(f'Unsafe record folder: {folder}')
+                shutil.rmtree(folder)
     for copy, destination in restores:
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         with storage.file_lock(destination):
@@ -284,6 +345,11 @@ def migrate(data, maps, backups, dry_run=False):
         return {'status': 'new', 'version': CURRENT, 'changes': []}
     if found == CURRENT:
         if not dry_run:
+            cleanup_pending = os.path.isfile(pending_path(backups))
+            if cleanup_pending:
+                for kind in records.FIELDS:
+                    with contextlib.suppress(FileNotFoundError):
+                        os.remove(os.path.join(data, kind + '.json'))
             with contextlib.suppress(FileNotFoundError):
                 os.remove(pending_path(backups))
         return {'status': 'current', 'version': CURRENT, 'changes': []}
@@ -309,6 +375,9 @@ def migrate(data, maps, backups, dry_run=False):
             storage.atomic_json(path, value, durable=True)
     note = os.path.basename(result['backup']) if result['backup'] else 'no changes'
     write_marker(data, CURRENT, f'Migrated from schema {found}; backup {note}')
+    for kind in records.FIELDS:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(os.path.join(data, kind + '.json'))
     with contextlib.suppress(FileNotFoundError):
         os.remove(pending_path(backups))
     return result

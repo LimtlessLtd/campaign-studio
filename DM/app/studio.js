@@ -109,8 +109,8 @@ function interruptedChanges() {
 }
 async function studioDashboard(_arg, context) {
   const maps = (await context.doc('maps/index', { items: [] })).items;
-  const codex = (await context.doc('codex', { entries: [] })).entries;
-  const threads = (await context.doc('threads', { threads: [] })).threads;
+  const codex = await recordChoices('codex', context.signal);
+  const threads = await recordChoices('threads', context.signal);
   const art = (await context.doc('art', { items: [] })).items;
   const archived = S.state.prep_archived || [];
   const next = S.state.prep.filter((n) => !archived.includes(n)).at(-1);

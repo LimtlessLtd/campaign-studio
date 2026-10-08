@@ -10,6 +10,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 import campaign
+import records
 import config
 import context as prompt_context
 import shapes
@@ -80,8 +81,8 @@ def scope_areas(value):
     areas = [a for a in key['areas'] if not wanted or a['n'] == wanted]
     if wanted or len(areas) <= WHOLE_MAP:
         return sorted(a['n'] for a in areas), []
-    threads = read(os.path.join(campaign.active().data, 'threads.json'), {'threads': []})
-    codex = read(os.path.join(campaign.active().data, 'codex.json'), {'entries': []})
+    threads = records.collection(campaign.active().data, 'threads')
+    codex = records.collection(campaign.active().data, 'codex')
     linked = {
         r.get('area')
         for r in threads['threads'] + codex['entries']
@@ -354,8 +355,8 @@ def prompt_pack(value, campaign_info, for_run=False):
         begin(value)
     slug = value['map']
     key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
-    codex = read(os.path.join(campaign.active().data, 'codex.json'), {'entries': []})
-    threads = read(os.path.join(campaign.active().data, 'threads.json'), {'threads': []})
+    codex = records.collection(campaign.active().data, 'codex')
+    threads = records.collection(campaign.active().data, 'threads')
     brief = value['brief']
     base = {
         'campaign': campaign_info,
@@ -748,8 +749,8 @@ def apply_content(value, commit):
     draft = validate(value, deepcopy(value['draft']))
     slug = value['map']
     key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
-    codex = read(os.path.join(campaign.active().data, 'codex.json'), {'entries': []})
-    threads = read(os.path.join(campaign.active().data, 'threads.json'), {'threads': []})
+    codex = records.collection(campaign.active().data, 'codex')
+    threads = records.collection(campaign.active().data, 'threads')
     art = read(os.path.join(campaign.active().data, 'art.json'), {'items': []})
     areas = {a['n']: a for a in key['areas']}
     prefix = value['id'] + '-'

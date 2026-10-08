@@ -85,7 +85,7 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.locator('#main h1').first).to_be_visible()
 
     def stored(self, name):
-        return campaign_core.read_json(campaign_core.doc_path(name))
+        return self.studio.stored(name)
 
     def assert_accessible(self, label):
         """Fail on serious or critical axe-core findings in the page as currently shown."""
@@ -225,6 +225,52 @@ class BrowserSmoke(unittest.TestCase):
                 self.assertIsNotNone(section)
                 gap = section['y'] - (action['y'] + action['height'])
                 self.assertGreaterEqual(gap, 16, (viewport['width'], button, heading, gap))
+
+    def test_codex_pages_and_thread_edits_save_individual_records(self):
+        self.studio.seed(
+            'codex',
+            {
+                'entries': [
+                    fixtures.shapes.CODEX_ENTRY.new(
+                        id=f'entry-{n:04d}', type='npc', name=f'Entry {n:04d}'
+                    )
+                    for n in range(45)
+                ]
+            },
+        )
+        self.studio.seed(
+            'threads',
+            {
+                'threads': [
+                    fixtures.shapes.THREAD.new(id='first', title='First thread'),
+                    fixtures.shapes.THREAD.new(id='second', title='Second thread'),
+                ]
+            },
+        )
+        self.open('#/codex')
+        expect(self.page.get_by_text('Entry 0000')).to_be_visible()
+        expect(self.page.get_by_text('Entry 0044')).to_have_count(0)
+        self.page.get_by_role('button', name='Next').click()
+        self.page.get_by_text('Entry 0044').click()
+        expect(self.page.get_by_role('heading', name='Entry 0044')).to_be_visible()
+        self.page.get_by_label('Notes, voice, mannerisms, stats').fill('A new clue')
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        self.assertEqual(self.studio.stored('codex')['entries'][-1]['notes'], 'A new clue')
+        self.assertEqual(self.studio.stored('codex')['entries'][-2]['notes'], '')
+
+        self.page.get_by_role('link', name='Story threads').click()
+        expect(self.page.get_by_role('heading', name='Threads')).to_be_visible()
+        self.page.locator('.card input[type="text"]').first.fill('Changed thread')
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        self.assertEqual(
+            fixtures.records.read(self.studio.dm / 'data', 'threads', 'first')['title'],
+            'Changed thread',
+        )
+        self.assertEqual(
+            fixtures.records.read(self.studio.dm / 'data', 'threads', 'second')['title'],
+            'Second thread',
+        )
+        self.assert_accessible('per-record threads')
 
     def test_pin_editor_persists_across_navigation(self):
         slug, _brief = self.studio.import_map()
@@ -388,7 +434,7 @@ class BrowserSmoke(unittest.TestCase):
         self.assert_accessible('codex')
 
     def test_request_context_preview_can_pin_a_codex_entry(self):
-        campaign_core.write_doc(
+        self.studio.seed(
             'codex',
             {'entries': [{'id': 'mira', 'name': 'Mira', 'type': 'npc', 'notes': 'Keeps the clue'}]},
         )
@@ -408,7 +454,7 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_role('heading', name='Draft context')).not_to_be_visible()
         self.assertEqual(self.stored('inbox')['items'][0]['context_pins'], ['mira'])
 
-        campaign_core.write_doc('codex', {'entries': []})
+        campaign_core.delete_record('codex', 'mira')
         self.page.get_by_role('button', name='Preview context').click()
         expect(
             self.page.get_by_text('Previously pinned entries were deleted: mira.')

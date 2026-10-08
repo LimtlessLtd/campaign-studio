@@ -14,7 +14,6 @@ Next ID: W65
 
 | ID  | Priority | Work                                                                                                        | Acceptance criteria                                                            |
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate        |
 | W29 | 2        | Rename world maps (map trash, restore, codex-entry delete and prep archive are done)                        | A world map's name can be changed and its pins keep working                    |
 | W30 | 2        | Session log for each played session, shown on its prep and read by recaps and the context budget            | Shape, migration and browser flow; recent logs appear in the context           |
 | W31 | 2        | Import existing campaign memory: legacy folders, session summaries and Foundry lore journals                | Synthetic legacy folder and summaries import as reviewed proposals             |

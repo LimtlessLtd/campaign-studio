@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(HERE))  # the application's modules
 import campaign
 import config
 import foundry_library
+import records
 import storage
 
 FOUNDRY_DIR = 'wotg-maps'
@@ -51,13 +52,17 @@ def key_for_foundry(slug, key, copy_art=True, here=None):
         return None
     here = here or campaign.active()
     result = deepcopy(key)
-    codex_path = os.path.join(here.data, 'codex.json')
-    if os.path.exists(codex_path):
-        with open(codex_path, encoding='utf-8') as f:
-            codex = json.load(f)
-    else:
-        codex = {'entries': []}
-    entries = {e['id']: e for e in codex.get('entries', [])}
+    linked_ids = {
+        ident
+        for area in result.get('areas', [])
+        for field in ('npcs', 'items')
+        for ident in area.get(field, [])
+    }
+    entries = {
+        ident: entry
+        for ident in linked_ids
+        if (entry := records.read(here.data, 'codex', ident)) is not None
+    }
     files = os.path.realpath(here.files)
     foundry_data = config.foundry_data(here)
     art_dir = os.path.join(foundry_data, FOUNDRY_DIR, slug, 'art')

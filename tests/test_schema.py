@@ -15,6 +15,7 @@ import campaign
 import campaign_core
 import migrate
 import foundry_library
+import records
 import schema
 import shapes
 
@@ -155,6 +156,10 @@ class SchemaTests(unittest.TestCase):
                 'data/prep/s1.json',
                 'data/prep/s2.json',
                 'maps/harbour/key.json',
+                'data/codex/ui-npc.json',
+                'data/codex/old-place.json',
+                'data/threads/ui.json',
+                'data/threads/old.json',
             ],
         )
         self.assertEqual(self.snapshot(), self.original)
@@ -176,11 +181,13 @@ class SchemaTests(unittest.TestCase):
         for name in saved:
             self.assertEqual((backup / name).read_bytes(), self.original[name])
 
-        codex = self.read('data/codex.json')['entries']
+        self.assertFalse((self.dm / 'data/codex.json').exists())
+        self.assertFalse((self.dm / 'data/threads.json').exists())
+        codex = [self.read('data/codex/' + ident + '.json') for ident in ('ui-npc', 'old-place')]
         self.assertEqual(codex[0], json.loads(self.original['data/codex.json'])['entries'][0])
         self.assertEqual((codex[1]['tags'], codex[1]['files'], codex[1]['public']), ([], [], ''))
         self.assertEqual(codex[1]['name'], 'Hand edited')
-        threads = self.read('data/threads.json')['threads']
+        threads = [self.read('data/threads/' + ident + '.json') for ident in ('ui', 'old')]
         self.assertEqual(
             (threads[1]['pcs'], threads[1]['source'], threads[1]['custom']), ([], '', 7)
         )
@@ -218,7 +225,6 @@ class SchemaTests(unittest.TestCase):
         )
 
     def test_version_three_campaign_hashes_foundry_imports_instead_of_copying_them(self):
-        self.migrate()
         schema.write_marker(self.data, 3, 'Synthetic version 3 campaign')
         values = {'name': 'Mira', 'group': 'Allies', 'notes': 'Summary', 'image': 'a.png'}
         codex = self.read('data/codex.json')
@@ -235,7 +241,8 @@ class SchemaTests(unittest.TestCase):
         result = self.migrate()
 
         self.assertEqual((result['from'], result['version']), (3, schema.CURRENT))
-        link = self.read('data/codex.json')['entries'][-1]['foundry']
+        self.assertFalse((self.dm / 'data/codex.json').exists())
+        link = self.read('data/codex/fvtt-a1.json')['foundry']
         self.assertEqual(
             link,
             {
@@ -245,6 +252,28 @@ class SchemaTests(unittest.TestCase):
                 'image': 'a.png',
             },
         )
+
+    def test_version_five_campaign_splits_records_without_changing_foundry_links(self):
+        schema.write_marker(self.data, 5, 'Synthetic version 5 campaign')
+        codex = self.read('data/codex.json')
+        codex['entries'][0]['foundry'] = {
+            'uuid': 'Actor.a1',
+            'world_key': 'w',
+            'hash': 'saved-hash',
+            'image': 'worlds/w/portrait.png',
+        }
+        (self.dm / 'data/codex.json').write_text(json.dumps(codex))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (5, schema.CURRENT))
+        self.assertFalse((self.dm / 'data/codex.json').exists())
+        self.assertFalse((self.dm / 'data/threads.json').exists())
+        self.assertEqual(
+            self.read('data/codex/ui-npc.json')['foundry'], codex['entries'][0]['foundry']
+        )
+        self.assertEqual(self.read('data/threads/ui.json')['title'], 'From the UI')
+        self.assertEqual(self.read('data/threads/old.json')['custom'], 7)
 
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
@@ -277,8 +306,8 @@ class SchemaTests(unittest.TestCase):
             self.read('data/prep/s1.json')['loot'][0], {'item': 'Rope', 'where': '', 'value': ''}
         )
         for rel, shape in (
-            ('data/codex.json', shapes.CODEX),
-            ('data/threads.json', shapes.THREADS),
+            ('data/codex/ui-npc.json', shapes.CODEX_ENTRY),
+            ('data/threads/ui.json', shapes.THREAD),
             ('data/art.json', shapes.ART),
             ('maps/harbour/key.json', shapes.MAP_KEY),
         ):
@@ -321,7 +350,8 @@ class SchemaTests(unittest.TestCase):
         result = schema.migrate(data, maps, backups)
         self.assertEqual((result['status'], result['from']), ('migrated', 0))
         self.assertTrue(Path(result['backup']).is_dir())
-        self.assertEqual(json.loads((empty / 'data/threads.json').read_text())['threads'], [])
+        self.assertFalse((empty / 'data/threads.json').exists())
+        self.assertEqual(records.collection(data, 'threads')['threads'], [])
         self.assertEqual(schema.version(data, maps), schema.CURRENT)
 
     def test_a_new_campaign_records_its_schema_with_its_first_document(self):
@@ -331,7 +361,10 @@ class SchemaTests(unittest.TestCase):
             campaign_core.write_doc('settings', {'campaign_name': 'Fixture'})
             # An older build then refuses it instead of treating it as unversioned 0.1.x data.
             self.assertEqual(schema.version(fresh.data, fresh.maps), schema.CURRENT)
-            campaign_core.write_doc('codex', {'entries': []})
+            campaign_core.write_doc(
+                records.document_name('codex', 'sample'),
+                shapes.CODEX_ENTRY.new(id='sample', type='npc', name='Sample'),
+            )
         marker = json.loads((new / 'data' / schema.MARKER).read_text(encoding='utf-8'))
         self.assertEqual(len(marker['history']), 1)
         # Unversioned documents already present are left for the next start to migrate.
@@ -389,7 +422,7 @@ class SchemaTests(unittest.TestCase):
 
         self.assertEqual(result['status'], 'migrated')
         self.assertEqual(schema.version(self.data, self.maps), schema.CURRENT)
-        self.assertEqual(self.read('data/codex.json')['entries'][1]['tags'], [])
+        self.assertEqual(self.read('data/codex/old-place.json')['tags'], [])
         self.assertEqual(self.read('maps/harbour/key.json')['areas'][0]['rooms'], [])
 
     def test_a_retried_migration_backup_names_the_first_attempt_as_partly_migrated(self):
@@ -468,7 +501,7 @@ class SchemaTests(unittest.TestCase):
             report = io.StringIO()
             with contextlib.redirect_stdout(report):
                 self.assertEqual(migrate.main([]), 0)
-            self.assertIn('5 documents will be updated', report.getvalue())
+            self.assertIn('9 documents will be updated', report.getvalue())
             self.assertEqual(self.snapshot(), self.original)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(migrate.main(['--apply']), 0)

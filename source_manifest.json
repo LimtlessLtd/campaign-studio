@@ -63,6 +63,7 @@
   "DM/revisions.py",
   "DM/schema.py",
   "DM/remote_access.py",
+  "DM/records.py",
   "DM/request_workflow.py",
   "DM/server.py",
   "DM/shapes.py",

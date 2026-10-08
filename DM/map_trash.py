@@ -98,6 +98,8 @@ def reconcile(here):
     if not os.path.isdir(here.map_trash):
         return
     for trash_id in sorted(os.listdir(here.map_trash)):
+        if not TRASH_ID.fullmatch(trash_id):
+            continue
         try:
             meta = read(here, trash_id)
         except KeyError:

@@ -24,6 +24,7 @@ import references
 import job_service
 import remote_access
 import request_workflow
+import records
 import revisions
 import shapes
 import storage
@@ -40,6 +41,7 @@ from campaign_core import (
     campaign_path,
     cancel_job,
     commit_docs,
+    delete_record,
     doc_path,
     editable_doc_path,
     generate_cmd,
@@ -77,6 +79,7 @@ ROUTES = {
         (lambda path: path == '/api/shapes', '_get_shapes'),
         (lambda path: path == '/api/settings', '_get_settings'),
         (lambda path: path == '/api/context/search', '_get_context_search'),
+        (lambda path: path.startswith('/api/records/'), '_get_records'),
         (lambda path: path == '/api/foundry/backup/plan', '_get_backup_plan'),
         (lambda path: path == '/api/foundry/worlds', '_get_worlds'),
         (lambda path: path == '/api/foundry/library', '_get_library'),
@@ -105,6 +108,7 @@ ROUTES = {
         (lambda path: path.startswith('/forge-scripts/'), '_get_forge_script'),
     ),
     'PUT': (
+        (lambda path: path.startswith('/api/records/'), '_put_record'),
         (lambda path: path.startswith('/api/doc/'), '_put_doc'),
         (lambda path: path.startswith('/api/plan/'), '_put_plan'),
     ),
@@ -154,6 +158,7 @@ ROUTES = {
         (lambda path: path.startswith('/api/forge/'), '_post_forge'),
         (lambda path: path == '/api/claude', '_post_claude'),
     ),
+    'DELETE': ((lambda path: path.startswith('/api/records/'), '_delete_record'),),
 }
 
 
@@ -328,6 +333,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         return self._dispatch('POST')
 
+    def do_DELETE(self):
+        return self._dispatch('DELETE')
+
     def _get_state(self, path, query, p):
         notes = os.path.join(campaign.active().data, 'notes.txt')
         cfg = config.settings()
@@ -391,13 +399,102 @@ class Handler(SimpleHTTPRequestHandler):
         needle = query.get('q', [''])[0].strip().casefold()[:100]
         if len(needle) < 2:
             return self.send_json([])
-        entries = read_json(doc_path('codex'), {'entries': []})['entries']
+        entries = records.all_records(campaign.active().data, 'codex')
         found = [
             {'id': e['id'], 'name': e.get('name', ''), 'type': e.get('type', '')}
             for e in entries
             if needle in (e.get('name', '') + ' ' + e.get('id', '')).casefold()
         ]
         return self.send_json(sorted(found, key=lambda e: (e['name'].casefold(), e['id']))[:20])
+
+    def _record_route(self, path, query):
+        parts = path.split('/')
+        if len(parts) not in (4, 5) or parts[3] not in records.FIELDS:
+            raise Invalid('Invalid record route.')
+        action = parts[4] if len(parts) == 5 else ''
+        if action not in ('', 'choices', 'item'):
+            raise NotFound('Unknown record action.')
+        ident = query.get('id', [''])[0] if action == 'item' else ''
+        if action == 'item':
+            records.document_name(parts[3], ident)
+        return parts[3], action, ident
+
+    def _get_records(self, path, query, p):
+        kind, action, ident = self._record_route(path, query)
+        data = campaign.active().data
+        if action == 'item':
+            value = records.read(data, kind, ident)
+            if value is None:
+                raise NotFound('No such record.')
+            return self.send_json(
+                value, headers={'X-Rev': rev_of(records.record_path(data, kind, ident))}
+            )
+        if action == 'choices':
+            return self.send_json(records.choices(data, kind))
+        return self.send_json(
+            records.page(
+                data,
+                kind,
+                offset=int(query.get('offset', ['0'])[0]),
+                limit=int(query.get('limit', ['40'])[0]),
+                query=query.get('q', [''])[0],
+                type=query.get('type', [''])[0],
+                tag=query.get('tag', [''])[0],
+                source=query.get('source', [''])[0],
+                status=query.get('status', [''])[0],
+                pc=query.get('pc', [''])[0],
+            )
+        )
+
+    def _put_record(self, path, query, p):
+        kind, action, ident = self._record_route(path, query)
+        if action != 'item':
+            raise NotFound('Unknown record action.')
+        value = json.loads(self.body().decode('utf-8'))
+        shape = shapes.CODEX_ENTRY if kind == 'codex' else shapes.THREAD
+        if not isinstance(value, dict) or value.get('id') != ident:
+            raise Invalid('The record ID cannot change.')
+        problems = shape.problems(value)
+        if problems:
+            raise Invalid('; '.join(problems[:5]))
+        name = records.document_name(kind, ident)
+        with LOCK:
+            path = doc_path(name)
+            current = rev_of(path)
+            if self.headers.get('X-Rev') != current:
+                raise Conflict(
+                    'conflict',
+                    {
+                        'error': 'conflict',
+                        'rev': current,
+                        'doc': records.read(campaign.active().data, kind, ident),
+                    },
+                )
+            rev = write_doc(name, value)
+        return self.send_json({'ok': True, 'rev': rev})
+
+    def _delete_record(self, path, query, p):
+        kind, action, ident = self._record_route(path, query)
+        if action != 'item':
+            raise NotFound('Unknown record action.')
+        if kind == 'codex':
+            raise Invalid('Review where this entry is used before deleting it.')
+        with LOCK:
+            record_path = records.record_path(campaign.active().data, kind, ident)
+            current = rev_of(record_path)
+            if current == '0':
+                raise NotFound('No such record.')
+            if self.headers.get('X-Rev') != current:
+                raise Conflict(
+                    'conflict',
+                    {
+                        'error': 'conflict',
+                        'rev': current,
+                        'doc': records.read(campaign.active().data, kind, ident),
+                    },
+                )
+            delete_record(kind, ident)
+        return self.send_json({'ok': True})
 
     def _get_backup_plan(self, path, query, p):
         return self.send_json(foundry_backup.plan())
@@ -513,7 +610,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _get_revs(self, path, query, p):
         names = [n for n in query.get('names', [''])[0].split(',') if n]
-        return self.send_json({n: rev_of(doc_path(n)) for n in names})
+        if len(names) > 100:
+            raise Invalid('Too many revision names.')
+
+        def revision(name):
+            kind, _, ident = name.partition('/')
+            if kind in records.FIELDS and ident:
+                return rev_of(records.record_path(campaign.active().data, kind, ident))
+            return rev_of(doc_path(name))
+
+        return self.send_json({name: revision(name) for name in names})
 
     def _get_plan(self, path, query, p):
         slug = path[10:]
@@ -586,35 +692,55 @@ class Handler(SimpleHTTPRequestHandler):
     def _reference_docs(self):
         maps = read_json(doc_path('maps/index'), {'items': []}).get('items', [])
         return references.documents(
-            lambda name: read_json(doc_path(name)),
+            request_read,
             list_docs('prep'),
             [m['slug'] for m in maps if isinstance(m, dict) and SLUG.fullmatch(str(m.get('slug')))],
         )
 
     def _codex_id(self, path, suffix):
         entry_id = path[len('/api/codex/') : -len(suffix)]
-        if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', entry_id):
-            raise Invalid('Invalid codex entry.')
+        records.document_name('codex', entry_id)
         return entry_id
 
     def _get_codex_uses(self, path, query, p):
         entry_id = self._codex_id(path, '/uses')
         with LOCK:
-            docs = self._reference_docs()
-            if not any(e.get('id') == entry_id for e in docs.get('codex', {}).get('entries', [])):
+            name = records.document_name('codex', entry_id)
+            rev = rev_of(doc_path(name))
+            if rev == '0':
                 raise NotFound('No such codex entry.')
-            return self.send_json({'uses': references.scan(docs, entry_id)})
+            docs = self._reference_docs()
+            return self.send_json({'uses': references.scan(docs, entry_id), 'rev': rev})
 
     def _post_codex_delete(self, path, query, p):
         entry_id = self._codex_id(path, '/delete')
         with LOCK:
+            name = records.document_name('codex', entry_id)
+            current = rev_of(doc_path(name))
+            if current == '0':
+                raise NotFound('No such codex entry.')
+            if p.get('rev') != current:
+                raise Conflict(
+                    'The entry changed since you reviewed its uses. Reload and try again.'
+                )
             docs = self._reference_docs()
             try:
                 changed = references.remove(docs, entry_id)
             except KeyError:
                 raise NotFound('No such codex entry.') from None
+            affected = []
+            for doc in changed:
+                if doc in records.FIELDS:
+                    affected.extend(
+                        target
+                        for target, _ in records.changed_documents(
+                            campaign.active().data, doc, docs[doc]
+                        )
+                    )
+                else:
+                    affected.append(doc)
             commit_docs(f'Delete codex entry {entry_id}', [(name, docs[name]) for name in changed])
-            return self.send_json({'ok': True, 'changed': changed})
+            return self.send_json({'ok': True, 'changed': affected})
 
     def _put_doc(self, path, query, p):
         name = path[9:]
@@ -800,7 +926,7 @@ class Handler(SimpleHTTPRequestHandler):
             if item.get('status') in ('doing', 'done') or item.get('applied'):
                 raise Conflict('Reopen or wait for this request before changing its draft.')
             if action == 'context':
-                entries = read_json(doc_path('codex'), {'entries': []})['entries']
+                entries = records.all_records(campaign.active().data, 'codex')
                 item['context_pins'] = prompt_context.clean_pins(p.get('pins'), entries)
                 write_doc('inbox', box)
             elif action == 'stage':
@@ -956,12 +1082,19 @@ class Handler(SimpleHTTPRequestHandler):
             changed, links = references.unlink_map(docs, slug, entry.get('name', ''))
             index['items'] = [m for m in index['items'] if m is not entry]
             brief = read_json(doc_path('mapbrief/' + slug), {})
-            trash_id = map_trash.put(here, slug, entry, brief, links)
-            commit_docs(
-                f'Delete map {slug}',
-                [(name, docs[name]) for name in changed] + [('maps/index', index)],
-            )
-            map_trash.phase(here, trash_id, 'trashed')
+            try:
+                trash_id = map_trash.put(here, slug, entry, brief, links)
+                commit_docs(
+                    f'Delete map {slug}',
+                    [(name, docs[name]) for name in changed] + [('maps/index', index)],
+                )
+                map_trash.phase(here, trash_id, 'trashed')
+            except Exception:
+                try:
+                    recover_commits()
+                except OSError:
+                    pass  # the staged move is retried on the next write or restart
+                raise
             storage.remove(here.map_brief(slug))
             return self.send_json({'ok': True, 'trash': trash_id, 'changed': changed})
 
@@ -982,14 +1115,21 @@ class Handler(SimpleHTTPRequestHandler):
             docs = self._reference_docs()
             changed = references.relink_map(docs, meta.get('links', []))
             index['items'].append(meta['entry'])
-            map_trash.restore(here, trash_id, slug)
-            commit_docs(
-                f'Restore map {slug}',
-                [(name, docs[name]) for name in changed]
-                + [('maps/index', index)]
-                + ([('mapbrief/' + slug, meta['brief'])] if meta.get('brief') else []),
-            )
-            map_trash.discard(here, trash_id)
+            try:
+                map_trash.restore(here, trash_id, slug)
+                commit_docs(
+                    f'Restore map {slug}',
+                    [(name, docs[name]) for name in changed]
+                    + [('maps/index', index)]
+                    + ([('mapbrief/' + slug, meta['brief'])] if meta.get('brief') else []),
+                )
+                map_trash.discard(here, trash_id)
+            except Exception:
+                try:
+                    recover_commits()
+                except OSError:
+                    pass  # the staged move is retried on the next write or restart
+                raise
             return self.send_json({'ok': True, 'slug': slug, 'changed': changed})
 
     def _post_map_discard(self, path, query, p):
@@ -1119,7 +1259,7 @@ class Handler(SimpleHTTPRequestHandler):
                 value = workflow.get(value['id'])
                 if value['status'] in ('running', 'applied'):
                     raise Conflict('Wait for this workflow before changing its context.')
-                entries = read_json(doc_path('codex'), {'entries': []})['entries']
+                entries = records.all_records(campaign.active().data, 'codex')
                 value['context_pins'] = prompt_context.clean_pins(p.get('pins'), entries)
                 workflow.save(value)
                 return self.send_json(value)
