@@ -10,7 +10,7 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W60
+Next ID: W65
 
 | ID  | Priority | Work                                                                                                        | Acceptance criteria                                                            |
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -33,6 +33,10 @@ Next ID: W60
 | W44 | 2        | AI usage ledger, remainder: totals per session; ask before prompts over a set size (per-job done)           | A large prompt asks first; totals per session                                  |
 | W57 | 2        | Phone-first editing of codex, threads, preps and proposal review                                            | Touch-emulated flow edits an entry, thread and scene, then applies a proposal  |
 | W58 | 2        | One-click journal entry: text, links to entries and an image prompt                                         | One click yields reviewed linked text and a ready image prompt                 |
+| W61 | 2        | Preserve Foundry folder hierarchy when importing scenes, actors, items and journals                         | Imported records show parent folder paths; deprecated scenes stay grouped      |
+| W62 | 2        | Highlight the selected record in navigation lists, including Foundry scenes                                 | Selection is visible after click, keyboard navigation and page reload          |
+| W63 | 2        | Preview imported scene images, journal videos, and both NPC token and portrait art                          | Each asset opens or plays from Studio with safe path and media limits          |
+| W64 | 2        | Choose an imported Foundry scene as an overworld map and place other scenes on it                           | A selected scene becomes the base map; pins link to imported scenes            |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                     | Two folders with one name import separately; older snapshots still open        |
 | W10 | 3        | Installer and performance budgets for very large maps                                                       | Clean-machine install test and measured time/memory at documented map sizes    |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped) | Services receive their `Campaign` explicitly (no process-wide active campaign) |
@@ -48,3 +52,10 @@ Next ID: W60
 | W55 | 3        | Browser code as ES modules with `// @ts-check`; split `mapStudio`; Ruff F and B rules                       | Type check and wider lint run in CI with no behaviour change                   |
 | W56 | 3        | Move single-campaign names out of source: readable folders to settings, names from the codex                | No single-campaign names in source; generator test uses codex names            |
 | W59 | 3        | Show the schema change and backup folder before a migration runs                                            | The notice appears for an older campaign; the backup it names restores         |
+
+## Recurring when numbered work is complete
+
+**RA1 — Full project audit.** Whenever no numbered backlog rows remain, audit the entire application against
+`AGENTS.md`, the review checklist and the owner's session journey. Update `docs/CODE_REVIEW.md`,
+`docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and this backlog with confirmed findings and new numbered work.
+Repeat RA1 whenever the numbered backlog becomes empty again; do not remove this standing item.

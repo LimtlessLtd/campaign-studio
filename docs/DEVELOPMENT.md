@@ -157,7 +157,8 @@ it.
    otherwise until its thread says merged or released or goes 24 hours without a post. If two claims
    collide, the earlier post wins.
 4. **Choose work** in this order: unreviewed PRs, then a fix the relay made this run's task, then the
-   highest-priority unclaimed backlog item.
+   highest-priority unclaimed backlog item. When no numbered item remains, claim and run the standing
+   full-project audit (RA1) in `docs/BACKLOG.md`; repeat whenever the backlog becomes empty again.
 5. **Finish** with `MERGED #N` in the claim thread, naming anything left undone.
 
 ## Release
