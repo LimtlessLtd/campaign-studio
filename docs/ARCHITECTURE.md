@@ -325,7 +325,9 @@ prompt treats all transcript and campaign text as reference data, with no provid
 
 One `ledger/<transcript-id>` document (`shapes.LEDGER`, schema 12) holds staged events, a confirmed-play
 fingerprint, window cursor and target revisions. A failed or cancelled window keeps earlier validated
-events and resumes at the cursor. `GET /api/transcripts/<id>/ledger` presents the draft without internal
+events and resumes at the cursor. `POST /api/transcripts/<id>/ledger/start {restart: true}` replaces a
+review or failed draft and snapshots current targets so stale evidence can be redrafted. An applied ledger
+cannot restart. `GET /api/transcripts/<id>/ledger` presents the draft without internal
 revision data. `POST /api/transcripts/<id>/ledger/apply {selected}` accepts only IDs in that draft, checks
 the transcript fingerprint and selected target revisions, then writes only selected per-record threads and
 codex notes, prep log outcomes, and the applied ledger marker through `commit_docs` with the marker last.

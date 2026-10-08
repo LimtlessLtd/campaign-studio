@@ -295,6 +295,15 @@ class BrowserSmoke(unittest.TestCase):
         self.assert_accessible('ledger review phone')
         self.page.set_viewport_size(DESKTOP)
         self.assert_accessible('ledger review desktop')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        with self.page.expect_response(lambda response: '/ledger/start' in response.url):
+            self.page.get_by_role('button', name='Redraft ledger').click()
+        job, cmd, stdin = campaign_core.LANES['claude'].get_nowait()
+        campaign_core.execute_job(job, cmd, stdin)
+        self.page.reload()
+        expect(self.page.locator('#main h1').first).to_be_visible()
+        self.page.get_by_role('button', name='Open the thread ledger of Session one').click()
+        expect(self.page.get_by_text('4 proposed changes.', exact=False)).to_be_visible()
         self.page.locator('.ledger-event').filter(has_text='Codex note').get_by_role(
             'checkbox'
         ).uncheck()

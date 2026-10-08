@@ -108,6 +108,24 @@ async function showThreadLedger(box, transcript, sessionSelect) {
         ),
       );
     }
+    if (ledger.status === 'review' || ledger.status === 'failed') {
+      actions.push(
+        h(
+          'button',
+          {
+            onclick: () =>
+              attempt(async () => {
+                if (!confirm('Discard this draft and propose a fresh ledger?')) return;
+                await post(url + '/start', { restart: true });
+                toast('Fresh thread ledger draft started.');
+                S.jobs = await api('/api/jobs');
+                route(true);
+              }),
+          },
+          'Redraft ledger',
+        ),
+      );
+    }
     if (ledger.status === 'review' && !ledger.events.length) {
       body = h(
         'p',

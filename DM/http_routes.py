@@ -873,7 +873,7 @@ class Handler(SimpleHTTPRequestHandler):
         ident = self._transcript_id(path, '/ledger/start')
         if read_json(doc_path('transcripts/' + ident)) is None:
             raise NotFound('No such transcript.')
-        return self.send_json(start_ledger(ident))
+        return self.send_json(start_ledger(ident, p.get('restart') is True))
 
     def _post_ledger_session(self, path, query, p):
         ident = self._transcript_id(path, '/ledger/session')

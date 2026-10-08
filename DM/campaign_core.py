@@ -906,8 +906,8 @@ def queue_ledger(transcript, ledger):
     return job
 
 
-def start_ledger(ident):
-    """Start or resume a draft only after the transcript's play has been confirmed."""
+def start_ledger(ident, restart=False):
+    """Start, resume or explicitly replace a draft after the GM confirms play."""
     with LOCK:
         transcript = read_json(doc_path('transcripts/' + ident))
         if transcript is None:
@@ -931,14 +931,12 @@ def start_ledger(ident):
         ledger = read_json(doc_path(name))
         source = thread_ledger.source_hash(transcript)
         if ledger:
-            if ledger.get('status') in ('running', 'review', 'applied'):
-                raise ValueError(
-                    'This ledger is already running or awaiting review, or was applied.'
-                )
-            if ledger['source'] != source:
-                ledger = (
-                    None  # old, incomplete evidence must not carry into a changed classification
-                )
+            if ledger.get('status') in ('running', 'applied'):
+                raise ValueError('This ledger is already running or was applied.')
+            if ledger.get('status') == 'review' and not restart:
+                raise ValueError('Review or explicitly redraft this ledger before starting again.')
+            if restart or ledger['source'] != source:
+                ledger = None  # never carry old evidence into a changed source or fresh draft
         if ledger is None:
             ledger = shapes.LEDGER.new(id=ident, session=session, source=source, status='ready')
             ledger['base_revs'] = {

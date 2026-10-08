@@ -124,7 +124,8 @@ well real Claude separates banter from play has not been checked yet.
 **Thread ledger** on a sorted transcript asks Claude to propose changes from only the play you confirmed.
 Each thread, codex note and session outcome cites an exact quote and its time. Link the transcript to a
 session prep first, then review the proposed items and check those you want to apply. The selected changes
-save together; an existing record changed since drafting asks you to redraft. The Recordings page lists
+save together; if confirmed play or a target record changes, choose **Redraft ledger** to make a fresh
+proposal. The Recordings page lists
 unresolved threads, stalest first, with their heroes and latest quoted evidence. A long transcript is read
 in bounded windows; a failed window can resume. Tests use a fake Claude answer and synthetic play; no live
 Claude or long recording has been checked for this step.

@@ -176,6 +176,11 @@ class LedgerCampaignTests(unittest.TestCase):
     def stored(self, name):
         return core.read_json(core.doc_path(name))
 
+    def settle_jobs(self):
+        for job in core.JOBS_SERVICE.iter_jobs():
+            job['status'] = 'done'
+            core.JOBS_SERVICE.save_job(job)
+
     def draft(self):
         queued = core.start_ledger(IDENT)
         self.assertEqual(queued['kind'], 'thread-ledger')
@@ -287,6 +292,33 @@ class LedgerCampaignTests(unittest.TestCase):
         core.write_doc('transcripts/' + IDENT, document)
         with self.assertRaisesRegex(ValueError, 'Confirmed play changed'):
             core.apply_ledger(IDENT, selected)
+
+    def test_a_stale_review_can_redraft_against_current_targets_and_play(self):
+        old = self.draft()
+        self.settle_jobs()
+        church = self.stored('threads/church')
+        church['detail'] = 'GM revision after the proposal.'
+        core.write_doc('threads/church', church)
+        with self.assertRaisesRegex(ValueError, 'explicitly redraft'):
+            core.start_ledger(IDENT)
+        job = core.start_ledger(IDENT, restart=True)
+        fresh = self.stored('ledger/' + IDENT)
+        self.assertEqual((fresh['cursor'], fresh['events'], fresh['status']), (0, [], 'running'))
+        self.assertEqual(
+            fresh['base_revs']['threads/church'], core.rev_of(core.doc_path('threads/church'))
+        )
+        self.assertEqual(job['first'], 0)
+
+        self.settle_jobs()
+        fresh['status'] = 'failed'
+        core.write_doc('ledger/' + IDENT, fresh)
+        document = self.stored('transcripts/' + IDENT)
+        document['passages'][2].update(kind='banter', confirmed=True)
+        core.write_doc('transcripts/' + IDENT, document)
+        core.start_ledger(IDENT, restart=True)
+        changed = self.stored('ledger/' + IDENT)
+        self.assertNotEqual(changed['source'], old['source'])
+        self.assertEqual(changed['events'], [])
 
     def test_no_unreviewed_or_banter_only_transcript_can_start_a_ledger(self):
         document = self.stored('transcripts/' + IDENT)
