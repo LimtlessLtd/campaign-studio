@@ -4,7 +4,7 @@
   "scripts": {
     "format": "prettier --write DM/app DM/forge/foundry-import-macro.js DM/forge/foundry-library-export.js DM/forge/foundry-upgrade-audit.js DM/forge/foundry-upgrade-inventory.js .github docs *.md *.json",
     "format:check": "prettier --check DM/app DM/forge/foundry-import-macro.js DM/forge/foundry-library-export.js DM/forge/foundry-upgrade-audit.js DM/forge/foundry-upgrade-inventory.js .github docs *.md *.json",
-    "check:js": "node --check DM/app/merge.js && node --check DM/app/controls.js && node --check DM/app/state.js && node --check DM/app/campaign-pages.js && node --check DM/app/map-pages.js && node --check DM/app/world-pages.js && node --check DM/app/foundry-pages.js && node --check DM/app/live-library.js && node --check DM/app/studio.js && node --check DM/app/app.js && node tools/check_macro.cjs && node tools/check_foundry_live.cjs && node tools/check_foundry_import.cjs && node tools/check_merge.cjs && node tools/check_routes.cjs"
+    "check:js": "node --check DM/app/merge.js && node --check DM/app/controls.js && node --check DM/app/state.js && node --check DM/app/campaign-pages.js && node --check DM/app/map-pages.js && node --check DM/app/world-pages.js && node --check DM/app/foundry-pages.js && node --check DM/app/live-library.js && node --check DM/app/memory-page.js && node --check DM/app/studio.js && node --check DM/app/app.js && node tools/check_macro.cjs && node tools/check_foundry_live.cjs && node tools/check_foundry_import.cjs && node tools/check_merge.cjs && node tools/check_routes.cjs"
   },
   "devDependencies": {
     "axe-core": "4.13.0",

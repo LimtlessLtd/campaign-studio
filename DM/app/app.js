@@ -35,6 +35,7 @@ async function route(soft) {
         '': studioDashboard,
         welcome: studioWelcome,
         library: studioLibrary,
+        memory: memoryPage,
         prep: prepPage,
         threads: threadsPage,
         codex: codexPage,

@@ -19,6 +19,7 @@ import foundry_library
 import foundry_upgrade
 import map_trash
 import maps_io
+import memory_import
 import packaging_source
 import references
 import job_service
@@ -84,6 +85,7 @@ ROUTES = {
         (lambda path: path == '/api/foundry/backup/plan', '_get_backup_plan'),
         (lambda path: path == '/api/foundry/worlds', '_get_worlds'),
         (lambda path: path == '/api/foundry/library', '_get_library'),
+        (lambda path: path == '/api/memory/lore-folders', '_get_memory_lore_folders'),
         (lambda path: path == '/api/foundry/library/macro', '_get_library_macro'),
         (lambda path: path == '/api/foundry/asset', '_get_asset'),
         (lambda path: path == '/api/maps/pending', '_get_pending_maps'),
@@ -129,6 +131,8 @@ ROUTES = {
         (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
         (lambda path: path == '/api/foundry/world/import', '_post_import_world'),
         (lambda path: path == '/api/foundry/world/remove', '_post_remove_world'),
+        (lambda path: path == '/api/memory/preview', '_post_memory_preview'),
+        (lambda path: path == '/api/memory/apply', '_post_memory_apply'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
         (lambda path: path == '/api/foundry/backup/verify', '_post_backup_verify'),
         (lambda path: path == '/api/foundry/backup/rehearse', '_post_backup_rehearse'),
@@ -514,6 +518,49 @@ class Handler(SimpleHTTPRequestHandler):
                 limit=int(query.get('limit', ['60'])[0]),
             )
         )
+
+    @staticmethod
+    def _memory_snapshot():
+        try:
+            world = foundry_library.selected_world()
+        except (OSError, ValueError):
+            return None
+        return (
+            foundry_library.current_snapshot(read_json(doc_path('foundry-library')), world)
+            if world
+            else None
+        )
+
+    def _get_memory_lore_folders(self, path, query, p):
+        return self.send_json({'folders': memory_import.lore_folders(self._memory_snapshot())})
+
+    def _post_memory_preview(self, path, query, p):
+        proposal = memory_import.proposal(
+            p.get('kind'), p.get('path', ''), p.get('folders'), self._memory_snapshot()
+        )
+        return self.send_json(
+            {
+                'fingerprint': proposal['fingerprint'],
+                'items': [
+                    {key: item[key] for key in ('key', 'kind', 'title', 'preview')}
+                    for item in proposal['items']
+                ],
+            }
+        )
+
+    def _post_memory_apply(self, path, query, p):
+        with LOCK:
+            proposal = memory_import.proposal(
+                p.get('kind'), p.get('path', ''), p.get('folders'), self._memory_snapshot()
+            )
+            if p.get('fingerprint') != proposal['fingerprint']:
+                raise Conflict('The source changed since preview. Review it again before applying.')
+            changes, report = memory_import.changes(
+                proposal, p.get('selected'), request_read, campaign.active().data
+            )
+            if changes:
+                commit_docs('Import campaign memory', changes)
+        return self.send_json({'ok': True, **report})
 
     def _get_library_macro(self, path, query, p):
         """Serve the reviewed source macro from the installation, even with external DM_HOME."""

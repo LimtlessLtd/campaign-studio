@@ -101,6 +101,25 @@ class BrowserSmoke(unittest.TestCase):
         ]
         self.assertEqual(found, [], label)
 
+    def test_memory_import_reviews_a_session_summary_on_phone_and_desktop(self):
+        summary = self.studio.root / 's3.md'
+        summary.write_text('# Third session\nThe party found the sealed gate.', encoding='utf-8')
+        self.open('#/memory')
+        self.page.get_by_role('combobox', name='Source type').select_option('summaries')
+        self.page.get_by_label('Local source path').fill(str(summary))
+        self.page.get_by_role('button', name='Preview import').click()
+        expect(self.page.get_by_text('Third session')).to_be_visible()
+        self.assertIsNone(self.stored('prep/s3'))
+        self.assert_accessible('memory preview desktop')
+        self.page.set_viewport_size(NARROW)
+        self.assert_accessible('memory preview phone')
+        self.page.get_by_role('checkbox').check()
+        self.page.get_by_role('button', name='Apply 1 selected').click()
+        expect(self.page.get_by_text('Imported 1 new records')).to_be_visible()
+        self.assertEqual(
+            self.stored('prep/s3')['log']['summary'], 'The party found the sealed gate.'
+        )
+
     def test_openai_settings_enable_structured_draft_controls(self):
         self.page.set_viewport_size(NARROW)
         with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'synthetic-key'}):
@@ -208,6 +227,17 @@ class BrowserSmoke(unittest.TestCase):
         self.page.reload()
         self.page.get_by_role('button', name='Actors & NPCs').click()
         expect(picked).to_contain_text('Mira')
+
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='Remove imported data').click()
+        expect(self.page.locator('.library-status')).to_contain_text('No documents read yet')
+        self.assertIsNone(self.stored('foundry-library'))
+        self.assertTrue((world / 'world.json').is_file())
+        self.open('#/codex')
+        self.open('#/library')
+        expect(self.page.locator('.library-status')).to_contain_text('No documents read yet')
+        expect(self.page.get_by_role('button', name='Remove imported data')).to_have_count(0)
+        self.assertIsNone(self.stored('foundry-library'))
 
     def test_archiving_the_last_prep_keeps_new_session_number_unique(self):
         self.open('#/prep/new')

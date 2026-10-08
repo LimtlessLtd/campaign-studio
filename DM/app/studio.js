@@ -23,6 +23,7 @@ function initStudio() {
       [
         ['', 'home', 'Overview'],
         ['library', 'book', 'World Library'],
+        ['memory', 'folder', 'Import memory'],
         ['maps', 'map', 'Maps & locations'],
         ['prep', 'book', 'Session prep'],
         ['codex', 'people', 'Campaign codex'],
@@ -394,11 +395,7 @@ async function studioLibrary(_arg, context) {
     );
     if (current !== requestNumber) return;
     const snapshot = result.snapshot;
-    if (
-      result.readable &&
-      !autoRead &&
-      (!snapshot || (snapshot.source === 'folder' && snapshot.stale))
-    ) {
+    if (result.readable && !autoRead && snapshot?.source === 'folder' && snapshot.stale) {
       autoRead = true;
       await readFolder();
       return refresh();
@@ -492,7 +489,9 @@ async function studioLibrary(_arg, context) {
         },
         'Import world into Studio',
       ),
-      S.state.world_key
+      S.state.world_key &&
+        (snapshot ||
+          S.recordIndex.codex.some((entry) => entry.foundry?.world_key === S.state.world_key))
         ? h(
             'button',
             {
@@ -509,6 +508,7 @@ async function studioLibrary(_arg, context) {
                     world_key: S.state.world_key,
                   });
                   toast(`Removed ${result.removed} imported entries.`);
+                  await recordChoices('codex');
                   await refresh();
                 }),
             },

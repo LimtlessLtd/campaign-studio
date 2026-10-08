@@ -32,6 +32,7 @@ const context = {
   studioSettings: async (_arg, page) => render(page.view, 'settings'),
   studioWelcome: emptyPage,
   studioLibrary: emptyPage,
+  memoryPage: emptyPage,
   prepPage: emptyPage,
   threadsPage: emptyPage,
   codexPage: emptyPage,
