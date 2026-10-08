@@ -6,6 +6,7 @@ import time
 from copy import deepcopy
 
 import context as prompt_context
+import records
 import shapes
 import workflow
 
@@ -165,7 +166,7 @@ def prompt_pack(item, read_doc, campaign, budget_chars, prep_names, recent_logs)
     active = [t for t in threads if t.get('status') != 'resolved']
     active.sort(
         key=lambda t: (
-            t.get('last_session') if type(t.get('last_session')) is int else 0,
+            records.last_session(t),
             t.get('id', ''),
         )
     )
@@ -346,6 +347,7 @@ def apply(item, read_doc, commit, inbox):
                 status=row['status'],
                 detail=row['detail'],
                 source='Session ' + item['session'],
+                sessions=[item['session']],
                 request=item['id'],
             )
         )
@@ -357,6 +359,7 @@ def apply(item, read_doc, commit, inbox):
             target['detail'] = '\n\n'.join(
                 x for x in (target.get('detail', ''), row['update']) if x.strip()
             )
+        target['sessions'] = list(dict.fromkeys([*target.get('sessions', []), item['session']]))
         target.setdefault('session_updates', []).append(item['id'])
     for row in draft['entries'] + draft['handouts']:
         if row['image_prompt'].strip():

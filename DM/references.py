@@ -1,6 +1,6 @@
 """Where a codex entry is used, and removing it without leaving dangling links.
 
-Records point at codex entries by ID from several documents: other entries' `related` lists, thread `pcs`,
+Records point at codex entries by ID from several documents: other entries' `related` lists, thread `pcs` and `entries`,
 art items, prep scenes, map-area `npcs`/`items`, and a request's focus entry. `scan` lists every use and
 `remove` deletes the entry and unlinks them all in memory; the caller commits every changed document with
 one `commit_docs`, so a deletion is never half applied. Both take a plain {document name: value} mapping
@@ -41,13 +41,14 @@ def _links(docs):
                 )
         elif name == 'threads':
             for thread in _rows(doc, 'threads'):
-                yield (
-                    name,
-                    f'Thread: {thread.get("title") or thread.get("id")}',
-                    thread,
-                    'pcs',
-                    True,
-                )
+                for field in ('pcs', 'entries'):
+                    yield (
+                        name,
+                        f'Thread: {thread.get("title") or thread.get("id")}',
+                        thread,
+                        field,
+                        True,
+                    )
         elif name == 'art':
             for item in _rows(doc, 'items'):
                 yield name, f'Art: {item.get("title") or item.get("id")}', item, 'codex', False

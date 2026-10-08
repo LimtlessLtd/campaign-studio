@@ -767,6 +767,10 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(
             self.stored('threads')['threads'][0]['detail'].count('The bell is their signal.'), 1
         )
+        self.assertEqual(
+            [thread['sessions'] for thread in self.stored('threads')['threads']],
+            [['s1'], ['s1']],
+        )
         self.assertEqual(len(self.stored('codex')['entries']), 2)
         self.assert_shaped()
 

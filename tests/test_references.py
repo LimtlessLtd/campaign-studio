@@ -16,8 +16,9 @@ import campaign
 import campaign_core
 import http_routes
 import map_trash
-import references
 import records
+import references
+import shapes
 
 
 def sample():
@@ -35,6 +36,31 @@ def sample():
         'prep/s1': {'n': 1, 'scenes': [{'id': 'sc', 'title': 'Docks', 'npcs': ['mira', 'bram']}]},
         'mapkey/docks': {'areas': [{'n': 1, 'name': 'Quay', 'npcs': ['mira'], 'items': ['sword']}]},
     }
+
+
+class StalenessTests(unittest.TestCase):
+    def test_threads_sort_by_the_session_they_last_touched(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for key, title, sessions in (
+                ('fresh', 'Fresh', ['s2', 's10']),
+                ('old', 'Old', ['s1', 's2']),
+                ('never', 'Never', []),
+                ('odd', 'Odd', ['notes', 5]),
+            ):
+                path = records.record_path(folder, 'threads', key)
+                Path(path).parent.mkdir(parents=True, exist_ok=True)
+                Path(path).write_text(
+                    json.dumps(shapes.THREAD.new(id=key, title=title, sessions=sessions)),
+                    encoding='utf-8',
+                )
+            page = records.page(folder, 'threads', sort='stale')
+            ids = [row['record']['id'] for row in page['items']]
+            self.assertEqual(ids, ['never', 'odd', 'old', 'fresh'])
+            self.assertEqual(records.last_session({'sessions': ['s2', 's10']}), 10)
+            plain = records.page(folder, 'threads')
+            self.assertEqual(
+                [row['record']['id'] for row in plain['items']], ['fresh', 'never', 'odd', 'old']
+            )
 
 
 class ReferenceTests(unittest.TestCase):
@@ -59,6 +85,15 @@ class ReferenceTests(unittest.TestCase):
         self.assertEqual(docs['threads']['threads'][0]['pcs'], ['bram'])
         self.assertEqual(docs['art']['items'][0]['codex'], '')
         self.assertEqual(docs['mapkey/docks']['areas'][0]['items'], ['sword'])
+
+    def test_thread_entry_links_are_listed_and_unlinked_on_delete(self):
+        docs = sample()
+        docs['threads']['threads'][0]['entries'] = ['sword']
+        self.assertEqual(
+            references.scan(docs, 'sword')[0], {'doc': 'threads', 'where': 'Thread: Heist'}
+        )
+        references.remove(docs, 'sword')
+        self.assertEqual(docs['threads']['threads'][0]['entries'], [])
 
     def test_remove_leaves_unrelated_documents_alone(self):
         docs = sample()

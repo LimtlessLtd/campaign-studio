@@ -112,14 +112,17 @@ their row and finding say enough.
 - Session Forge (W32) now accepts a pitch and settings, validates a bounded proposal, and applies its linked
   prep, records, art briefs and map layout workflows in one recoverable change. Its review shows the whole
   proposal, with an editable JSON import. A scene's map points to a stored slug, while the location number
-  stays zero until a new map has a keyed layout. Recent logs lead its context; W34 will provide reliable
-  thread staleness fields for better ranking. W41 adds compendium bases for proposed NPCs.
+  stays zero until a new map has a keyed layout. Recent logs lead its context, and W34's touched-session
+  links rank active threads by staleness. W41 adds compendium bases for proposed NPCs.
 - General requests now offer item choices for entries, threads, scenes and handouts. W33 extends this to
   session and map proposals, adds "redraft this one" and shows before/after changes to existing records.
   Applying writes only accepted items; an edited item is validated again.
 
 ### W34, W35 Threads and wrap-up
 
+- First W34 slice done: a thread links codex entries (`entries`) and sessions it touched (`sessions`, prep
+  names); the threads page can sort stalest first, and a codex entry lists the threads that use it through
+  the `references` link scan (schema 8). Still to do: map and location links, clues, sort by hero.
 - Threads gain links (codex entries, maps and locations, sessions), clues (text, where it is found, and
   planned, planted or found), and the last session that touched them. The threads page sorts by staleness
   and by hero.
