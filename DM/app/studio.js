@@ -251,11 +251,36 @@ function folderPicker(folders, getPicked, setPicked) {
   );
 }
 
+/* A library entry's identity for highlighting: Foundry id, else media path, else folder and name. */
+function entryKey(item) {
+  return String(item.id ?? item.path ?? (item.folder || '') + '/' + item.name);
+}
+
+/* The picked entry per category survives navigation and reloads of the tab, not browser restarts. */
+function recallSelection(kind) {
+  try {
+    return JSON.parse(sessionStorage.getItem('library-selection') || '{}')[kind] || null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberSelection(kind, key) {
+  try {
+    const picked = JSON.parse(sessionStorage.getItem('library-selection') || '{}');
+    picked[kind] = key;
+    sessionStorage.setItem('library-selection', JSON.stringify(picked));
+  } catch {
+    /* storage unavailable: the highlight still works until the page is left */
+  }
+}
+
 async function studioLibrary(_arg, context) {
   let kind = S.libraryKind || 'scenes';
   let query = '';
   let offset = 0;
   let requestNumber = 0;
+  let selectedKey = recallSelection(kind);
   const tabs = h('div', { class: 'library-tabs' });
   const status = h('div', { class: 'library-status' });
   const list = h('div', { class: 'library-list' });
@@ -299,6 +324,13 @@ async function studioLibrary(_arg, context) {
     },
   });
   const showDetail = (item) => {
+    selectedKey = entryKey(item);
+    rememberSelection(kind, selectedKey);
+    list.querySelectorAll('.library-entry').forEach((button) => {
+      const on = button.dataset.key === selectedKey;
+      button.classList.toggle('on', on);
+      button.setAttribute('aria-pressed', String(on));
+    });
     const image =
       kind === 'assets' && item.type.startsWith('image/')
         ? h('img', {
@@ -321,7 +353,9 @@ async function studioLibrary(_arg, context) {
               : 'FOUNDRY SNAPSHOT',
       ),
       h('h2', {}, item.name),
-      item.folder ? h('p', { class: 'muted' }, 'Folder: ' + item.folder) : null,
+      item.folder
+        ? h('p', { class: 'muted' }, 'Folder: ' + (item.folder_path || item.folder))
+        : null,
       item.type && kind !== 'assets' ? badge(item.type) : null,
       image,
       item.summary ? h('p', { class: 'library-text' }, item.summary) : null,
@@ -507,6 +541,7 @@ async function studioLibrary(_arg, context) {
             onclick: () => {
               kind = value;
               S.libraryKind = kind;
+              selectedKey = recallSelection(kind);
               offset = 0;
               render(detail, h('p', { class: 'muted' }, 'Select an entry to view it.'));
               attempt(refresh);
@@ -523,9 +558,14 @@ async function studioLibrary(_arg, context) {
         ? result.items.map((item) =>
             h(
               'button',
-              { class: 'library-entry', onclick: () => showDetail(item) },
+              {
+                class: 'library-entry' + (entryKey(item) === selectedKey ? ' on' : ''),
+                'data-key': entryKey(item),
+                'aria-pressed': String(entryKey(item) === selectedKey),
+                onclick: () => showDetail(item),
+              },
               h('b', {}, item.name),
-              h('small', {}, item.folder || item.path || item.type || ''),
+              h('small', {}, item.folder_path || item.folder || item.path || item.type || ''),
             ),
           )
         : h(

@@ -19,7 +19,7 @@ import storage
 import records
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 6
+CURRENT = 7
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -81,7 +81,7 @@ def check(data, maps):
 # ---------- migrations ----------
 # Fields of every stored record at CURRENT (shapes.fields_digest()). When a shape changes, add a version
 # whose migration is fill_campaign, so stored records gain the new fields, then update this digest.
-SHAPES_DIGEST = 'cfd385abce4ef08dc07f1f85433b2b57a7d9e0be5e696564b79a00a460bc4d24'
+SHAPES_DIGEST = '28e72bf0aff08c06bf03a8dce8b8c569ac84c4990a1c5ebbc745c2b7f752e7e8'
 
 
 def shaped_documents(data, maps):
@@ -129,14 +129,17 @@ def hash_foundry_imports(data, maps):
 
 # From version -> (path, normalize) pairs reaching version + 1. Version 1 completed codex, thread, prep and
 # map key records; version 2 completed art, handout, checklist, loot, journal and event records too;
-# version 3 added world maps; version 4 hashes Foundry-imported values; version 5 adds prep archive;
-# version 6 splits codex and thread collections into individual documents.
+# version 3 added world maps (a campaign without world-maps.json has nothing to fill); version 4 keeps a
+# hash of each Foundry-imported entry's values instead of a copy of them; version 5 added the prep archive;
+# version 6 added the session log to each prep; version 7 splits the codex and thread collections into
+# individual record documents (a special step in planned_changes, not an entry here).
 MIGRATIONS = {
     0: fill_campaign,
     1: fill_campaign,
     2: fill_campaign,
     3: hash_foundry_imports,
     4: fill_campaign,
+    5: fill_campaign,
 }
 
 
@@ -144,7 +147,7 @@ def planned_changes(data, maps, start):
     """[(path, new value)] for each document the migrations from start would change."""
     changes = {}
     for step in range(start, CURRENT):
-        if step == 5:
+        if step == 6:
             for kind, field in records.FIELDS.items():
                 legacy = os.path.join(data, kind + '.json')
                 if legacy in changes:

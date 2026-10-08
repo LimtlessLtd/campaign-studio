@@ -75,6 +75,9 @@ def _short(value, limit):
     return text[: limit - 1].rstrip() + '…'
 
 
+short = _short
+
+
 def _mentioned(name, text):
     name = str(name or '').strip()
     return (

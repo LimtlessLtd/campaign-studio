@@ -88,14 +88,6 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W29 Deletion and where used
-
-- IDs are referenced from map areas (`npcs`, `items`, `threads`), scenes (`npcs`), prep `threads`, map
-  briefs, `related` lists and art items. A server-side backlink index answers "where used" for any record;
-  W34's "appears in" uses the same index.
-- Deleting unlinks every reference in one `commit_docs` change. Maps, preps and world maps go to a trash
-  folder and stay recoverable until it is emptied.
-
 ### W30, W31 Campaign memory
 
 - A **session log** records what happened: date, players' summary, GM notes, outcomes, threads touched,
@@ -104,6 +96,18 @@ their row and finding say enough.
 - W31 imports what a GM already has: a legacy DM-screen or Studio campaign folder (the schema-0 migration
   already reads their JSON), session summaries as JSON or one Markdown file per session, and chosen Foundry
   journal folders marked as lore. Each import arrives as a reviewed proposal, and its text is reference data.
+
+### W68 Session recordings
+
+- Owner feedback (8 Oct): point AI at local video files, transcribe the audio, and work out which threads are
+  still unresolved. The table's jokes and invented gags (for example a player's made-up animal form) must not
+  become canon, while real play (for example destroying a named temple) must.
+- Files stay on disk: the GM picks a path and Studio never uploads or copies a recording. Transcription is a
+  job behind a provider adapter (local Whisper or a hosted API), with the usual usage ledger and an ask before a
+  large job. The transcript is reference data, never instructions.
+- A second pass classifies each passage as **in-game**, **table banter** or **unclear**, quoting the passage
+  for the GM to confirm. Only confirmed in-game passages feed a W35 wrap-up proposal: session log, thread changes
+  and new threads. Nothing applies unreviewed. The GM can mark a passage as banter so later runs remember it.
 
 ### W32, W33 Session Forge and review
 
@@ -261,6 +265,25 @@ their row and finding say enough.
 - **Proposal**: a validated AI draft awaiting review. Nothing changes until it is applied.
 - **Bundle**: everything a session's prep links, exported to Foundry together (W38).
 - **Reference library**: Foundry documents kept searchable without becoming codex entries (W24).
+
+### W65 Scene settings
+
+- Imported scenes already keep their Foundry document. Add an editable `settings` subset (playlist or
+  sound, darkness, weather, global light, grid size and units) with a validated shape, written back by the
+  scene export. Start with music, since that is what the owner asked for; leave unknown fields untouched.
+
+### W66 AI pins for named scenes
+
+- After a scene is chosen as the overworld map (W64), let the AI read its image text and pin labels and
+  match them to imported scenes by exact or near name (a label "Campess Port" and a scene "Campess Port").
+  Return a proposal, one pin per match with its position; the GM accepts, edits or rejects each (W33). Never
+  place a pin without review, and send the AI only what the job needs.
+
+### W67 Unlink and remove, never delete from Foundry
+
+- Rule: Studio never deletes anything from Foundry. It may remove links, nominations and detail it generated.
+  Give every linked record (world map nomination, pin, scene or entry link) an unlink or remove action that
+  states what stays in Foundry. Shipped so far: remove a world map (nomination and pins).
 
 ## Deprioritised
 

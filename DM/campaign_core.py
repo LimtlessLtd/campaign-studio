@@ -536,13 +536,29 @@ def generate_cmd(p):
     return cmd, f'{name or kind} ({W}x{H})'
 
 
+def campaign_info():
+    """Campaign facts every AI draft sees: its name, world and the newest session logs."""
+    cfg = config.settings()
+    info = {'name': cfg['campaign_name']}
+    if cfg.get('world_path'):
+        info['world'] = config.world_info(cfg['world_path'])
+    logs = request_workflow.recent_logs(request_read, list_docs('prep'))
+    if logs:
+        info['recent_session_logs'] = logs
+    return info
+
+
 def request_pack(item):
     cfg = config.settings()
     campaign_info = {'name': cfg['campaign_name']}
     if cfg.get('world_path'):
         campaign_info['world'] = config.world_info(cfg['world_path'])
     return request_workflow.prompt_pack(
-        item, request_read, campaign_info, cfg['context_budget_chars']
+        item,
+        request_read,
+        campaign_info,
+        cfg['context_budget_chars'],
+        prep_names=list_docs('prep'),
     )
 
 
@@ -585,16 +601,12 @@ def start_workflow(value):
         if workflow.needs_plan(value):
             workflow.begin(value)
         cmd = ai_provider.command(value['kind'], workflow.schema(value['kind']))
-        cfg = config.settings()
-        campaign_info = {'name': cfg['campaign_name']}
-        if cfg.get('world_path'):
-            campaign_info['world'] = config.world_info(cfg['world_path'])
         job = new_job(
             'claude',
             'ai-workflow',
             'AI: ' + value['kind'] + ' · ' + value['brief']['name'],
             cmd,
-            workflow.prompt(value, campaign_info),
+            workflow.prompt(value, campaign_info()),
             workflow=value['id'],
             slug=value['map'],
         )

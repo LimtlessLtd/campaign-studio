@@ -144,6 +144,7 @@ PREP = Shape(
         notes='',
         loot=[],
         handouts=[],
+        log=dict(summary='', notes='', outcomes=[]),
     ),
     {'scenes': SCENE, 'handouts': HANDOUT, 'checklist': CHECKLIST_ITEM, 'loot': LOOT},
 )

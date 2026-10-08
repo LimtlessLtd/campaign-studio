@@ -253,8 +253,22 @@ class SchemaTests(unittest.TestCase):
             },
         )
 
-    def test_version_five_campaign_splits_records_without_changing_foundry_links(self):
+    def test_version_five_prep_gains_an_empty_session_log(self):
+        self.migrate()
         schema.write_marker(self.data, 5, 'Synthetic version 5 campaign')
+        prep = self.dm / 'data/prep/s9.json'
+        prep.parent.mkdir(exist_ok=True)
+        prep.write_text(json.dumps({'n': 9, 'title': 'Nine'}))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (5, schema.CURRENT))
+        self.assertEqual(
+            self.read('data/prep/s9.json')['log'], {'summary': '', 'notes': '', 'outcomes': []}
+        )
+
+    def test_version_six_campaign_splits_records_without_changing_foundry_links(self):
+        schema.write_marker(self.data, 6, 'Synthetic version 6 campaign')
         codex = self.read('data/codex.json')
         codex['entries'][0]['foundry'] = {
             'uuid': 'Actor.a1',
@@ -266,7 +280,7 @@ class SchemaTests(unittest.TestCase):
 
         result = self.migrate()
 
-        self.assertEqual((result['from'], result['version']), (5, schema.CURRENT))
+        self.assertEqual((result['from'], result['version']), (6, schema.CURRENT))
         self.assertFalse((self.dm / 'data/codex.json').exists())
         self.assertFalse((self.dm / 'data/threads.json').exists())
         self.assertEqual(
@@ -326,21 +340,21 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(schema.SchemaError, 'changed since'):
             schema.restore(result['backup'], self.data, self.maps)
 
-    def test_restoring_schema_five_removes_schema_six_record_folders(self):
-        schema.write_marker(self.data, 5, 'Synthetic version 5 campaign')
+    def test_restoring_schema_six_removes_schema_seven_record_folders(self):
+        schema.write_marker(self.data, 6, 'Synthetic version 6 campaign')
         result = self.migrate()
         self.assertTrue((self.dm / 'data/codex/ui-npc.json').exists())
         self.assertTrue((self.dm / 'data/threads/ui.json').exists())
 
         schema.restore(result['backup'], self.data, self.maps)
 
-        self.assertEqual(schema.version(self.data, self.maps), 5)
+        self.assertEqual(schema.version(self.data, self.maps), 6)
         self.assertFalse((self.dm / 'data/codex').exists())
         self.assertFalse((self.dm / 'data/threads').exists())
         self.assertEqual(self.read('data/codex.json')['entries'][0]['id'], 'ui-npc')
         self.assertEqual(self.read('data/threads.json')['threads'][0]['id'], 'ui')
 
-    def test_restoring_schema_six_removes_records_added_after_the_backup(self):
+    def test_restoring_schema_seven_removes_records_added_after_the_backup(self):
         self.migrate()
         saved = schema.backup(self.data, self.maps, self.backups, 'synthetic-current')
         extra = self.dm / 'data/codex/later.json'

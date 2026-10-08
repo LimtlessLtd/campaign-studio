@@ -198,6 +198,17 @@ class BrowserSmoke(unittest.TestCase):
             self.context.request.get(self.studio.url + image.get_attribute('src')).status, 200
         )
 
+        self.open('#/library')
+        self.page.get_by_role('button', name='Actors & NPCs').click()
+        picked = self.page.locator('.library-entry.on')
+        expect(picked).to_have_count(0)
+        self.page.locator('.library-entry', has_text='Mira').click()
+        expect(picked).to_have_count(1)
+        expect(picked).to_have_attribute('aria-pressed', 'true')
+        self.page.reload()
+        self.page.get_by_role('button', name='Actors & NPCs').click()
+        expect(picked).to_contain_text('Mira')
+
     def test_archiving_the_last_prep_keeps_new_session_number_unique(self):
         self.open('#/prep/new')
         expect(self.page).to_have_url(self.studio.url + '/#/prep/s1')
@@ -485,8 +496,23 @@ class BrowserSmoke(unittest.TestCase):
 
         pin = self.stored('world-maps')['maps'][0]['pins'][0]
         self.assertEqual((pin['label'], pin['map']), ('Lantern Quay', slug))
+
+        self.page.get_by_role('button', name='Rename map').click()
+        self.page.get_by_label('Name', exact=True).fill('The Wide Realm')
+        self.page.get_by_role('button', name='Rename', exact=True).click()
+        expect(self.page.get_by_role('heading', name='The Wide Realm', level=1)).to_be_visible()
+        stored = self.stored('world-maps')['maps'][0]
+        self.assertEqual((stored['name'], stored['pins'][0]['map']), ('The Wide Realm', slug))
         self.page.get_by_role('link', name='Open battle map').click()
         expect(self.page).to_have_url(re.compile('#/maps/' + slug))
+
+        self.page.goto(self.studio.url + '/#/world')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='Remove world map').click()
+        expect(self.page.get_by_role('button', name='Add a world map')).to_be_visible()
+        self.assertEqual(self.stored('world-maps')['maps'], [])
+        self.page.goto(self.studio.url + '/#/maps/' + slug)
+        expect(self.page.locator('body')).not_to_contain_text('not found')
 
     def test_phone_can_place_and_adjust_pins_without_dragging(self):
         slug, _brief = self.studio.import_map()

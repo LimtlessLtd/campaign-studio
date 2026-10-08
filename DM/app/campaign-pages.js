@@ -487,6 +487,7 @@ async function prepPage(name, context) {
   }
   p.loot = p.loot || [];
   p.handouts = p.handouts || [];
+  p.log = Object.assign({ summary: '', notes: '', outcomes: [] }, p.log);
   const threads = await recordChoices('threads', context.signal);
   await recordChoices('codex', context.signal);
   const scenesBox = h('div');
@@ -667,6 +668,20 @@ async function prepPage(name, context) {
       ),
     ),
     await makePanel(name, context),
+    h('h2', {}, 'Session log'),
+    h(
+      'p',
+      { class: 'muted' },
+      'What actually happened when this session was played. Later AI drafts read the newest logs as canon.',
+    ),
+    field(docName, p.log, 'summary', { label: 'What the players did', type: 'textarea', rows: 5 }),
+    field(docName, p.log, 'notes', {
+      label: 'GM notes (not for players)',
+      type: 'textarea',
+      rows: 3,
+    }),
+    h('label', {}, 'Outcomes: changes that now stand'),
+    listEditor(docName, p.log.outcomes, { placeholder: 'Add an outcome and press Enter' }),
     h('h2', {}, 'Scenes'),
     scenesBox,
     h(
