@@ -13,6 +13,8 @@ import subprocess
 import sys
 import time
 
+import psutil
+
 import config
 import storage
 
@@ -49,7 +51,18 @@ class SubprocessProcess:
         return self.popen.wait()
 
     def terminate(self):
+        """Stop the child and anything it started, such as the programs a transcription worker runs."""
+        try:
+            family = psutil.Process(self.popen.pid).children(recursive=True)
+        except psutil.Error:
+            family = []
         self.popen.terminate()
+        for process in family:
+            try:
+                process.terminate()
+            except psutil.Error:
+                pass  # it already exited
+        psutil.wait_procs(family, timeout=3)
 
 
 class SubprocessRunner:
@@ -89,7 +102,12 @@ class JobService:
         self.on_failure = on_failure
         self.on_restart = on_restart
         self.runner = runner or SubprocessRunner()
-        self.lanes = {'forge': queue.Queue(), 'claude': queue.Queue(), 'art': queue.Queue()}
+        self.lanes = {
+            'forge': queue.Queue(),
+            'claude': queue.Queue(),
+            'art': queue.Queue(),
+            'transcribe': queue.Queue(),  # hours of local compute: it must not hold up the others
+        }
         self.running = {}
         self.cancelled = set()  # ids cancelled while queued or running
 

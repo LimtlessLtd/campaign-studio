@@ -22,6 +22,7 @@ import records
 import schema
 import shapes
 import storage
+import transcription
 import usage
 from job_service import JobService
 
@@ -33,6 +34,7 @@ if (
     sys.path.insert(0, FORGE)
 PORT = int(os.environ.get('DM_PORT', 8766))
 
+RECORDINGS_FOLDER = 'Session recordings'
 # campaign folders the site may show files from (read-only)
 FILE_ROOTS = (
     'PCs',
@@ -41,7 +43,7 @@ FILE_ROOTS = (
     'Maps & Assets',
     'Tokens',
     'Dungeon Alchemist',
-    'Session recordings',
+    RECORDINGS_FOLDER,
     'Arena Teams',
     'Icons',
     'Landing Page & Social Media stuff',
@@ -52,7 +54,7 @@ DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 # Documents the application owns: only their own routes and services change them.
 APP_OWNED_DOC = re.compile(
-    r'^(?:settings|foundry-library|codex|threads|(?:codex|threads|workflows|jobs)/.+)$'
+    r'^(?:settings|foundry-library|codex|threads|(?:codex|threads|workflows|jobs|transcripts)/.+)$'
 )
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
@@ -154,9 +156,9 @@ def delete_record(kind, ident):
 
 
 def delete_record_document(name):
-    if name != 'foundry-library' and not name.startswith(('codex/', 'threads/')):
+    if name != 'foundry-library' and not name.startswith(('codex/', 'threads/', 'transcripts/')):
         raise ValueError(
-            'Only records and the World Library snapshot can be deleted through a change.'
+            'Only records, transcripts and the World Library snapshot can be deleted through a change.'
         )
     path = doc_path(name)
     if os.path.islink(os.path.dirname(path)) or os.path.islink(path):
@@ -338,6 +340,8 @@ def settle_failed_job(job, message):
             write_doc('art', art)
     if job.get('request'):
         fail_request(job, message)
+    if job.get('transcript'):
+        transcription.discard(campaign.active().jobs, job['transcript'])
 
 
 def fail_job(job, error):
@@ -368,6 +372,8 @@ def finish_job(job, code, tail):
             pass  # no log, no usage: the job itself still settles
     if job['kind'] == 'request-draft':
         finish_request(job, code, tail)
+    if job['kind'] == 'transcribe':
+        finish_transcription(job, code, tail)
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -458,6 +464,22 @@ def fail_request(job, message):
     if item and item.get('status') == 'doing' and item.get('job') == job['id']:
         item.update(status='new', error=message)
         write_doc('inbox', box)
+
+
+def finish_transcription(job, code, tail):
+    """Store a finished transcription's transcript, or fail the job with the reason."""
+    result, _ = transcription.staging(campaign.active().jobs, job['transcript'])
+    try:
+        if code:
+            lines = [x for x in tail.splitlines() if x.strip() and not x.startswith('PROGRESS ')]
+            raise ValueError('\n'.join(lines[-3:])[-1000:] or 'The transcription failed.')
+        with open(result, encoding='utf-8') as file:
+            staged = json.load(file)
+        write_doc('transcripts/' + job['transcript'], transcription.build(job, staged))
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        job.update(status='failed', note=str(error))
+    finally:
+        transcription.discard(campaign.active().jobs, job['transcript'])
 
 
 def finish_request(job, code, tail):
@@ -609,6 +631,41 @@ def start_request(rid):
         item.update(status='doing', job=job['id'], draft=None, error='')
         write_doc('inbox', box)
         return job
+
+
+def default_recordings():
+    """The campaign's recordings folder when it exists, else an empty string."""
+    folder = os.path.join(campaign.active().files, RECORDINGS_FOLDER)
+    return folder if os.path.isdir(folder) else ''
+
+
+def transcript_busy(transcript):
+    return any(
+        j.get('transcript') == transcript and j.get('status') in ('queued', 'running')
+        for j in JOBS_SERVICE.iter_jobs()
+    )
+
+
+def start_transcription(rec, session=''):
+    """Queue the local transcription of one recording; its transcript is stored when the job ends."""
+    with LOCK:
+        options = config.settings()['transcription']
+        problem = transcription.selected(options).problem(options)
+        if problem:
+            raise ValueError(problem)
+        if session and session not in list_docs('prep'):
+            raise ValueError('No such session prep.')
+        return new_job(
+            'transcribe',
+            'transcribe',
+            'Transcribe: ' + rec['name'][:60],
+            transcription.worker_command(),
+            transcription.request(rec, options, campaign.active().jobs),
+            transcript=rec['id'],
+            recording=rec,
+            session=session,
+            engine={key: options[key] for key in ('provider', 'model', 'language')},
+        )
 
 
 def start_workflow(value):

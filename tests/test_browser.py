@@ -22,6 +22,10 @@ import test_workflows as fixtures  # noqa: E402
 import leveldb_writer as writer  # noqa: E402
 from test_workflows import campaign_core, workflow  # noqa: E402
 
+sys.path.insert(0, str(ROOT / 'DM'))
+import storage  # noqa: E402
+import transcription  # noqa: E402
+
 AXE = ROOT / 'node_modules' / 'axe-core' / 'axe.min.js'
 REQUIRED = os.environ.get('CAMPAIGN_STUDIO_BROWSER_TESTS') == 'required'
 DESKTOP = {'width': 1280, 'height': 800}
@@ -32,6 +36,32 @@ PNG = bytes.fromhex(
 )
 # axe impact levels that fail the build. Minor and moderate findings are not gated yet.
 BLOCKING = ('serious', 'critical')
+
+
+class StagingRunner:
+    """Stands in for the transcription worker: it leaves the result a real engine would."""
+
+    SEGMENTS = [
+        {'start': 0, 'end': 4, 'text': 'The party reaches the gate.'},
+        {'start': 4, 'end': 9, 'text': 'Mira says <b>open</b> it.'},
+    ]
+
+    def start(self, cmd, cwd, env, log, has_stdin):
+        log.write('PROGRESS 100% done\n')
+        log.flush()
+        return self
+
+    def feed(self, text):
+        storage.atomic_json(
+            json.loads(text)['out'], {'language': 'en', 'duration': 9, 'segments': self.SEGMENTS}
+        )
+
+    def wait(self):
+        return 0
+
+    def terminate(self):
+        pass
+
 
 try:
     from playwright.sync_api import Error as PlaywrightError, expect, sync_playwright
@@ -119,6 +149,41 @@ class BrowserSmoke(unittest.TestCase):
         self.assertEqual(
             self.stored('prep/s3')['log']['summary'], 'The party found the sealed gate.'
         )
+
+    def test_a_recording_is_transcribed_read_and_removed_on_phone_and_desktop(self):
+        recordings = self.studio.root / 'Session recordings'
+        recordings.mkdir()
+        recording = recordings / 'session-one.mp4'
+        recording.write_bytes(b'not really a video')
+        self.addCleanup(patch.stopall)
+        patch.object(transcription.FasterWhisper, 'problem', return_value='').start()
+        patch.object(campaign_core.JOBS_SERVICE, 'runner', StagingRunner()).start()
+
+        self.page.set_viewport_size(NARROW)
+        self.open('#/recordings')
+        expect(self.page.get_by_text('session-one.mp4')).to_be_visible()
+        self.assert_accessible('recordings phone')
+        self.page.get_by_role('button', name='Transcribe session-one.mp4').click()
+        expect(self.page.get_by_text('Transcribing session-one.mp4')).to_be_visible()
+        job, cmd, stdin = campaign_core.LANES['transcribe'].get_nowait()
+        campaign_core.execute_job(job, cmd, stdin)
+
+        read = self.page.get_by_role('button', name='Read the transcript of session-one')
+        expect(read).to_be_visible(timeout=15000)  # the page notices the finished job
+        self.assertEqual(len(self.stored('transcripts/' + job['transcript'])['segments']), 2)
+        read.click()
+        expect(self.page.get_by_text('The party reaches the gate.')).to_be_visible()
+        expect(self.page.get_by_text('Mira says <b>open</b> it.')).to_be_visible()  # text, not HTML
+        self.assertEqual(self.page.locator('.transcript b').count(), 0)
+        self.assert_accessible('transcript phone')
+        self.page.set_viewport_size(DESKTOP)
+        self.assert_accessible('transcript desktop')
+
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='Remove the transcript of session-one').click()
+        expect(self.page.get_by_text('No transcripts yet.')).to_be_visible()
+        self.assertEqual(campaign_core.list_docs('transcripts'), [])
+        self.assertTrue(recording.exists(), 'removing a transcript never touches the recording')
 
     def test_openai_settings_enable_structured_draft_controls(self):
         self.page.set_viewport_size(NARROW)

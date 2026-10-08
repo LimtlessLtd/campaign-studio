@@ -11,6 +11,14 @@ DEFAULTS = {
     'world_path': '',
     'context_budget_chars': 64_000,
     'ai': {'provider': 'claude', 'model': '', 'key_env': 'OPENAI_API_KEY'},
+    'transcription': {
+        'provider': 'faster-whisper',
+        'model': 'small',
+        'language': '',
+        'executable': '',
+        'ffmpeg': '',
+        'allow_download': False,
+    },
     'images': {'endpoint': '', 'model': '', 'key_env': 'IMAGE_API_KEY', 'size': '1024x1024'},
 }
 

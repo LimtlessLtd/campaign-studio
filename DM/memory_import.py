@@ -15,6 +15,7 @@ import campaign
 import foundry_library
 import records
 import shapes
+import storage
 
 MAX_FILES = 5000
 MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -29,18 +30,6 @@ STATUSES = {'open', 'planned', 'foreshadowed', 'resolved'}
 
 def _short(value, limit=MAX_TEXT):
     return value[:limit] if isinstance(value, str) else ''
-
-
-def _path(value, directory=True):
-    if not isinstance(value, str) or not value.strip() or len(value) > 2048:
-        raise ValueError('Choose a local source path.')
-    original = Path(value).expanduser()
-    if original.is_symlink():
-        raise ValueError('Linked source paths are not supported.')
-    path = original.resolve(strict=True)
-    if directory and not path.is_dir() or not directory and not path.is_file():
-        raise ValueError('Choose an existing local ' + ('folder.' if directory else 'file.'))
-    return path
 
 
 class Reader:
@@ -195,7 +184,7 @@ def _session_candidate(source, identity, title, log, n=0):
 
 
 def _legacy(folder):
-    root = _path(folder)
+    root = storage.local_path(folder)
     data = root / 'DM' / 'data' if (root / 'DM' / 'data').is_dir() else root / 'data'
     if not data.is_dir() and root.name.lower() == 'data':
         data = root
@@ -256,7 +245,7 @@ def _summary_json(source, name, value):
 
 
 def _summaries(path):
-    source_path = _path(path, directory=Path(path).is_dir())
+    source_path = storage.local_path(path, directory=Path(path).is_dir())
     files = (
         sorted(p for p in source_path.iterdir() if p.suffix.lower() in ('.json', '.md'))
         if source_path.is_dir()

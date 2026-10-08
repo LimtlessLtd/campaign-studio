@@ -174,6 +174,10 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   drafts, including Session Forge recaps (W30). World import can select folders, though duplicate folder names
   still need ID-based selection (W24).
   A brief or map key larger than the configured budget is refused before a provider call.
+- Session recording transcription (W68) has fixture coverage with fake engines only: no real Whisper model, GPU
+  or long recording has been run, so speed and accuracy are unknown. A cancel or restart stops the engine's
+  programs, but a server killed without a restart can leave an engine running until it finishes; its staged
+  result is discarded on the next start. The transcript list reads every stored transcript in full.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
