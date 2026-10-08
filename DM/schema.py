@@ -281,9 +281,9 @@ def restore(backup_path, data, maps):
         if storage.sha256_file(copy) != entry['sha256']:
             raise SchemaError('Backup copy changed since it was made: ' + entry['path'])
         restores.append((copy, destination))
-    # A schema-3 backup predates the record folders. Remove newer records before
-    # restoring it, or they would be mistaken for entries in the old campaign.
-    if manifest['version'] < 5:
+    # Backups before schema 6 predate the record folders. Remove newer records before
+    # restoring one, or they would be mistaken for entries in the old campaign.
+    if manifest['version'] < 6:
         for kind in records.FIELDS:
             folder = os.path.join(data, kind)
             if os.path.lexists(folder):

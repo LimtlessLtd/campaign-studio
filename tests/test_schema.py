@@ -326,6 +326,20 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(schema.SchemaError, 'changed since'):
             schema.restore(result['backup'], self.data, self.maps)
 
+    def test_restoring_schema_five_removes_schema_six_record_folders(self):
+        schema.write_marker(self.data, 5, 'Synthetic version 5 campaign')
+        result = self.migrate()
+        self.assertTrue((self.dm / 'data/codex/ui-npc.json').exists())
+        self.assertTrue((self.dm / 'data/threads/ui.json').exists())
+
+        schema.restore(result['backup'], self.data, self.maps)
+
+        self.assertEqual(schema.version(self.data, self.maps), 5)
+        self.assertFalse((self.dm / 'data/codex').exists())
+        self.assertFalse((self.dm / 'data/threads').exists())
+        self.assertEqual(self.read('data/codex.json')['entries'][0]['id'], 'ui-npc')
+        self.assertEqual(self.read('data/threads.json')['threads'][0]['id'], 'ui')
+
     def test_newer_schema_is_refused_without_changes(self):
         (self.dm / 'data' / schema.MARKER).write_text(
             json.dumps({'format': schema.FORMAT, 'version': schema.CURRENT + 1})
