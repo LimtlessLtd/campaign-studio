@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM' / 'tools'))
 
 import test_workflows as fixtures  # noqa: E402
+import foundry_library  # noqa: E402
 from test_workflows import campaign_core, shapes  # noqa: E402
 
 
@@ -121,7 +122,7 @@ class MemoryImportTests(unittest.TestCase):
         self.studio.assert_shaped()
 
     def test_lore_folder_selection_imports_only_selected_journals(self):
-        world = self.studio.world
+        world = foundry_library.selected_world()
         snapshot = {
             'format': 'campaign-studio-foundry-library',
             'schema': 1,
@@ -129,7 +130,7 @@ class MemoryImportTests(unittest.TestCase):
                 'id': 'fixture-world',
                 'title': 'Fixture',
                 'system': 'dnd5e',
-                'path': str(world),
+                'path': world['path'],
                 'core_version': '12.331',
             },
             'exported_at': '2026-10-08',
