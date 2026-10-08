@@ -450,6 +450,13 @@ class BrowserSmoke(unittest.TestCase):
 
         pin = self.stored('world-maps')['maps'][0]['pins'][0]
         self.assertEqual((pin['label'], pin['map']), ('Lantern Quay', slug))
+
+        self.page.get_by_role('button', name='Rename map').click()
+        self.page.get_by_label('Name', exact=True).fill('The Wide Realm')
+        self.page.get_by_role('button', name='Rename', exact=True).click()
+        expect(self.page.get_by_role('heading', name='The Wide Realm', level=1)).to_be_visible()
+        stored = self.stored('world-maps')['maps'][0]
+        self.assertEqual((stored['name'], stored['pins'][0]['map']), ('The Wide Realm', slug))
         self.page.get_by_role('link', name='Open battle map').click()
         expect(self.page).to_have_url(re.compile('#/maps/' + slug))
 
