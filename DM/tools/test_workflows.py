@@ -623,6 +623,33 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assert_shaped()
 
+    def test_partly_accepted_proposal_writes_only_accepted_items(self):
+        campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))
+        item = {
+            'id': 'req-part',
+            'kind': 'encounter',
+            'text': 'Create a harbour encounter.',
+            'session': 's1',
+            'status': 'new',
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        self.request('/api/requests/req-part/stage', {'draft': self.request_proposal()})
+        keys = request_workflow.reviewable_keys(self.request_proposal())
+        self.assertIn('entries:watcher', keys)
+        self.request('/api/requests/req-part/apply', {'rejected': ['entries:nope']}, expected=400)
+        self.request('/api/requests/req-part/apply', {'rejected': sorted(keys)}, expected=400)
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        self.request('/api/requests/req-part/apply', {'rejected': ['entries:watcher']})
+        self.assertEqual(
+            self.stored('codex')['entries']
+            if os.path.isfile(campaign_core.doc_path('codex'))
+            else [],
+            [],
+        )
+        saved = campaign_core.read_json(campaign_core.doc_path('prep/s1'))
+        self.assertEqual(saved['scenes'][0]['npcs'], [])
+        self.assertEqual(len(saved['handouts']), 1)
+
     def test_expand_entry_adds_text_links_and_art_once(self):
         self.seed(
             'codex',
