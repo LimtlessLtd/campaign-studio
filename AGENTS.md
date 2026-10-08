@@ -21,6 +21,8 @@ user. Follow the same development workflow whether you are a human contributor o
    own task. Claim work and report progress as described under Coordinating agents.
    Then check for open PRs left behind by an agent that ran out of context or usage, and adopt and finish
    them before new work (`docs/DEVELOPMENT.md` → Open PRs left behind).
+   Remove the worktrees, branches and scratch files you created when the task ends (`docs/DEVELOPMENT.md` →
+   Clean up after yourself).
 1. Inspect `git status` and relevant instructions. Preserve other contributors' work.
 2. Trace the requested interaction from route to API, persistence and Foundry export. State assumptions.
 3. Keep the change focused. For substantial changes, record a short plan and acceptance criteria in the
