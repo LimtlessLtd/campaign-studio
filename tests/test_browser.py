@@ -460,6 +460,14 @@ class BrowserSmoke(unittest.TestCase):
         self.page.get_by_role('link', name='Open battle map').click()
         expect(self.page).to_have_url(re.compile('#/maps/' + slug))
 
+        self.page.goto(self.studio.url + '/#/world')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='Remove world map').click()
+        expect(self.page.get_by_role('button', name='Add a world map')).to_be_visible()
+        self.assertEqual(self.stored('world-maps')['maps'], [])
+        self.page.goto(self.studio.url + '/#/maps/' + slug)
+        expect(self.page.locator('body')).not_to_contain_text('not found')
+
     def test_phone_can_place_and_adjust_pins_without_dragging(self):
         slug, _brief = self.studio.import_map()
         phone = browser.new_context(viewport=NARROW, is_mobile=True, has_touch=True)
