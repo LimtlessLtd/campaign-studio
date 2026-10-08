@@ -33,6 +33,17 @@ class CampaignTests(unittest.TestCase):
         self.studio = campaign.Campaign(Path(self.temp.name) / 'Studio')
         Path(self.studio.data).mkdir(parents=True)
 
+    def test_campaign_info_carries_the_newest_session_logs_for_map_drafts(self):
+        with campaign.using(self.studio):
+            Path(self.studio.data, 'prep').mkdir()
+            campaign_core.write_doc(
+                'prep/s4', {'n': 4, 'title': 'Docks', 'log': {'summary': 'Burned the chapel'}}
+            )
+            campaign_core.write_doc('prep/s5', {'n': 5, 'title': 'Plan'})
+            info = campaign_core.campaign_info()
+        self.assertEqual([log['session'] for log in info['recent_session_logs']], ['s4'])
+        self.assertEqual(info['recent_session_logs'][0]['summary'], 'Burned the chapel')
+
     def test_only_the_campaign_module_names_campaign_folders(self):
         found = [
             f'{path.relative_to(ROOT)}:{n}'

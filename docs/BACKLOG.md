@@ -15,7 +15,7 @@ Next ID: W69
 | ID  | Priority | Work                                                                                                        | Acceptance criteria                                                                |
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate            |
-| W30 | 2        | Session log, remainder: map drafts and recaps read the newest logs                                          | Shape, migration and browser flow; recent logs appear in the context               |
+| W30 | 2        | Session log, remainder: recaps read the newest logs                                                         | Shape, migration and browser flow; recent logs appear in the context               |
 | W31 | 2        | Import existing campaign memory: legacy folders, session summaries and Foundry lore journals                | Synthetic legacy folder and summaries import as reviewed proposals                 |
 | W32 | 2        | Plan the next session: a pitch in; linked scenes, cast, maps, handouts and thread changes out               | One paragraph yields a fully linked prep; reapplying adds nothing twice            |
 | W33 | 2        | Review every proposal item by item: accept, edit, reject or redraft one item, with diffs                    | A partly accepted proposal writes only the accepted items                          |
