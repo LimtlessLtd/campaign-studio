@@ -329,6 +329,23 @@ class RouteTests(unittest.TestCase):
             'Studio version',
         )
 
+        # Removing the world drops its entries and snapshot, unlinks other entries, and spares the folder.
+        own = records.collection(here.data, 'codex')
+        key = own['entries'][0]['foundry']['world_key']
+        mine = shapes.CODEX_ENTRY.new(id='mine', type='npc', name='Mine', related=['fvtt-a1'])
+        own['entries'].append(mine)
+        http_routes.commit_docs('Studio edit', [('codex', own)])
+        self.assertEqual(self.request('/api/foundry/world/remove', 'POST', {})[0], 400)
+        status, result, _ = self.request('/api/foundry/world/remove', 'POST', {'world_key': key})
+        self.assertEqual((status, result['removed'], result['snapshot']), (200, 1, True))
+        left = records.collection(here.data, 'codex')['entries']
+        self.assertEqual([(e['id'], e['related']) for e in left], [('mine', [])])
+        self.assertFalse(Path(http_routes.doc_path('foundry-library')).exists())
+        self.assertTrue((world / 'world.json').is_file())
+        self.assertEqual(
+            self.request('/api/foundry/world/remove', 'POST', {'world_key': key})[0], 404
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

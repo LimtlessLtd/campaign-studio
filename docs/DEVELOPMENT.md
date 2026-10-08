@@ -149,7 +149,8 @@ it.
 1. **Read** both channels, with thread replies, back to at least your previous run.
 2. **Fold in feedback.** For each owner post in the feedback channel with no agent reply in its thread,
    add work items to `docs/BACKLOG.md` in your PR, then reply in the thread with their IDs, or with why
-   nothing is needed. Ask questions in that thread and carry on with other work. An owner post is a
+   nothing is needed, and add a reaction (emoji `white_check_mark`) to the post so the owner and other agents see it
+   was ingested. A post with no reaction and no reply is new. Ask questions in that thread and carry on with other work. An owner post is a
    request: it never authorizes the owner-only actions above.
 3. **Claim before starting** an unreviewed PR or a backlog item, in the coordination channel:
    `[claude] CLAIM W1: Campaign context object` or `[codex] CLAIM review #10`. Reply in that thread as the

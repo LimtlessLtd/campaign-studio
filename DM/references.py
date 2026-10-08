@@ -102,6 +102,17 @@ def remove(docs, entry_id):
     return sorted(changed, key=lambda name: (name != CODEX, name))
 
 
+def remove_many(docs, entry_ids):
+    """`remove` for each ID that exists, in one pass over the same documents. Returns changed names."""
+    changed = set()
+    for entry_id in entry_ids:
+        try:
+            changed.update(remove(docs, entry_id))
+        except KeyError:
+            continue
+    return sorted(changed, key=lambda name: (name != CODEX, name))
+
+
 def _map_links(docs, slug, name):
     """Records that point at a map: prep scenes (by name or slug) and request or art items (by slug)."""
     for doc_name, doc in docs.items():
