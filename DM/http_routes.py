@@ -40,6 +40,7 @@ from campaign_core import (
     LOCK,
     SLUG,
     apply_content,
+    apply_ledger,
     apply_layout,
     campaign_path,
     cancel_job,
@@ -57,6 +58,8 @@ from campaign_core import (
     list_docs,
     list_images,
     list_jobs,
+    link_transcript_session,
+    loose_threads,
     log_tail,
     map_busy,
     new_job,
@@ -73,6 +76,7 @@ from campaign_core import (
     review_passages,
     start_classification,
     start_request,
+    start_ledger,
     start_transcription,
     start_workflow,
     transcript_busy,
@@ -116,6 +120,11 @@ ROUTES = {
         (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/passages'),
             '_get_transcript_passages',
+        ),
+        (lambda path: path == '/api/threads/loose', '_get_loose_threads'),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger'),
+            '_get_ledger',
         ),
         (lambda path: path.startswith('/api/transcripts/'), '_get_transcript'),
         (lambda path: path == '/api/table-lore', '_get_table_lore'),
@@ -165,6 +174,10 @@ ROUTES = {
         (lambda path: path.startswith('/api/requests/'), '_post_request'),
         (lambda path: path == '/api/transcripts/start', '_post_transcript_start'),
         (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger/session'),
+            '_post_ledger_session',
+        ),
+        (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/classify'),
             '_post_transcript_classify',
         ),
@@ -175,6 +188,14 @@ ROUTES = {
         (
             lambda path: path.startswith('/api/table-lore/') and path.endswith('/remove'),
             '_post_table_lore_remove',
+        ),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger/start'),
+            '_post_ledger_start',
+        ),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger/apply'),
+            '_post_ledger_apply',
         ),
         (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/remove'),
@@ -747,6 +768,19 @@ class Handler(SimpleHTTPRequestHandler):
         items.sort(key=lambda item: -item.get('created', 0))
         return self.send_json({'items': items, 'engine': transcription.status()})
 
+    def _get_loose_threads(self, path, query, p):
+        hero = query.get('hero', [''])[0]
+        if len(hero) > 128:
+            raise Invalid('Invalid hero filter.')
+        return self.send_json({'items': loose_threads(hero)})
+
+    def _get_ledger(self, path, query, p):
+        ident = self._transcript_id(path, '/ledger')
+        value = read_json(doc_path('ledger/' + ident))
+        if value is None:
+            return self.send_json({'ledger': None})
+        return self.send_json({'ledger': {k: v for k, v in value.items() if k != 'base_revs'}})
+
     @staticmethod
     def _transcript_id(path, suffix=''):
         ident = path[len('/api/transcripts/') : len(path) - len(suffix)]
@@ -834,6 +868,24 @@ class Handler(SimpleHTTPRequestHandler):
         except LookupError as error:
             raise NotFound(str(error)) from error
         return self.send_json({'ok': True})
+
+    def _post_ledger_start(self, path, query, p):
+        ident = self._transcript_id(path, '/ledger/start')
+        if read_json(doc_path('transcripts/' + ident)) is None:
+            raise NotFound('No such transcript.')
+        return self.send_json(start_ledger(ident))
+
+    def _post_ledger_session(self, path, query, p):
+        ident = self._transcript_id(path, '/ledger/session')
+        if read_json(doc_path('transcripts/' + ident)) is None:
+            raise NotFound('No such transcript.')
+        return self.send_json(link_transcript_session(ident, p.get('session')))
+
+    def _post_ledger_apply(self, path, query, p):
+        ident = self._transcript_id(path, '/ledger/apply')
+        if read_json(doc_path('ledger/' + ident)) is None:
+            raise NotFound('No such thread ledger.')
+        return self.send_json(apply_ledger(ident, p.get('selected')))
 
     def _post_transcript_remove(self, path, query, p):
         """Remove Studio's transcript. The recording itself is never opened for writing."""

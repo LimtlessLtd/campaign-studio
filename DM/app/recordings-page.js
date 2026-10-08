@@ -17,12 +17,14 @@ async function recordingsPage(_arg, context) {
   let listing = await list(S.recordingsPath).catch(() => list(''));
   const transcripts = (await context.api('/api/transcripts')).items;
   const lore = await context.api('/api/table-lore');
+  const loose = (await context.api('/api/threads/loose')).items;
   let reading = null;
   let offset = 0;
   const status = h('p', { role: 'status', 'aria-live': 'polite' });
   const filesBox = h('section', { class: 'card' });
   const readerBox = h('section', { class: 'card', hidden: true });
   const reviewBox = h('section', { class: 'card', hidden: true });
+  const ledgerBox = h('section', { class: 'card', hidden: true });
   const pathInput = h('input', {
     id: 'recordings-path',
     type: 'text',
@@ -249,6 +251,14 @@ async function recordingsPage(_arg, context) {
         h(
           'button',
           {
+            'aria-label': `Open the thread ledger of ${item.title}`,
+            onclick: () => attempt(() => showThreadLedger(ledgerBox, item, sessionSelect)),
+          },
+          'Thread ledger',
+        ),
+        h(
+          'button',
+          {
             'aria-label': `Read the transcript of ${item.title}`,
             onclick: () => openReader(item, 0),
           },
@@ -277,7 +287,9 @@ async function recordingsPage(_arg, context) {
       ),
     );
 
-  const transcribing = S.jobs.filter((job) => ['transcribe', 'classify'].includes(job.kind));
+  const transcribing = S.jobs.filter((job) =>
+    ['transcribe', 'classify', 'thread-ledger'].includes(job.kind),
+  );
   const live = transcribing.filter((job) => ['queued', 'running'].includes(job.status));
   const failed = transcribing.filter((job) => job.status === 'failed').slice(0, 3);
   render(
@@ -293,7 +305,7 @@ async function recordingsPage(_arg, context) {
       ? h(
           'section',
           {},
-          h('h2', {}, 'Recording jobs'),
+          h('h2', {}, 'Recording and ledger jobs'),
           ...[...live, ...failed].map((job) => jobBox(job, context.signal)),
         )
       : null,
@@ -306,8 +318,10 @@ async function recordingsPage(_arg, context) {
         : h('p', { class: 'muted' }, 'No transcripts yet.'),
     ),
     tableLoreBox(lore),
+    looseThreadsBox(loose),
     readerBox,
     reviewBox,
+    ledgerBox,
   );
   drawFiles();
   if (S.review && transcripts.some((item) => item.id === S.review.id)) {

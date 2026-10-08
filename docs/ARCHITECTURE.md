@@ -27,55 +27,57 @@ flowchart LR
 
 ## Modules
 
-| File                                  | Responsibility                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `DM/server.py`                        | Local server startup, interrupted-job recovery and worker threads                   |
-| `DM/http_routes.py`                   | HTTP routes, request validation, response handling and static files                 |
-| `DM/campaign.py`                      | Where the active campaign's files live; inherited by job subprocesses (`DM_HOME`)   |
-| `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results         |
-| `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection  |
-| `DM/config.py`                        | Local settings, world manifest and Data directory detection                         |
-| `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                      |
-| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts         |
-| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review     |
-| `DM/foundry_compat.py`                | Shared build, version and package relationship rules                                |
-| `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                            |
-| `DM/foundry_solver.py`                | Compatible build and dependency selection                                           |
-| `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion        |
-| `DM/foundry_party.py`                 | Character level, classes, AC and HP from actors and their class items; party totals |
-| `DM/memory_import.py`                 | Bounded legacy, summary and Foundry lore parsing into reviewed import candidates    |
-| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world     |
-| `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                        |
-| `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes               |
-| `DM/records.py`                       | Per-record codex/thread paths, collections and bounded list views                   |
-| `DM/references.py`, `DM/map_trash.py` | Where-used links, unlinking and recoverable map trash                               |
-| `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore         |
-| `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser   |
-| `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply           |
-| `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply          |
-| `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply    |
-| `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                 |
-| `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory        |
-| `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration          |
-| `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                            |
-| `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                               |
-| `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                      |
-| `DM/transcription.py`                 | Local Whisper engines, recording checks, transcript bounds and the transcript shape |
-| `DM/tools/transcribe_worker.py`       | One local transcription in a child process; leaves segments for the server to store |
-| `DM/transcript_classifier.py`         | Transcript windows, the sorting prompt and schema, passage validation, GM review    |
-| `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge      |
-| `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                     |
-| `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                              |
-| `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                               |
-| `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                     |
-| `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                            |
-| `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                             |
-| `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                    |
-| `DM/app/recordings-page.js`           | Recordings page: choose a file, watch the job, read and remove transcripts          |
-| `DM/app/transcript-review.js`         | Sorting controls, the passage review list and the table-lore list                   |
-| `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                      |
-| `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation               |
-| `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                               |
+| File                                  | Responsibility                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------- |
+| `DM/server.py`                        | Local server startup, interrupted-job recovery and worker threads                     |
+| `DM/http_routes.py`                   | HTTP routes, request validation, response handling and static files                   |
+| `DM/campaign.py`                      | Where the active campaign's files live; inherited by job subprocesses (`DM_HOME`)     |
+| `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results           |
+| `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection    |
+| `DM/config.py`                        | Local settings, world manifest and Data directory detection                           |
+| `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                        |
+| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts           |
+| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review       |
+| `DM/foundry_compat.py`                | Shared build, version and package relationship rules                                  |
+| `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                              |
+| `DM/foundry_solver.py`                | Compatible build and dependency selection                                             |
+| `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion          |
+| `DM/foundry_party.py`                 | Character level, classes, AC and HP from actors and their class items; party totals   |
+| `DM/memory_import.py`                 | Bounded legacy, summary and Foundry lore parsing into reviewed import candidates      |
+| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world       |
+| `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                          |
+| `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes                 |
+| `DM/records.py`                       | Per-record codex/thread paths, collections and bounded list views                     |
+| `DM/references.py`, `DM/map_trash.py` | Where-used links, unlinking and recoverable map trash                                 |
+| `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore           |
+| `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser     |
+| `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply             |
+| `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply            |
+| `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply      |
+| `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
+| `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
+| `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration            |
+| `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                              |
+| `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                                 |
+| `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                        |
+| `DM/transcription.py`                 | Local Whisper engines, recording checks, transcript bounds and the transcript shape   |
+| `DM/tools/transcribe_worker.py`       | One local transcription in a child process; leaves segments for the server to store   |
+| `DM/transcript_classifier.py`         | Transcript windows, the sorting prompt and schema, passage validation, GM review      |
+| `DM/thread_ledger.py`                 | Confirmed-play windows, quoted evidence validation, reviewed changes and loose report |
+| `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge        |
+| `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                       |
+| `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                                |
+| `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                                 |
+| `DM/app/thread-ledger.js`             | Transcript ledger review and unresolved-thread report                                 |
+| `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                       |
+| `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                              |
+| `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                               |
+| `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                      |
+| `DM/app/recordings-page.js`           | Recordings page: choose a file, watch the job, read and remove transcripts            |
+| `DM/app/transcript-review.js`         | Sorting controls, the passage review list and the table-lore list                     |
+| `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                        |
+| `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation                 |
+| `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                                 |
 
 `http_routes.ROUTES` maps methods and paths to focused handlers. The dispatcher converts typed
 `Invalid`, `NotFound` and `Conflict` errors into JSON responses with 400, 404 and 409 statuses. Domain
@@ -159,6 +161,7 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 | `data/art.json`              | `art`         | art items                                                            |
 | `data/world-maps.json`       | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
 | `data/transcripts/<id>.json` | `transcript`  | segments, and the passages sorted from them (`transcript_passage`)   |
+| `data/ledger/<id>.json`      | `ledger`      | reviewed evidence events for one transcript (`ledger_event`)         |
 | `data/table-lore.json`       | `table_lore`  | notes on gags the GM confirmed as banter (`table_lore_item`)         |
 | `data/prep/<session>.json`   | `prep`        | scenes with thread clues, handouts, checklist items, loot            |
 | `maps/<slug>/key.json`       | `map_key`     | areas (with journal entries, events, loot), events                   |
@@ -166,7 +169,7 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts and schema 11 adds their passages, sorting progress and the table-lore list. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, and schema 12 adds separate thread ledgers. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -250,8 +253,9 @@ Old `/api/claude` calls use the selected structured request runner. The OpenAI p
 it has not been exercised with a paid API call.
 
 The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
-recordings are transcribed locally (W68) and sorted into play and banter (W69); the thread ledger and
-what follows are W70–W73 in `docs/ROADMAP.md`. The OpenAI provider is optional.
+recordings are transcribed locally (W68), sorted into play and banter (W69), then proposed as a reviewed
+thread ledger (W70). Arc options and automatic runs remain W71–W73 in `docs/ROADMAP.md`. The OpenAI provider
+is optional.
 
 ## Session recordings
 
@@ -306,6 +310,29 @@ transcript, in the same commit. Known-lore passages sit outside the pending coun
 one in-game. The step's only output is `confirmed_play(transcript)`: passages the GM confirmed as in-game,
 with their segments and times. Banter, unclear and unconfirmed passages never leave it, whatever a model
 proposed. `table-lore` and transcripts are application-owned documents the generic document save refuses.
+
+### Confirmed-play thread ledger
+
+`POST /api/transcripts/<id>/ledger/start` requires completed sorting, no pending decisions, at least one
+confirmed in-game passage and an existing linked prep. `POST /api/transcripts/<id>/ledger/session {session}`
+can link a transcript to a prep without transcribing it again. The server reads only
+`transcript_classifier.confirmed_play`, divides its segments into windows within the context budget, and
+queues each `thread-ledger` draft on the normal structured provider lane. Each window returns thread,
+codex-note or session-outcome events. `thread_ledger.validate_batch` requires a passage ID and an exact,
+bounded quote inside that window's confirmed play; it derives the timestamp from the segment rather than
+accepting one from the model. Banter, unclear and unconfirmed passages cannot validate as evidence. The
+prompt treats all transcript and campaign text as reference data, with no provider tools.
+
+One `ledger/<transcript-id>` document (`shapes.LEDGER`, schema 12) holds staged events, a confirmed-play
+fingerprint, window cursor and target revisions. A failed or cancelled window keeps earlier validated
+events and resumes at the cursor. `GET /api/transcripts/<id>/ledger` presents the draft without internal
+revision data. `POST /api/transcripts/<id>/ledger/apply {selected}` accepts only IDs in that draft, checks
+the transcript fingerprint and selected target revisions, then writes only selected per-record threads and
+codex notes, prep log outcomes, and the applied ledger marker through `commit_docs` with the marker last.
+A retried apply returns the applied marker without appending again. Existing custom fields remain. Quotes
+and times stay in the ledger and in the edited record text. `GET /api/threads/loose?hero=` returns open,
+planned and foreshadowed threads sorted by last touched session, with hero links and the selected ledger
+evidence. No event changes the campaign until the GM applies it.
 
 ## Foundry boundary
 

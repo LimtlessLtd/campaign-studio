@@ -118,9 +118,16 @@ and asks; a long session is read in windows, and a window that fails can be cont
 in the review list you confirm each passage (or the proposed ones on a page at once), and nothing counts as
 in-game until you do. Confirming banter with a short note, such as an invented running joke, saves it as
 **table lore**; later runs show those notes to Claude and set matching passages aside. Removing a note, or
-undoing the banter that saved it, unlinks the passages that matched it. Finding loose threads in confirmed
-play is the next step (W70 in the [roadmap](docs/ROADMAP.md)). Tests fake Claude on a synthetic session; how
+undoing the banter that saved it, unlinks the passages that matched it. Tests fake Claude on a synthetic session; how
 well real Claude separates banter from play has not been checked yet.
+
+**Thread ledger** on a sorted transcript asks Claude to propose changes from only the play you confirmed.
+Each thread, codex note and session outcome cites an exact quote and its time. Link the transcript to a
+session prep first, then review the proposed items and check those you want to apply. The selected changes
+save together; an existing record changed since drafting asks you to redraft. The Recordings page lists
+unresolved threads, stalest first, with their heroes and latest quoted evidence. A long transcript is read
+in bounded windows; a failed window can resume. Tests use a fake Claude answer and synthetic play; no live
+Claude or long recording has been checked for this step.
 
 From a session prep, **Plan whole session** turns one pitch into a reviewable proposal for a recap, goals,
 three to six scenes, cast, thread changes, handouts, loot and a checklist. Choose the session length, combat

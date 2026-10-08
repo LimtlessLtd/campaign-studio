@@ -209,6 +209,30 @@ TABLE_LORE_ITEM = Shape(
 )
 TABLE_LORE = Shape('table_lore', [], dict(items=[]), {'items': TABLE_LORE_ITEM})
 
+# A ledger draft is separate from a transcript: classification can be reviewed without
+# accidentally applying campaign changes. Evidence stays with the accepted proposal.
+LEDGER_EVENT = Shape(
+    'ledger_event',
+    ['id'],
+    dict(kind='', target='', title='', status='', text='', pcs=[], passage='', quote='', at=0),
+)
+LEDGER = Shape(
+    'ledger',
+    ['id'],
+    dict(
+        session='',
+        source='',
+        status='',
+        cursor=0,
+        job='',
+        error='',
+        events=[],
+        selected=[],
+        applied=0,
+    ),
+    {'events': LEDGER_EVENT},
+)
+
 WORLD_PIN = Shape('world_pin', ['id'], dict(label='', map='', x=0.5, y=0.5, note=''))
 WORLD_MAP = Shape('world_map', ['id', 'name'], dict(image='', pins=[]), {'pins': WORLD_PIN})
 WORLD_MAPS = Shape('world_maps', [], dict(maps=[]), {'maps': WORLD_MAP})
@@ -240,6 +264,8 @@ SHAPES = {
         TRANSCRIPT,
         TABLE_LORE_ITEM,
         TABLE_LORE,
+        LEDGER_EVENT,
+        LEDGER,
     )
 }
 
