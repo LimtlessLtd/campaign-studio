@@ -112,7 +112,8 @@ async function studioDashboard(_arg, context) {
   const codex = (await context.doc('codex', { entries: [] })).entries;
   const threads = (await context.doc('threads', { threads: [] })).threads;
   const art = (await context.doc('art', { items: [] })).items;
-  const next = S.state.prep.at(-1);
+  const archived = S.state.prep_archived || [];
+  const next = S.state.prep.filter((n) => !archived.includes(n)).at(-1);
   render(
     context.view,
     pageHead(

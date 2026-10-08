@@ -351,9 +351,18 @@ class Handler(SimpleHTTPRequestHandler):
                 if os.path.exists(notes)
                 else '',
                 prep=list_docs('prep'),
+                prep_archived=self._archived_preps(),
                 interrupted_changes=JOURNAL.conflicts(),
             )
         )
+
+    def _archived_preps(self):
+        out = []
+        for name in list_docs('prep'):
+            doc = read_json(doc_path('prep/' + name), {})
+            if isinstance(doc, dict) and doc.get('archived') is True:
+                out.append(name)
+        return out
 
     def _get_shapes(self, path, query, p):
         return self.send_json(shapes.describe())

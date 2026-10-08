@@ -172,6 +172,17 @@ class RouteTests(unittest.TestCase):
             self.request('/api/state')
         self.assertEqual(sys.path, before)
 
+    def test_state_lists_archived_preps_and_old_preps_default_to_active(self):
+        for name, archived in (('s1', True), ('s2', False), ('s3', None)):
+            doc = {'n': int(name[1:]), 'title': name} | (
+                {} if archived is None else {'archived': archived}
+            )
+            status, _, _ = self.request('/api/doc/prep/' + name, 'PUT', doc)
+            self.assertEqual(status, 200)
+        _, state, _ = self.request('/api/state')
+        self.assertEqual(state['prep'], ['s1', 's2', 's3'])
+        self.assertEqual(state['prep_archived'], ['s1'])
+
     def test_cancel_route_distinguishes_bad_missing_and_finished_jobs(self):
         status, _, _ = self.request('/api/jobs/NOT-HEX/cancel', 'POST')
         self.assertEqual(status, 400)

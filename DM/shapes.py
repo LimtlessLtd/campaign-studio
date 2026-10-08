@@ -135,6 +135,7 @@ PREP = Shape(
     dict(
         date='',
         status='planning',
+        archived=False,
         recap='',
         goals=[],
         threads=[],
