@@ -128,6 +128,7 @@ ROUTES = {
         (lambda path: path == '/api/foundry/library/live-import', '_post_live_library'),
         (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
         (lambda path: path == '/api/foundry/world/import', '_post_import_world'),
+        (lambda path: path == '/api/foundry/world/remove', '_post_remove_world'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
         (lambda path: path == '/api/foundry/backup/verify', '_post_backup_verify'),
         (lambda path: path == '/api/foundry/backup/rehearse', '_post_backup_rehearse'),
@@ -834,6 +835,34 @@ class Handler(SimpleHTTPRequestHandler):
             raise Invalid('Choose folders as a list of names.')
         snapshot = foundry_library.read_world(world)
         return self._save_foundry_import(snapshot, world, folders)
+
+    def _post_remove_world(self, path, query, p):
+        """Forget an imported world: its codex entries (unlinked everywhere) and its library snapshot.
+
+        Only Studio's records change. The Foundry world folder is never opened for writing.
+        """
+        key = (p or {}).get('world_key')
+        if not isinstance(key, str) or not key:
+            raise Invalid('Say which imported world to remove.')
+        with LOCK:
+            docs = self._reference_docs()
+            ids = [
+                entry['id']
+                for entry in docs.get('codex', {}).get('entries', [])
+                if isinstance(entry.get('foundry'), dict)
+                and entry['foundry'].get('world_key') == key
+            ]
+            snapshot = read_json(doc_path('foundry-library'), {})
+            world = snapshot.get('world') if isinstance(snapshot, dict) else None
+            has_snapshot = isinstance(world, dict) and foundry_library.world_key(world) == key
+            if not ids and not has_snapshot:
+                raise NotFound('No imported data for that world.')
+            changed = references.remove_many(docs, ids)
+            changes = [(name, docs[name]) for name in changed]
+            if has_snapshot:
+                changes.append(('foundry-library', None))
+            commit_docs('Remove imported Foundry world', changes)
+            return self.send_json({'ok': True, 'removed': len(ids), 'snapshot': has_snapshot})
 
     def _save_foundry_import(self, snapshot, world, folders=None):
         media = foundry_library.assets(world, '', 0, 1)

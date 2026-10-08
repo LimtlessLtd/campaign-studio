@@ -153,8 +153,10 @@ def delete_record(kind, ident):
 
 
 def delete_record_document(name):
-    if not name.startswith(('codex/', 'threads/')):
-        raise ValueError('Only record documents can be deleted through a change.')
+    if name != 'foundry-library' and not name.startswith(('codex/', 'threads/')):
+        raise ValueError(
+            'Only records and the World Library snapshot can be deleted through a change.'
+        )
     path = doc_path(name)
     if os.path.islink(os.path.dirname(path)) or os.path.islink(path):
         raise ValueError('Unsafe record path.')
