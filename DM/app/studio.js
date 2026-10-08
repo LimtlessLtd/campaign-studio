@@ -253,6 +253,14 @@ function folderPicker(folders, getPicked, setPicked) {
 }
 
 /* A library entry's identity for highlighting: Foundry id, else media path, else folder and name. */
+function partyLine(stats) {
+  if (!stats || !stats.level) return null;
+  const classes = stats.classes.map((c) => c.name + ' ' + c.levels).join(', ');
+  const facts = ['Level ' + stats.level, classes];
+  if (stats.ac != null) facts.push('AC ' + stats.ac);
+  if (stats.hp != null) facts.push('HP ' + stats.hp);
+  return h('p', { class: 'muted' }, facts.filter(Boolean).join(' · '));
+}
 function entryKey(item) {
   return String(item.id ?? item.path ?? (item.folder || '') + '/' + item.name);
 }
@@ -358,6 +366,7 @@ async function studioLibrary(_arg, context) {
         ? h('p', { class: 'muted' }, 'Folder: ' + (item.folder_path || item.folder))
         : null,
       item.type && kind !== 'assets' ? badge(item.type) : null,
+      partyLine(item.stats),
       image,
       item.summary ? h('p', { class: 'library-text' }, item.summary) : null,
       ...(item.pages || []).map((page) =>

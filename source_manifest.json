@@ -42,6 +42,7 @@
   "DM/foundry_compat.py",
   "DM/foundry_leveldb.py",
   "DM/foundry_library.py",
+  "DM/foundry_party.py",
   "DM/foundry_solver.py",
   "DM/foundry_upgrade.py",
   "DM/forge/README.md",
