@@ -36,6 +36,7 @@ async function studioMaps(arg, context) {
   let q = S.mapSearch || '',
     filter = S.mapFilter || 'all';
   const pending = await context.api('/api/maps/pending');
+  const trashed = (await context.api('/api/maps/trash')).items;
   const cards = h('div', { class: 'grid maps' });
   const draw = () => {
     S.mapSearch = q;
@@ -143,8 +144,64 @@ async function studioMaps(arg, context) {
         )
       : null,
     cards,
+    trashSection(trashed, context),
   );
   draw();
+}
+
+function trashSection(items, context) {
+  if (!items.length) return null;
+  const refresh = (changed = []) => {
+    for (const name of ['maps/index', ...changed]) {
+      delete S.docs[name];
+      delete S.base[name];
+      delete S.revs[name];
+    }
+    route(true);
+  };
+  return h(
+    'details',
+    { class: 'map-trash' },
+    h('summary', {}, `Trash (${items.length})`),
+    h(
+      'ul',
+      {},
+      items.map((t) =>
+        h(
+          'li',
+          { class: 'row' },
+          h('span', {}, t.name),
+          h('span', { class: 'muted' }, t.trashed || ''),
+          h(
+            'button',
+            {
+              onclick: () =>
+                attempt(async () => {
+                  const { changed } = await post(`/api/maps/trash/${t.id}/restore`, {});
+                  toast(t.name + ' restored. Scene links to it are back.');
+                  refresh(changed);
+                }),
+            },
+            'Restore',
+          ),
+          h(
+            'button',
+            {
+              class: 'danger',
+              onclick: () =>
+                attempt(async () => {
+                  if (!confirm(`Delete ${t.name} for good? This cannot be undone.`)) return;
+                  await post(`/api/maps/trash/${t.id}/discard`, {});
+                  toast(t.name + ' deleted for good.');
+                  refresh();
+                }),
+            },
+            'Delete for good',
+          ),
+        ),
+      ),
+    ),
+  );
 }
 function freshBrief() {
   return {
@@ -1506,6 +1563,31 @@ async function mapStudio(slugArg, context) {
         { class: 'row' },
         h('a', { class: 'btn', href: fileUrl(m.scene), download: '' }, 'Scene JSON'),
         h('a', { class: 'btn', href: fileUrl(m.image), download: '' }, 'Map image'),
+      ),
+      h(
+        'button',
+        {
+          class: 'danger',
+          onclick: () =>
+            attempt(async () => {
+              if (
+                !confirm(
+                  `Move ${m.name} to the trash? Scenes and requests that name it stop pointing at it; you can restore it from the Maps page.`,
+                )
+              )
+                return;
+              await flushAll();
+              const { changed } = await post('/api/maps/' + slugArg + '/delete', {});
+              for (const name of ['maps/index', ...changed]) {
+                delete S.docs[name];
+                delete S.base[name];
+                delete S.revs[name];
+              }
+              toast(m.name + ' moved to the trash.');
+              go('#/maps');
+            }),
+        },
+        'Move map to trash',
       ),
       h(
         'p',

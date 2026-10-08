@@ -144,6 +144,10 @@ ROUTES = {
             lambda path: path.startswith('/api/maps/trash/') and path.endswith('/restore'),
             '_post_map_untrash',
         ),
+        (
+            lambda path: path.startswith('/api/maps/trash/') and path.endswith('/discard'),
+            '_post_map_discard',
+        ),
         (lambda path: path.startswith('/api/maps/'), '_post_map'),
         (lambda path: path.startswith('/api/workflow/'), '_post_workflow'),
         (lambda path: path == '/api/generate', '_post_generate'),
@@ -981,7 +985,18 @@ class Handler(SimpleHTTPRequestHandler):
                 + ([('mapbrief/' + slug, meta['brief'])] if meta.get('brief') else []),
             )
             map_trash.discard(here, trash_id)
-            return self.send_json({'ok': True, 'slug': slug})
+            return self.send_json({'ok': True, 'slug': slug, 'changed': changed})
+
+    def _post_map_discard(self, path, query, p):
+        trash_id = path[len('/api/maps/trash/') : -len('/discard')]
+        here = campaign.active()
+        with LOCK:
+            try:
+                map_trash.read(here, trash_id)
+            except (KeyError, ValueError):
+                raise NotFound('Nothing in the trash with that id.') from None
+            map_trash.discard(here, trash_id)
+            return self.send_json({'ok': True})
 
     def _map_brief(self, slug):
         brief = read_json(doc_path('mapbrief/' + slug), {})
