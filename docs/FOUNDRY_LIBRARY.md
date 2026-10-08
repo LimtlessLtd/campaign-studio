@@ -12,8 +12,8 @@ would miss shared media. See [Foundry User Data](https://foundryvtt.com/article/
 
 ## Reading documents from the world folder
 
-Foundry scenes, journals, actors and items live in the world's own database files. Opening the World
-Library reads them straight from `Data/worlds/<world>/data`, with no macro. Foundry 11 and later keep each
+Foundry scenes, journals, actors and items live in the world's own database files. **Read again now** in the
+World Library reads them straight from `Data/worlds/<world>/data`, with no macro. Foundry 11 and later keep each
 collection in a LevelDB folder, which Studio reads with its own standard-library reader
 (`DM/foundry_leveldb.py`). It follows LevelDB's `CURRENT` and `MANIFEST` files to read only active tables
 and logs; files retired by compaction are ignored even if they are still on disk. Foundry 10 and earlier
@@ -21,9 +21,10 @@ keep one JSON document per line in `<collection>.db`,
 which is also supported. The reader only opens files for reading: it does not open the database, take
 Foundry's lock or write anything, so it cannot corrupt the world.
 
-The page reads when no documents have been read yet, and again when the files have changed since the last
-read (Studio compares a fingerprint of the database and manifest file names, sizes and modification times). **Read again now**
-forces a re-read. A read takes a few seconds for a large world; one with hundreds of actors and over a
+The page refreshes a saved folder snapshot when the files have changed since the last read (Studio compares
+a fingerprint of the database and manifest file names, sizes and modification times). When no snapshot is
+saved, it waits for **Read again now** or **Import world into Studio**; this keeps a removed snapshot gone
+until the GM chooses to read it again. A read takes a few seconds for a large world; one with hundreds of actors and over a
 thousand items took about two seconds on a development machine. Foundry writes changes to disk as you play, so a change made a
 moment ago may not appear until you reopen the page. This has been tested against a real v12 world while
 Foundry was closed, and against synthetic LevelDB and v10-style fixtures; reading while Foundry is running
@@ -42,7 +43,8 @@ A later import refreshes an entry only while it still holds those values, so any
 kept and counted as kept. Foundry IDs can be reused in another world; importing that world creates separate
 entries. Entries imported by the earlier unscoped importer are preserved and may appear a second time on the
 first reimport because their source world cannot be established safely. Journals stay browsable in the World
-Library. Media is not copied: the result reports how many files can be browsed. Supported local image paths
+Library. To bring chosen journal folders into the codex as GM lore reference, use **Import memory** and review
+each proposed entry first. Media is not copied: the result reports how many files can be browsed. Supported local image paths
 on codex entries display through the read-only Foundry asset route while their world is selected; remote,
 missing and unsupported images are left blank. Foundry's files are only read. If the folder cannot be read,
 first-run setup shows the error and the page offers the macro. The result also reports documents omitted by

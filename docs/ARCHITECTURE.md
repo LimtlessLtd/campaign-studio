@@ -40,6 +40,7 @@ flowchart LR
 | `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |
 | `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion       |
+| `DM/memory_import.py`                 | Bounded legacy, summary and Foundry lore parsing into reviewed import candidates   |
 | `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world    |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
@@ -109,6 +110,12 @@ snapshot and codex changes together. Codex provenance uses an opaque source-worl
 Foundry document UUID; an identical document ID in another world cannot update it. The browser loads
 supported local images through the read-only Foundry asset route only while that world is selected. Macro
 snapshots use the same conversion and commit path as direct folder reads.
+
+Memory import previews older Studio collections, session-summary JSON/Markdown or selected journal folders
+from the current World Library snapshot. Each candidate has a stable source-derived key and a fingerprint of
+the proposed content. Apply rereads the source, rejects a changed fingerprint, maps links among chosen
+records, and journals all additions and log fills through `commit_docs`. It never overwrites an existing
+record or nonempty log, reads source files within size/count limits, and treats their text as reference data.
 The live GM bridge also uses that path. Its browser messages require the paired opener and exact origin;
 the Studio user explicitly approves the offered world, and the server validates it again. The Foundry
 macro checks GM/read permission before sending bounded summaries. The existing importer updates an entry

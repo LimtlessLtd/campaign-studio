@@ -23,6 +23,7 @@ function initStudio() {
       [
         ['', 'home', 'Overview'],
         ['library', 'book', 'World Library'],
+        ['memory', 'folder', 'Import memory'],
         ['maps', 'map', 'Maps & locations'],
         ['prep', 'book', 'Session prep'],
         ['codex', 'people', 'Campaign codex'],

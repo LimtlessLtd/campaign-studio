@@ -92,6 +92,15 @@ General Requests use the same draft, review and apply pattern for codex entries,
 Link a session before requesting encounters or handouts. Applied requests keep their stable IDs; use a new
 follow-up request for more additions. Existing map requests open the map studio.
 
+**Import memory** brings older campaign records into the current project. Point it at a previous Studio or
+DM-screen folder containing `DM/data` (or `data`), a JSON/Markdown session-summary file or folder, or choose
+folders of journals from the connected Foundry World Library. Preview the text, tick the candidates to keep,
+then apply. Imported codex entries and threads get stable IDs; existing entries and nonempty session logs are
+never overwritten, and repeating an import adds nothing twice. Session summaries fill the log of a matching
+prep or create one. Foundry journal text stays GM reference material in lore entries. Source files and the
+Foundry world are read only; images and other media are not copied. If a source changes after preview, Studio
+asks you to review it again. A source is limited to 5,000 files and 40 MB for one preview.
+
 Image briefs are queued with their content. Upload artwork, or configure a local HTTP / remote HTTPS
 image endpoint. The request contract is `{model, prompt, size, n: 1}`; the response must include
 `data[0].b64_json`. Use an environment variable for the API key; settings store its name only.

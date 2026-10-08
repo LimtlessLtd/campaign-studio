@@ -14,8 +14,9 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Campaign memory and AI context** (W24, W30, W31). W23 now bounds drafts and prompt packs, and the world import
-   takes chosen folders; they still have no past session logs. Every
+1. **Campaign memory and AI context** (W24, W30). W23 now bounds drafts and prompt packs, and the world import
+   takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
+   a reviewed memory import; session recaps still need W32. Every
    AI feature depends on improving this context.
 2. **Session workflow** (W32–W37). Studio prepares maps and single records well. Nothing turns a pitch into
    a session, or a played session back into threads.
@@ -88,14 +89,11 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W30, W31 Campaign memory
+### W30 Campaign memory
 
 - A **session log** records what happened: date, players' summary, GM notes, outcomes, threads touched,
   entities that appeared, loot awarded. Keep it with the session's prep so one session stays one document.
   It is a shape change with a migration.
-- W31 imports what a GM already has: a legacy DM-screen or Studio campaign folder (the schema-0 migration
-  already reads their JSON), session summaries as JSON or one Markdown file per session, and chosen Foundry
-  journal folders marked as lore. Each import arrives as a reviewed proposal, and its text is reference data.
 
 ### W68 Session recordings
 

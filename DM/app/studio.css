@@ -23,6 +23,16 @@ body {
   line-height: 1.55;
   background: radial-gradient(ellipse at 70% 0, #1a241e55, transparent 60%), var(--bg);
 }
+.memory-candidate {
+  margin: 12px 0;
+}
+.memory-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 280px;
+  overflow: auto;
+  margin-bottom: 0;
+}
 #side {
   padding: 28px 18px 18px;
   gap: 0;

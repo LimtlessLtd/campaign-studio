@@ -15,7 +15,6 @@ Next ID: W69
 | ID  | Priority | Work                                                                                                                 | Acceptance criteria                                                                |
 | --- | -------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | W30 | 2        | Session log, remainder: recaps read the newest logs                                                                  | Shape, migration and browser flow; recent logs appear in the context               |
-| W31 | 2        | Import existing campaign memory: legacy folders, session summaries and Foundry lore journals                         | Synthetic legacy folder and summaries import as reviewed proposals                 |
 | W32 | 2        | Plan the next session: a pitch in; linked scenes, cast, maps, handouts and thread changes out                        | One paragraph yields a fully linked prep; reapplying adds nothing twice            |
 | W33 | 2        | Review every proposal item by item: accept, edit, reject or redraft one item, with diffs                             | A partly accepted proposal writes only the accepted items                          |
 | W34 | 2        | Threads link to entries, maps, locations and sessions, with clues, staleness and backlinks                           | Threads sort by staleness; each NPC lists its threads and sessions                 |

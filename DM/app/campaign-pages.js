@@ -10,6 +10,7 @@ const TYPES = {
   faction: 'Factions',
   item: 'Items',
   monster: 'Monsters',
+  lore: 'Lore',
 };
 const KINDS = {
   'battle map': 'Battle map',
