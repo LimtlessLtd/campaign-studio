@@ -252,7 +252,6 @@ function folderPicker(folders, getPicked, setPicked) {
   );
 }
 
-/* A library entry's identity for highlighting: Foundry id, else media path, else folder and name. */
 function partyLine(stats) {
   if (!stats || !stats.level) return null;
   const classes = stats.classes.map((c) => c.name + ' ' + c.levels).join(', ');
@@ -261,6 +260,7 @@ function partyLine(stats) {
   if (stats.hp != null) facts.push('HP ' + stats.hp);
   return h('p', { class: 'muted' }, facts.filter(Boolean).join(' · '));
 }
+/* A library entry's identity for highlighting: Foundry id, else media path, else folder and name. */
 function entryKey(item) {
   return String(item.id ?? item.path ?? (item.folder || '') + '/' + item.name);
 }
