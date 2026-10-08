@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Plan: session recordings to next session (W68–W73):** the roadmap and backlog now cover local Whisper transcription, banter-versus-play classification, a thread ledger with evidence, arc and resolution proposals, an automatic between-sessions run and a Codex provider check, all subscription-only. Docs only; the old W68 row is replaced and W37's encounter-budget remainder is parked.
+- **Review #80:** audited the party-in-drafts change; no issues.
 - **Party in AI drafts (W37, second slice):** once a world is imported, every general, session and map draft prompt carries `campaign.party` (members, size, average level) and asks for encounters sized to it; maps made by Session Forge take the party's rounded average level as their brief's party level (5 when no party is known). Budget checks against the party remain on W37.
 - **Session Forge (W32):** a prep's "Plan whole session" action takes a pitch, length, combat/social mix and selected threads. A bounded structured proposal contains a recap, three to six linked scenes, up to two new map briefs, cast, handouts, thread changes, loot and a checklist. The GM reviews the whole draft before one recoverable apply; IDs and an apply marker prevent duplicates. New maps wait as linked layout workflows and art waits in the image queue. Schema 9 fills new prep, scene and handout fields after a verified backup. Synthetic apply, crash recovery, browser and map workflow checks pass; no paid AI or live Foundry call was made.
 - **Memory import relay fix (#75):** malformed legacy record types and session IDs now produce sanitised candidates or a clear validation error instead of a server error.

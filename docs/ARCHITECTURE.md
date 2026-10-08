@@ -239,6 +239,9 @@ same validation, GM review, cancellation and retry flow. Exported prompt packs p
 Old `/api/claude` calls use the selected structured request runner. The OpenAI path has synthetic tests;
 it has not been exercised with a paid API call.
 
+The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
+recordings are transcribed locally (planned, W68–W73 in `docs/ROADMAP.md`). The OpenAI provider is optional.
+
 ## Foundry boundary
 
 The world picker reads `world.json` for identity and system information. The World Library reads selected
