@@ -31,6 +31,7 @@ import http_routes
 import workflow
 import request_workflow
 import revisions
+import records
 import schema
 import shapes
 import maps_io
@@ -43,6 +44,18 @@ class Crash(BaseException):
 
 
 class StudioIntegration(unittest.TestCase):
+    def stored(self, name):
+        if name in records.FIELDS:
+            return records.collection(campaign.active().data, name)
+        return campaign_core.read_json(campaign_core.doc_path(name))
+
+    def seed(self, name, value):
+        if name in records.FIELDS:
+            if value[records.FIELDS[name]]:
+                campaign_core.commit_docs('Synthetic fixture', [(name, value)])
+        else:
+            campaign_core.write_doc(name, value)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='campaign-studio-test-')
         self.root = Path(self.temp.name)
@@ -139,6 +152,9 @@ class StudioIntegration(unittest.TestCase):
         for path, shape in schema.shaped_documents(str(self.dm / 'data'), str(self.dm / 'maps')):
             if os.path.isfile(path):
                 self.assertEqual(shape.problems(campaign_core.read_json(path)), [], path)
+        for kind, shape in (('codex', shapes.CODEX_ENTRY), ('threads', shapes.THREAD)):
+            for record in records.all_records(campaign.active().data, kind):
+                self.assertEqual(shape.problems(record), [], record['id'])
 
     def proposal(self):
         return {
@@ -222,7 +238,7 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(len(key['areas'][0]['journal']), 2)
         self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 4)
         self.assertEqual(
-            campaign_core.read_json(campaign_core.doc_path('threads'))['threads'][0]['status'],
+            self.stored('threads')['threads'][0]['status'],
             'foreshadowed',
         )
         self.request('/api/workflow/' + wf['id'] + '/apply', {}, expected=400)
@@ -241,9 +257,7 @@ class StudioIntegration(unittest.TestCase):
             campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))['areas'][0]['name'],
             'Landing',
         )
-        self.assertEqual(
-            len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 2
-        )
+        self.assertEqual(len(self.stored('codex')['entries']), 2)
 
     def test_big_map_is_stocked_in_batches_with_one_retry(self):
         slug, brief = self.import_map()
@@ -359,8 +373,8 @@ class StudioIntegration(unittest.TestCase):
 
                 self.assertEqual(len(report['completed']), 1)
                 self.assertEqual(workflow.get(value['id'])['status'], 'applied')
-                codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
-                threads = campaign_core.read_json(campaign_core.doc_path('threads'))['threads']
+                codex = self.stored('codex')['entries']
+                threads = self.stored('threads')['threads']
                 art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
                 mine = lambda rows: [r for r in rows if r.get('workflow') == value['id']]
                 self.assertEqual(len(mine(codex)), 2)
@@ -380,21 +394,23 @@ class StudioIntegration(unittest.TestCase):
     def test_next_change_completes_an_interrupted_one_first(self):
         slug, brief = self.import_map()
         value = workflow.stage(workflow.create(slug, brief), self.proposal())
-        codex_rev = campaign_core.rev_of(campaign_core.doc_path('codex'))
+        entry_id = value['id'] + '-watcher'
+        entry_name = records.document_name('codex', entry_id)
+        codex_rev = campaign_core.rev_of(campaign_core.doc_path(entry_name))
         with self.crash_after(0), self.assertRaises(Crash):
             workflow.apply_content(value, campaign_core.commit_docs)
-        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
-        # A browser tab holding the old codex revision must merge the completed change.
+        self.assertFalse(os.path.isfile(campaign_core.doc_path(entry_name)))
+        # A browser tab holding the old record revision must merge the completed change.
         conflict = urllib.request.Request(
-            self.url + '/api/doc/codex',
-            data=json.dumps({'entries': []}).encode(),
+            self.url + '/api/records/codex/item?id=' + entry_id,
+            data=json.dumps(shapes.CODEX_ENTRY.new(id=entry_id, type='npc', name='Stale')).encode(),
             headers={'Content-Type': 'application/json', 'X-DM-Site': '1', 'X-Rev': codex_rev},
             method='PUT',
         )
         with self.assertRaises(urllib.error.HTTPError) as stale:
             urllib.request.urlopen(conflict)
         self.assertEqual(stale.exception.code, 409)
-        self.assertEqual(len(json.loads(stale.exception.read())['doc']['entries']), 2)
+        self.assertEqual(json.loads(stale.exception.read())['doc']['name'], 'The Watcher')
         self.assertEqual(workflow.get(value['id'])['status'], 'applied')
         self.request('/api/workflow/' + value['id'] + '/apply', {}, expected=400)
 
@@ -403,28 +419,34 @@ class StudioIntegration(unittest.TestCase):
         value = workflow.stage(workflow.create(slug, brief), self.proposal())
         with self.crash_after(1), self.assertRaises(Crash):
             workflow.apply_content(value, campaign_core.commit_docs)
-        # Someone edits a pending document while the server is stopped.
-        campaign_core.write_doc('threads', {'threads': [{'id': 'hand-edited'}]})
+        # Someone edits a pending record while the server is stopped.
+        pending_id = value['id'] + '-key'
+        campaign_core.write_doc(
+            records.document_name('codex', pending_id),
+            shapes.CODEX_ENTRY.new(id=pending_id, type='item', name='Hand edit'),
+        )
 
         report = campaign_core.recover_commits()
 
         self.assertEqual(report['completed'], [])
         self.assertEqual(
-            campaign_core.read_json(campaign_core.doc_path('threads')),
-            {'threads': [{'id': 'hand-edited'}]},
+            records.read(campaign.active().data, 'codex', pending_id)['name'],
+            'Hand edit',
         )
         self.assertEqual(workflow.get(value['id'])['status'], 'review')
         changes = self.request('/api/state')['interrupted_changes']
         self.assertEqual(changes[0]['id'], report['conflicts'][0]['id'])
         states = {t['name']: t['state'] for t in changes[0]['targets']}
-        self.assertEqual(states['codex'], 'written')
-        self.assertEqual(states['threads'], 'changed')
+        self.assertEqual(
+            states[records.document_name('codex', value['id'] + '-watcher')], 'written'
+        )
+        self.assertEqual(states[records.document_name('codex', pending_id)], 'changed')
         self.assertEqual(states['workflows/' + value['id']], 'pending')
         dismissed = self.request('/api/commits/' + changes[0]['id'] + '/dismiss', {})
         self.assertEqual(dismissed['interrupted_changes'], [])
         # The proposal is still awaiting review, and reapplying it does not duplicate the codex.
         self.request('/api/workflow/' + value['id'] + '/apply', {})
-        codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+        codex = self.stored('codex')['entries']
         self.assertEqual(len(codex), 2)
 
     def test_recovered_layout_still_queues_its_render(self):
@@ -486,7 +508,7 @@ class StudioIntegration(unittest.TestCase):
 
     def test_generated_image_links_its_codex_entry_and_location(self):
         slug, _ = self.import_map()
-        campaign_core.write_doc('codex', {'entries': [{'id': 'npc-one', 'image': ''}]})
+        self.seed('codex', {'entries': [{'id': 'npc-one', 'image': ''}]})
         campaign_core.write_doc(
             'art',
             {
@@ -503,7 +525,7 @@ class StudioIntegration(unittest.TestCase):
         art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
         self.assertEqual((art[0]['status'], art[0]['image']), ('ready', 'one.png'))
         self.assertEqual((art[1]['status'], failed['status']), ('failed', 'failed'))
-        codex = campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
+        codex = self.stored('codex')['entries']
         self.assertEqual(codex[0]['image'], 'one.png')
         key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
         self.assertEqual(key['areas'][0]['images'], ['one.png'])
@@ -595,16 +617,14 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(saved['handouts'][0]['player_text'], 'Report to the harbour gate.')
         self.assertEqual(saved['notes'], 'Existing notes.\n\nThe rival captain is nearby.')
         self.assertEqual(len(campaign_core.read_json(campaign_core.doc_path('art'))['items']), 1)
-        self.assertEqual(
-            len(campaign_core.read_json(campaign_core.doc_path('codex'))['entries']), 1
-        )
+        self.assertEqual(len(self.stored('codex')['entries']), 1)
         self.assertEqual(
             len(campaign_core.read_json(campaign_core.doc_path('prep/s1'))['goals']), 1
         )
         self.assert_shaped()
 
     def test_expand_entry_adds_text_links_and_art_once(self):
-        campaign_core.write_doc(
+        self.seed(
             'codex',
             {
                 'entries': [
@@ -655,16 +675,14 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/requests/req-expand/stage', {'draft': broken}, expected=400)
         self.request('/api/requests/req-expand/stage', {'draft': draft})
         self.request('/api/requests/req-expand/apply', {})
-        entries = {
-            e['id']: e for e in campaign_core.read_json(campaign_core.doc_path('codex'))['entries']
-        }
+        entries = {e['id']: e for e in self.stored('codex')['entries']}
         self.assertEqual(entries['gate']['public'], 'A gate.\n\nIts lamps burn blue.')
         self.assertEqual(entries['gate']['related'], ['req-expand-keeper'])
         self.assertEqual(entries['req-expand-keeper']['related'], ['gate'])
         art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
         self.assertEqual([(a['id'], a['codex']) for a in art], [('art-req-expand-focus', 'gate')])
         # A second pass over the same request, as after a crash, adds nothing further.
-        codex = campaign_core.read_json(campaign_core.doc_path('codex'))
+        codex = self.stored('codex')
         request_workflow.expand_entry(codex, item, draft['focus'], 'req-expand-', {'keeper'})
         self.assertEqual(codex['entries'][0]['public'], 'A gate.\n\nIts lamps burn blue.')
         self.assert_shaped()
@@ -678,7 +696,7 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/requests/req-n/stage', {'draft': draft}, expected=400)
 
     def test_expand_proposal_for_a_deleted_entry_is_rejected(self):
-        campaign_core.write_doc('codex', {'entries': []})
+        self.seed('codex', {'entries': []})
         item = {'id': 'req-gone', 'kind': 'expand', 'codex': 'gate', 'text': 'x', 'status': 'new'}
         campaign_core.write_doc('inbox', {'items': [item]})
         draft = self.request_proposal()
@@ -1099,15 +1117,15 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(
             self.request('/api/foundry/library?kind=actors')['snapshot']['source'], 'live'
         )
-        codex = campaign_core.read_json(campaign_core.doc_path('codex'))
+        codex = self.stored('codex')
         actor = next(
             entry for entry in codex['entries'] if entry['foundry']['uuid'] == 'Actor.actor1'
         )
         actor['notes'] = 'My Studio edits'
-        campaign_core.write_doc('codex', codex)
+        self.seed('codex', codex)
         live['documents']['actors'][0]['summary'] = 'Changed in Foundry'
         self.assertEqual(self.request('/api/foundry/library/live-import', live)['kept'], 1)
-        codex = campaign_core.read_json(campaign_core.doc_path('codex'))
+        codex = self.stored('codex')
         actor = next(
             entry for entry in codex['entries'] if entry['foundry']['uuid'] == 'Actor.actor1'
         )

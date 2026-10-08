@@ -15,6 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 
 import campaign
 import http_routes
+import records
+import schema
+import shapes
 import workflow
 
 
@@ -72,14 +75,23 @@ class RouteTests(unittest.TestCase):
             self.request('/api/settings', 'POST', {**settings, 'context_budget_chars': 100})[0],
             400,
         )
-        http_routes.write_doc(
-            'codex',
-            {
-                'entries': [
-                    {'id': 'mira', 'name': 'Mira', 'type': 'npc', 'notes': 'Keeps the clue'},
-                    {'id': 'orm', 'name': 'Orm', 'type': 'npc', 'notes': 'Knows the gate'},
-                ]
-            },
+        http_routes.commit_docs(
+            'Synthetic codex',
+            [
+                (
+                    'codex',
+                    {
+                        'entries': [
+                            shapes.CODEX_ENTRY.new(
+                                id='mira', name='Mira', type='npc', notes='Keeps the clue'
+                            ),
+                            shapes.CODEX_ENTRY.new(
+                                id='orm', name='Orm', type='npc', notes='Knows the gate'
+                            ),
+                        ]
+                    },
+                )
+            ],
         )
         http_routes.write_doc(
             'inbox',
@@ -195,26 +207,69 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(status, 409)
 
     def test_stale_document_conflict_still_returns_latest_revision_and_document(self):
-        status, _, headers = self.request('/api/doc/codex', 'PUT', {'entries': []})
+        path = '/api/records/codex/item?id=current'
+        entry = shapes.CODEX_ENTRY.new(id='current', type='npc', name='Current')
+        status, _, headers = self.request(path, 'PUT', entry, {'X-Rev': '0'})
         self.assertEqual(status, 200)
-        status, _, headers = self.request('/api/doc/codex')
+        status, _, headers = self.request(path)
         self.assertEqual(status, 200)
         old_revision = headers['X-Rev']
         self.assertEqual(
             self.request(
-                '/api/doc/codex',
+                path,
                 'PUT',
-                {'entries': [{'id': 'current'}]},
+                dict(entry, notes='New notes'),
                 {'X-Rev': old_revision},
             )[0],
             200,
         )
         status, conflict, _ = self.request(
-            '/api/doc/codex', 'PUT', {'entries': []}, {'X-Rev': old_revision}
+            path, 'PUT', dict(entry, notes='Stale notes'), {'X-Rev': old_revision}
         )
         self.assertEqual(status, 409)
-        self.assertEqual(conflict['doc'], {'entries': [{'id': 'current'}]})
+        self.assertEqual(conflict['doc']['notes'], 'New notes')
         self.assertNotEqual(conflict['rev'], old_revision)
+
+    def test_two_thousand_records_page_and_one_edit_stays_small(self):
+        here = campaign.active()
+        schema.write_marker(here.data, schema.CURRENT, 'Synthetic large codex')
+        folder = Path(here.data) / 'codex'
+        folder.mkdir(parents=True)
+        for n in range(2000):
+            entry = shapes.CODEX_ENTRY.new(
+                id=f'entry-{n:04d}',
+                type='npc' if n % 2 else 'place',
+                name=f'Entry {n:04d}',
+                notes=f'Lore for entry {n:04d}',
+                tags=['harbour'] if n % 10 == 0 else [],
+                **({'foundry': {'world_key': 'fixture'}} if n == 1999 else {}),
+            )
+            Path(records.record_path(here.data, 'codex', entry['id'])).write_text(
+                json.dumps(entry), encoding='utf-8'
+            )
+        status, page, _ = self.request('/api/records/codex?limit=40&offset=40&type=npc')
+        self.assertEqual((status, page['total'], len(page['items'])), (200, 1000, 40))
+        self.assertEqual(page['items'][0]['id'], 'entry-0081')
+        self.assertNotIn('notes', page['items'][0])
+        status, filtered, _ = self.request('/api/records/codex?tag=harbour&q=entry%2001')
+        self.assertEqual((status, filtered['total']), (200, 10))
+        self.assertEqual(self.request('/api/records/codex?source=foundry')[1]['total'], 1)
+        self.assertEqual(self.request('/api/doc/codex', 'PUT', {'entries': []})[0], 403)
+
+        path = '/api/records/codex/item?id=entry-1999'
+        status, entry, headers = self.request(path)
+        self.assertEqual(status, 200)
+        entry['notes'] = 'Edited one record'
+        self.assertLess(len(json.dumps(entry).encode('utf-8')), 10_000)
+        self.assertEqual(self.request(path, 'PUT', entry, {'X-Rev': headers['X-Rev']})[0], 200)
+        self.assertEqual(
+            records.read(here.data, 'codex', 'entry-1999')['notes'], 'Edited one record'
+        )
+        self.assertEqual(
+            records.read(here.data, 'codex', 'entry-1998')['notes'], 'Lore for entry 1998'
+        )
+        self.assertEqual(len(list((Path(here.history) / 'codex' / 'entry-1999').glob('*.json'))), 1)
+        self.assertFalse((Path(here.history) / 'codex' / 'entry-1998').exists())
 
     def test_document_save_refuses_application_owned_documents(self):
         here = campaign.active()
@@ -262,15 +317,15 @@ class RouteTests(unittest.TestCase):
         }
         status, report, _ = self.request('/api/foundry/library/import', 'POST', snapshot)
         self.assertEqual((status, report['added'], report['counts']['actors']), (200, 1, 1))
-        codex = http_routes.read_json(http_routes.doc_path('codex'))
+        codex = records.collection(here.data, 'codex')
         self.assertEqual(codex['entries'][0]['notes'], 'Scout')
         codex['entries'][0]['notes'] = 'Studio version'
-        http_routes.write_doc('codex', codex)
+        http_routes.commit_docs('Studio edit', [('codex', codex)])
         snapshot['documents']['actors'][0]['summary'] = 'Foundry version'
         status, report, _ = self.request('/api/foundry/library/import', 'POST', snapshot)
         self.assertEqual((status, report['kept']), (200, 1))
         self.assertEqual(
-            http_routes.read_json(http_routes.doc_path('codex'))['entries'][0]['notes'],
+            records.collection(here.data, 'codex')['entries'][0]['notes'],
             'Studio version',
         )
 

@@ -56,8 +56,9 @@ class Journal:
     def commit(self, label, changes, after=()):
         """Write [(name, value), ...] in order, then run the follow-up actions in after.
 
-        A str value is a text file; anything else is JSON. Put the record that marks the change
-        as finished (a workflow or request status) last. Returns the follow-up results.
+        A str value is a text file, None deletes a file, and anything else is JSON.
+        Put the record that marks the change as finished (a workflow or request
+        status) last. Returns the follow-up results.
         """
         if self.entries():
             raise IncompleteCommit(
@@ -67,11 +68,15 @@ class Journal:
         for name, value in changes:
             if any(target['name'] == name for target in targets):
                 raise ValueError('A change may write each document only once.')
+            before = digest(self.path_of(name))
+            if value is None and before is None:
+                raise FileNotFoundError(self.path_of(name))
             targets.append(
                 {
                     'name': name,
                     'text': isinstance(value, str),
-                    'before': digest(self.path_of(name)),
+                    'delete': value is None,
+                    'before': before,
                     'value': value,
                 }
             )
@@ -109,8 +114,11 @@ class Journal:
 
     def state(self, target):
         path = self.path_of(target['name'])
-        if digest(path) == target['before']:
+        current = digest(path)
+        if current == target['before']:
             return 'pending'
+        if target.get('delete'):
+            return 'written' if current is None else 'changed'
         try:
             # newline='' compares text exactly as atomic_text wrote it, including any \r.
             with open(path, encoding='utf-8', newline='') as file:

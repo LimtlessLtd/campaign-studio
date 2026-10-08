@@ -13,9 +13,11 @@ import ai_provider
 import commits
 import config
 import foundry_library
+import map_trash
 import request_workflow
 import workflow
 import revisions
+import records
 import schema
 import shapes
 import storage
@@ -48,7 +50,9 @@ FILE_ROOTS = (
 DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 # Documents the application owns: only their own routes and services change them.
-APP_OWNED_DOC = re.compile(r'^(?:settings|foundry-library|(?:workflows|jobs)/.+)$')
+APP_OWNED_DOC = re.compile(
+    r'^(?:settings|foundry-library|codex|threads|(?:codex|threads|workflows|jobs)/.+)$'
+)
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
     'image/png': ('.png', lambda b: b.startswith(b'\x89PNG\r\n\x1a\n')),
@@ -116,6 +120,16 @@ def stamp_new_campaign():
 
 
 def write_doc(name, value, durable=False):
+    if (
+        name in records.FIELDS
+        and schema.version(campaign.active().data, campaign.active().maps) == schema.CURRENT
+    ):
+        raise ValueError('Write codex and threads as individual records.')
+    if name.startswith(('codex/', 'threads/')):
+        kind = name.split('/', 1)[0]
+        if not isinstance(value, dict) or records.document_name(kind, value.get('id')) != name:
+            raise ValueError('Record ID does not match its storage key.')
+        records.record_path(campaign.active().data, kind, value['id'])
     stamp_new_campaign()
     path = doc_path(name)
     with storage.file_lock(path):
@@ -133,6 +147,30 @@ def write_doc(name, value, durable=False):
         return rev_of(path)
 
 
+def delete_record(kind, ident):
+    """Remove one record, retaining its last version in that record's history."""
+    return delete_record_document(records.document_name(kind, ident))
+
+
+def delete_record_document(name):
+    if not name.startswith(('codex/', 'threads/')):
+        raise ValueError('Only record documents can be deleted through a change.')
+    path = doc_path(name)
+    if os.path.islink(os.path.dirname(path)) or os.path.islink(path):
+        raise ValueError('Unsafe record path.')
+    with storage.file_lock(path):
+        if not os.path.isfile(path):
+            raise FileNotFoundError(path)
+        keep = os.path.join(campaign.active().history, *name.split('/'))
+        os.makedirs(keep, exist_ok=True)
+        shutil.copy2(
+            path, os.path.join(keep, datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.json')
+        )
+        for old in sorted(os.listdir(keep))[:-KEEP_VERSIONS]:
+            os.remove(os.path.join(keep, old))
+        storage.remove(path)
+
+
 def target_path(name):
     """Journal target names are document names, plus plan/<slug> for a map's text plan."""
     if name.startswith('plan/'):
@@ -145,7 +183,9 @@ def target_path(name):
 def write_target(name, value):
     """Write one journaled document, flushed to disk before the journal entry is deleted."""
     path = target_path(name)
-    if name.startswith('plan/'):
+    if value is None:
+        delete_record_document(name)
+    elif name.startswith('plan/'):
         with storage.file_lock(path):
             storage.atomic_text(path, value, durable=True)
     elif name.startswith('workflows/'):
@@ -185,13 +225,20 @@ JOURNAL = commits.Journal(
 
 def commit_docs(label, changes, after=()):
     """Write several documents so an interruption is completed rather than left half applied."""
-    return JOURNAL.commit(label, changes, after)
+    expanded, deletes = [], []
+    for name, value in changes:
+        if name in records.FIELDS:
+            for target in records.changed_documents(campaign.active().data, name, value):
+                (deletes if target[1] is None else expanded).append(target)
+        else:
+            (deletes if value is None else expanded).append((name, value))
+    return JOURNAL.commit(label, expanded + deletes, after)
 
 
 def import_foundry_snapshot(snapshot, folders=None):
     """Commit a World Library snapshot and its codex changes as one recoverable operation."""
     with LOCK:
-        codex = read_json(doc_path('codex'), {'entries': []})
+        codex = records.collection(campaign.active().data, 'codex')
         report = foundry_library.import_into_codex(snapshot, codex, folders)
         commit_docs('Import Foundry world', [('foundry-library', snapshot), ('codex', codex)])
         return report
@@ -200,7 +247,10 @@ def import_foundry_snapshot(snapshot, folders=None):
 def recover_commits():
     """Finish interrupted changes. Call before any read/modify/write of campaign documents."""
     with LOCK:
-        return JOURNAL.recover()
+        report = JOURNAL.recover()
+        if not report['conflicts']:
+            map_trash.reconcile(campaign.active())
+        return report
 
 
 def queue_forge(slug, label, populate=False):
@@ -341,13 +391,10 @@ def finish_job(job, code, tail):
                             area.setdefault('images', []).append(image_path)
                             changes.append((doc, keydoc))
                     if target.get('codex'):
-                        codex = read_json(doc_path('codex'), {'entries': []})
-                        entry = next(
-                            (e for e in codex['entries'] if e['id'] == target['codex']), None
-                        )
+                        entry = records.read(campaign.active().data, 'codex', target['codex'])
                         if entry:
                             entry['image'] = image_path
-                            changes.append(('codex', codex))
+                            changes.append((records.document_name('codex', entry['id']), entry))
                 except (ValueError, KeyError, TypeError, OSError) as e:
                     changes = []
                     target.update(status='failed', error=str(e))
@@ -397,6 +444,8 @@ def request_item(box, rid):
 
 
 def request_read(name):
+    if name in records.FIELDS:
+        return records.collection(campaign.active().data, name)
     return read_json(doc_path(name))
 
 

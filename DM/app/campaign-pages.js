@@ -79,21 +79,22 @@ async function attachArt(item, path) {
     }
   }
   if (item.codex) {
-    const c = await doc('codex', { entries: [] });
-    const entry = c.entries.find((e) => e.id === item.codex);
+    const name = recordName('codex', item.codex);
+    const entry = await doc(name, null);
     if (entry) {
       entry.image = path;
-      save('codex');
+      save(name);
     }
   }
   refreshSoon();
 }
 
-const codexName = (id) => S.docs.codex?.entries.find((x) => x.id === id)?.name || id;
+const codexName = (id) => S.recordIndex.codex.find((x) => x.id === id)?.name || id;
 
 /* One button on an entry: reuse its open expansion request, or start one, and draft it. */
 async function expandEntry(e) {
-  if (S.pending.codex) await flush('codex');
+  const name = recordName('codex', e.id);
+  if (S.pending[name]) await flush(name);
   const box = await doc('inbox', { items: [] });
   let item = box.items.find((it) => it.kind === 'expand' && it.codex === e.id && !it.applied);
   if (!item) {
@@ -108,15 +109,14 @@ async function expandEntry(e) {
 }
 
 const codexChoices = () =>
-  (S.docs.codex?.entries || []).map((e) => ({
+  S.recordIndex.codex.map((e) => ({
     id: e.id,
     name: e.name + (e.type === 'npc' ? '' : ' · ' + e.type),
   }));
-const threadChoices = () =>
-  (S.docs.threads?.threads || []).map((t) => ({ id: t.id, name: t.title }));
+const threadChoices = () => S.recordIndex.threads.map((t) => ({ id: t.id, name: t.title }));
 const hero = (id) =>
   S.state.public.heroes.find((x) => x.id === id) ||
-  S.docs.codex?.entries.find((x) => x.id === id) || { name: id };
+  S.recordIndex.codex.find((x) => x.id === id) || { name: id };
 const pcChoices = () => PCS.map((id) => ({ id, name: hero(id).name }));
 const pcName = (id) => hero(id).name.split(' ')[0];
 const lastSession = () =>
@@ -488,8 +488,8 @@ async function prepPage(name, context) {
   p.loot = p.loot || [];
   p.handouts = p.handouts || [];
   p.log = Object.assign({ summary: '', notes: '', outcomes: [] }, p.log);
-  const threads = (await context.doc('threads', { threads: [] })).threads;
-  await context.doc('codex', { entries: [] });
+  const threads = await recordChoices('threads', context.signal);
+  await recordChoices('codex', context.signal);
   const scenesBox = h('div');
   const drawScenes = () =>
     render(
@@ -912,15 +912,24 @@ async function newPrep(context) {
 
 async function threadsPage(_arg, context) {
   const main = context.view;
-  const docName = 'threads';
-  const t = await context.doc(docName, { threads: [] });
+  await recordChoices('threads', context.signal);
   let filter = S.threadFilter || 'all';
+  let offset = 0;
+  const limit = 30;
+  let result = { items: [], total: 0 };
   const list = h('div');
+  const pages = h('div', { class: 'row' });
   const draw = () => {
     S.threadFilter = filter;
-    const shown = t.threads.filter(
-      (x) => filter === 'all' || x.status === filter || x.pcs.includes(filter),
-    );
+    const shown = result.items.map(({ record: x, rev }) => {
+      const name = recordName('threads', x.id);
+      if (!S.pending[name]) {
+        S.docs[name] = x;
+        S.base[name] = clone(x);
+        S.revs[name] = rev;
+      }
+      return S.docs[name];
+    });
     render(
       list,
       ...THREAD_STATES.map((st) => {
@@ -937,32 +946,44 @@ async function threadsPage(_arg, context) {
                   h(
                     'div',
                     { class: 'spread' },
-                    h('div', { style: 'flex:1' }, field(docName, x, 'title')),
-                    field(docName, x, 'status', {
+                    h(
+                      'div',
+                      { style: 'flex:1' },
+                      field(recordName('threads', x.id), x, 'title', { ariaLabel: 'Thread title' }),
+                    ),
+                    field(recordName('threads', x.id), x, 'status', {
+                      ariaLabel: 'Thread status',
                       type: 'select',
                       options: THREAD_STATES,
-                      onchange: draw,
+                      onchange: () => recordChoices('threads').then(draw),
                     }),
                     h(
                       'button',
                       {
                         class: 'danger',
-                        onclick: () => {
-                          if (confirm('Delete this thread?')) {
-                            t.threads.splice(t.threads.indexOf(x), 1);
-                            save(docName);
-                            draw();
-                          }
-                        },
+                        onclick: () =>
+                          attempt(async () => {
+                            if (confirm('Delete this thread?')) {
+                              await removeRecord('threads', x.id);
+                              await loadPage();
+                            }
+                          }),
                       },
                       'Delete',
                     ),
                   ),
-                  field(docName, x, 'detail', { type: 'textarea', rows: 2 }),
+                  field(recordName('threads', x.id), x, 'detail', {
+                    type: 'textarea',
+                    rows: 2,
+                    ariaLabel: 'Thread details',
+                  }),
                   h(
                     'div',
                     { style: 'margin-top:6px' },
-                    picker(docName, x.pcs, pcChoices, { placeholder: 'Tag a hero…', cls: 'pc' }),
+                    picker(recordName('threads', x.id), x.pcs, pcChoices, {
+                      placeholder: 'Tag a hero…',
+                      cls: 'pc',
+                    }),
                   ),
                   x.source &&
                     h(
@@ -979,23 +1000,64 @@ async function threadsPage(_arg, context) {
     filters
       .querySelectorAll('button')
       .forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
+    render(
+      pages,
+      h(
+        'button',
+        {
+          disabled: offset === 0,
+          onclick: () => {
+            offset -= limit;
+            loadPage();
+          },
+        },
+        'Previous',
+      ),
+      h(
+        'span',
+        { class: 'muted' },
+        `${result.total ? offset + 1 : 0}–${Math.min(offset + limit, result.total)} of ${result.total}`,
+      ),
+      h(
+        'button',
+        {
+          disabled: offset + limit >= result.total,
+          onclick: () => {
+            offset += limit;
+            loadPage();
+          },
+        },
+        'Next',
+      ),
+    );
+  };
+  const loadPage = async () => {
+    const params = new URLSearchParams({ offset, limit });
+    if (THREAD_STATES.includes(filter)) params.set('status', filter);
+    else if (filter !== 'all') params.set('pc', filter);
+    result = await context.api('/api/records/threads?' + params);
+    draw();
   };
   const filters = h(
     'div',
     { class: 'filters' },
-    ['all', ...THREAD_STATES, ...PCS.filter((pc) => t.threads.some((x) => x.pcs.includes(pc)))].map(
-      (f) =>
-        h(
-          'button',
-          {
-            'data-f': f,
-            onclick: () => {
-              filter = f;
-              draw();
-            },
+    [
+      'all',
+      ...THREAD_STATES,
+      ...PCS.filter((pc) => S.recordIndex.threads.some((x) => (x.pcs || []).includes(pc))),
+    ].map((f) =>
+      h(
+        'button',
+        {
+          'data-f': f,
+          onclick: () => {
+            filter = f;
+            offset = 0;
+            loadPage();
           },
-          THREAD_STATES.includes(f) || f === 'all' ? f : pcName(f),
-        ),
+        },
+        THREAD_STATES.includes(f) || f === 'all' ? f : pcName(f),
+      ),
     ),
   );
   render(
@@ -1008,12 +1070,16 @@ async function threadsPage(_arg, context) {
         'button',
         {
           class: 'primary',
-          onclick: () => {
-            t.threads.unshift(blank('thread', { id: uid('thread'), title: 'New thread' }));
-            save(docName);
-            filter = 'all';
-            draw();
-          },
+          onclick: () =>
+            attempt(async () => {
+              await createRecord(
+                'threads',
+                blank('thread', { id: uid('thread'), title: 'New thread' }),
+              );
+              filter = 'all';
+              offset = 0;
+              await loadPage();
+            }),
         },
         '+ New thread',
       ),
@@ -1021,31 +1087,33 @@ async function threadsPage(_arg, context) {
     h('p', { class: 'sub' }, 'Plot threads, promises and fortunes: what the story owes each hero.'),
     filters,
     list,
+    pages,
   );
-  draw();
+  await loadPage();
 }
 
 async function codexPage(id, context) {
   const main = context.view;
-  const docName = 'codex';
-  const c = await context.doc(docName, { entries: [] });
-  if (id) return codexEntry(c, id, main, context);
+  if (id) return codexEntry(await context.doc(recordName('codex', id), null), id, main, context);
+  await recordChoices('codex', context.signal);
   let type = S.codexType || 'all',
-    q = S.codexQ || '';
+    q = S.codexQ || '',
+    tag = S.codexTag || '',
+    source = S.codexSource || '';
+  let offset = 0;
+  const limit = 40;
+  let result = { items: [], total: 0 };
+  let sequence = 0;
   const grid = h('div', { class: 'grid codex' });
+  const pages = h('div', { class: 'row' });
   const draw = () => {
     S.codexType = type;
     S.codexQ = q;
-    const hits = c.entries.filter(
-      (e) =>
-        (type === 'all' || e.type === type) &&
-        (e.name + ' ' + e.public + ' ' + e.secrets + ' ' + (e.tags || []).join(' '))
-          .toLowerCase()
-          .includes(q),
-    );
+    S.codexTag = tag;
+    S.codexSource = source;
     render(
       grid,
-      ...hits.map((e) => {
+      ...result.items.map((e) => {
         const imageUrl = codexImageUrl(e);
         return h(
           'div',
@@ -1069,7 +1137,7 @@ async function codexPage(id, context) {
               { class: 'row' },
               h('span', { class: 'chip' }, e.type),
               (e.tags || []).slice(0, 2).map((t) => h('span', { class: 'chip' }, t)),
-              e.secrets ? h('span', { class: 'chip dead' }, 'secrets') : '',
+              e.has_secrets ? h('span', { class: 'chip dead' }, 'secrets') : '',
             ),
             h('p', { class: 'clamp' }, e.public || e.notes),
           ),
@@ -1079,22 +1147,78 @@ async function codexPage(id, context) {
     filters
       .querySelectorAll('button')
       .forEach((b) => b.classList.toggle('on', b.dataset.t === type));
+    render(
+      pages,
+      h(
+        'button',
+        {
+          disabled: offset === 0,
+          onclick: () => {
+            offset -= limit;
+            loadPage();
+          },
+        },
+        'Previous',
+      ),
+      h(
+        'span',
+        { class: 'muted' },
+        `${result.total ? offset + 1 : 0}–${Math.min(offset + limit, result.total)} of ${result.total}`,
+      ),
+      h(
+        'button',
+        {
+          disabled: offset + limit >= result.total,
+          onclick: () => {
+            offset += limit;
+            loadPage();
+          },
+        },
+        'Next',
+      ),
+    );
+  };
+  const loadPage = async () => {
+    const request = ++sequence;
+    const params = new URLSearchParams({ offset, limit });
+    if (type !== 'all') params.set('type', type);
+    if (q) params.set('q', q);
+    if (tag) params.set('tag', tag);
+    if (source) params.set('source', source);
+    const next = await context.api('/api/records/codex?' + params);
+    if (request === sequence) {
+      result = next;
+      draw();
+    }
+  };
+  let searchTimer;
+  const search = () => {
+    offset = 0;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(
+      () =>
+        loadPage().catch((e) => {
+          if (!context.signal.aborted) alert(e.message);
+        }),
+      200,
+    );
   };
   const filters = h(
     'div',
     { class: 'filters' },
-    ['all', ...Object.keys(TYPES).filter((t) => c.entries.some((e) => e.type === t))].map((t) =>
-      h(
-        'button',
-        {
-          'data-t': t,
-          onclick: () => {
-            type = t;
-            draw();
+    ['all', ...Object.keys(TYPES).filter((t) => S.recordIndex.codex.some((e) => e.type === t))].map(
+      (t) =>
+        h(
+          'button',
+          {
+            'data-t': t,
+            onclick: () => {
+              type = t;
+              search();
+            },
           },
-        },
-        t === 'all' ? 'Everything' : TYPES[t],
-      ),
+          t === 'all' ? 'Everything' : TYPES[t],
+        ),
     ),
     h('input', {
       type: 'search',
@@ -1102,9 +1226,35 @@ async function codexPage(id, context) {
       value: q,
       oninput: (e) => {
         q = e.target.value.toLowerCase();
-        draw();
+        search();
       },
     }),
+    h('input', {
+      type: 'search',
+      placeholder: 'Filter by tag…',
+      'aria-label': 'Filter codex by tag',
+      value: tag,
+      oninput: (e) => {
+        tag = e.target.value;
+        search();
+      },
+    }),
+    h(
+      'select',
+      {
+        'aria-label': 'Filter codex by source',
+        onchange: (e) => {
+          source = e.target.value;
+          search();
+        },
+      },
+      ...[
+        ['', 'Any source'],
+        ['studio', 'Studio'],
+        ['foundry', 'Foundry'],
+        ['ai', 'AI draft'],
+      ].map(([value, label]) => h('option', { value, selected: source === value }, label)),
+    ),
   );
   render(
     main,
@@ -1116,20 +1266,22 @@ async function codexPage(id, context) {
         'button',
         {
           class: 'primary',
-          onclick: () => {
-            const name = prompt('Name of the new entry?');
-            if (!name) return;
-            const e = blank('codex_entry', {
-              id:
-                slug(name) +
-                (c.entries.some((x) => x.id === slug(name)) ? '-' + Date.now().toString(36) : ''),
-              type: type === 'all' ? 'npc' : type,
-              name,
-            });
-            c.entries.push(e);
-            save(docName);
-            go('#/codex/' + e.id);
-          },
+          onclick: () =>
+            attempt(async () => {
+              const name = prompt('Name of the new entry?');
+              if (!name) return;
+              const e = blank('codex_entry', {
+                id:
+                  slug(name) +
+                  (S.recordIndex.codex.some((x) => x.id === slug(name))
+                    ? '-' + Date.now().toString(36)
+                    : ''),
+                type: type === 'all' ? 'npc' : type,
+                name,
+              });
+              await createRecord('codex', e);
+              go('#/codex/' + e.id);
+            }),
         },
         '+ New entry',
       ),
@@ -1141,13 +1293,13 @@ async function codexPage(id, context) {
     ),
     filters,
     grid,
+    pages,
   );
-  draw();
+  await loadPage();
 }
 
-async function codexEntry(c, id, main, context) {
-  const docName = 'codex';
-  const e = c.entries.find((x) => x.id === id);
+async function codexEntry(e, id, main, context) {
+  const docName = recordName('codex', id);
   if (!e) {
     render(main, h('h1', {}, 'Not in the codex'), h('a', { href: '#/codex' }, 'Back to the codex'));
     return;
@@ -1199,7 +1351,7 @@ async function codexEntry(c, id, main, context) {
           'button',
           {
             class: 'danger',
-            onclick: () => deleteCodexEntry(e, docName),
+            onclick: () => deleteCodexEntry(e),
           },
           'Delete',
         ),
@@ -1404,11 +1556,11 @@ function notesPage(_arg, context) {
 }
 
 /* Delete a codex entry on the server, which also unlinks it from every thread, scene, area and request. */
-async function deleteCodexEntry(e, docName) {
+async function deleteCodexEntry(e) {
   try {
-    await flush(docName); // so the server sees the edits made so far
+    await flushAll(); // so the server sees every linked record's pending edits
     const id = encodeURIComponent(e.id);
-    const { uses } = await api(`/api/codex/${id}/uses`);
+    const { uses, rev } = await api(`/api/codex/${id}/uses`);
     const shown = uses.slice(0, 8).map(
       (u) => `
 - ${u.where}`,
@@ -1424,7 +1576,7 @@ async function deleteCodexEntry(e, docName) {
 It is used in ${uses.length} place(s); those links will be removed:${shown.join('')}${more}`
       : '';
     if (!confirm(`Delete ${e.name} from the codex?${used}`)) return;
-    const { changed } = await post(`/api/codex/${id}/delete`);
+    const { changed } = await post(`/api/codex/${id}/delete`, { rev });
     for (const name of changed) {
       delete S.docs[name];
       delete S.base[name];

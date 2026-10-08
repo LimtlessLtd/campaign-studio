@@ -75,11 +75,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     S.state = await api('/api/state');
     S.shapes = await api('/api/shapes');
     S.jobs = await api('/api/jobs').catch(() => []);
-    const c = await doc('codex', { entries: [] });
+    const c = await recordChoices('codex');
+    await recordChoices('threads');
     PCS = [
       ...new Set([
         ...S.state.public.heroes.map((h) => h.id),
-        ...c.entries.filter((e) => e.type === 'pc').map((e) => e.id),
+        ...c.filter((e) => e.type === 'pc').map((e) => e.id),
       ]),
     ];
     initStudio();

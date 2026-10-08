@@ -43,6 +43,8 @@ flowchart LR
 | `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world    |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
 | `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
+| `DM/records.py`                       | Per-record codex/thread paths, collections and bounded list views                  |
+| `DM/references.py`, `DM/map_trash.py` | Where-used links, unlinking and recoverable map trash                              |
 | `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
 | `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser  |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
@@ -75,7 +77,8 @@ require the original campaign. Change export identifiers only with a migration f
 
 ## Persistence and concurrency
 
-Settings, codex, threads, art, inbox, prep, workflows and jobs live under `DM/data`. A map's plan, key,
+Settings, codex entries, threads, art, inbox, prep, workflows and jobs live under `DM/data`. Each codex
+entry and thread has its own JSON file and revision. A map's plan, key,
 generated files and checkpoints live under `DM/maps/<slug>`. Images live in `DM/uploads`.
 
 Browser document saves use `X-Rev` and return HTTP 409 plus the latest document on conflict. The browser
@@ -84,8 +87,9 @@ document). Server route mutations use a reentrant lock. Shared map catalogue rea
 `storage.file_lock`, which also coordinates forge subprocesses on Windows and POSIX. JSON replacement uses
 unique temporary files. External editors must cooperate with this lock to avoid lost updates.
 
-Changes that span documents (content and request application, layout application, revision restore
-and generated-image links) go through `campaign_core.commit_docs`. Before the first write, the journal in
+Changes that span documents (content and request application, codex deletion, layout application, revision restore
+and generated-image links) go through `campaign_core.commit_docs`. Collection changes expand into changed
+records; deletions are journaled last, after references are unlinked. Before the first write, the journal in
 `data/.commits` durably records every target's new value and a digest of the bytes it replaces. Put the
 record that marks the change finished (workflow or request status) last. If the server stops part way,
 startup replays the entry: targets still holding their old bytes are completed and targets already written
@@ -132,18 +136,21 @@ the shapes of the records in its lists (a map key's areas, an area's journal ent
 records with `Shape.new`, and the browser builds them with `blank(kind, fields)` from `GET /api/shapes`.
 Links and provenance such as `map`, `area`, `workflow` or `request` are optional extra fields.
 
-| Document                   | Shape        | Records in its lists                                                 |
-| -------------------------- | ------------ | -------------------------------------------------------------------- |
-| `data/codex.json`          | `codex`      | codex entries                                                        |
-| `data/threads.json`        | `threads`    | threads                                                              |
-| `data/art.json`            | `art`        | art items                                                            |
-| `data/world-maps.json`     | `world_maps` | world maps and their pins (positions are 0-1 fractions of the image) |
-| `data/prep/<session>.json` | `prep`       | scenes, handouts, checklist items, loot                              |
-| `maps/<slug>/key.json`     | `map_key`    | areas (with journal entries, events, loot), events                   |
+| Document                   | Shape         | Records in its lists                                                 |
+| -------------------------- | ------------- | -------------------------------------------------------------------- |
+| `data/codex/<id>.json`     | `codex_entry` | one codex entry; unsafe legacy IDs use a hashed storage key          |
+| `data/threads/<id>.json`   | `thread`      | one thread                                                           |
+| `data/art.json`            | `art`         | art items                                                            |
+| `data/world-maps.json`     | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
+| `data/prep/<session>.json` | `prep`        | scenes, handouts, checklist items, loot                              |
+| `maps/<slug>/key.json`     | `map_key`     | areas (with journal entries, events, loot), events                   |
 
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
-scenes, map keys and areas; schema 2 completed every shaped record. Adding a field to a shape changes
+scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
+values with a hash; schema 5 added prep archive; schema 6 split codex and thread collections into individual documents. The migration
+backs up old files before writing records and removes the old collections after recording the new version.
+Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
 `schema.SHAPES_DIGEST` is updated. Renaming or removing a field needs its own migration and fixture test.
 

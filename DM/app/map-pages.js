@@ -230,7 +230,7 @@ function freshBrief() {
 async function newMapStudio(context) {
   const f = S.creation || (S.creation = freshBrief());
   let step = S.creationStep || 0;
-  const threads = (await context.doc('threads', { threads: [] })).threads;
+  const threads = await recordChoices('threads', context.signal);
   const content = h('div');
   const summary = h('aside', { class: 'creation-summary' });
   const steps = h('div', { class: 'creation-steps' });
@@ -695,8 +695,8 @@ async function mapStudio(slugArg, context) {
     keyName,
     blank('map_key', { map: m.name, session: m.session || '' }),
   );
-  const c = await context.doc('codex', { entries: [] });
-  const t = await context.doc('threads', { threads: [] });
+  const c = { entries: await recordChoices('codex', context.signal) };
+  const t = { threads: await recordChoices('threads', context.signal) };
   const art = await context.doc('art', { items: [] });
   S.studioTabs = S.studioTabs || {};
   let tabName = S.studioTabs[slugArg] || 'locations';
@@ -718,7 +718,9 @@ async function mapStudio(slugArg, context) {
   };
   const refresh = async () => {
     await flushAll();
-    for (const n of [keyName, 'codex', 'threads', 'art', 'maps/index']) await load(n, S.docs[n]);
+    for (const n of [keyName, 'art', 'maps/index']) await load(n, S.docs[n]);
+    await recordChoices('codex');
+    await recordChoices('threads');
     route(true);
   };
   const drawCanvas = () => {
@@ -974,9 +976,10 @@ async function mapStudio(slugArg, context) {
       async () => {
         if (!f.name.trim()) throw new Error('Enter a name.');
         const id = uid(type);
-        c.entries.push(blank('codex_entry', { id, type, ...f, map: slugArg, area: selected.n }));
+        const entry = blank('codex_entry', { id, type, ...f, map: slugArg, area: selected.n });
+        await createRecord('codex', entry);
+        c.entries.push(entry);
         selected[type === 'npc' ? 'npcs' : 'items'].push(id);
-        save('codex');
         save(keyName);
         drawInspector();
       },

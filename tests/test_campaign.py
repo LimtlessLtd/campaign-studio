@@ -17,6 +17,8 @@ import config
 import foundry_library
 import maps_io
 import revisions
+import records
+import shapes
 
 sys.path.insert(0, str(ROOT / 'DM' / 'forge'))
 import forge
@@ -26,6 +28,12 @@ FOLDERS = re.compile(r"""os\.path\.join\([^)]*'(data|maps|uploads|backups)'""")
 
 
 class CampaignTests(unittest.TestCase):
+    @staticmethod
+    def fixture_record(here, kind, record):
+        path = Path(records.record_path(here.data, kind, record['id']))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record), encoding='utf-8')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -56,14 +64,17 @@ class CampaignTests(unittest.TestCase):
 
     def test_documents_and_stored_paths_follow_the_active_campaign(self):
         with campaign.using(self.studio):
-            campaign_core.write_doc('codex', {'entries': []})
+            campaign_core.write_doc(
+                records.document_name('codex', 'sample'),
+                shapes.CODEX_ENTRY.new(id='sample', type='npc', name='Sample'),
+            )
             upload = Path(self.studio.uploads) / 'token.png'
             upload.parent.mkdir()
             upload.write_bytes(b'')
             stored = self.studio.relative(str(upload))
             self.assertEqual(stored, 'Studio/uploads/token.png')
             self.assertEqual(campaign_core.campaign_path(stored), str(upload.resolve()))
-        self.assertTrue((Path(self.studio.data) / 'codex.json').is_file())
+        self.assertTrue(Path(records.record_path(self.studio.data, 'codex', 'sample')).is_file())
         self.assertNotEqual(campaign.active(), self.studio)
 
     def test_settings_and_slugs_use_the_campaign_they_are_given(self):
@@ -81,9 +92,7 @@ class CampaignTests(unittest.TestCase):
     def test_forge_exports_use_the_campaign_they_are_given(self):
         other = campaign.Campaign(Path(self.temp.name) / 'Other')
         Path(other.data).mkdir(parents=True)
-        Path(other.data, 'codex.json').write_text(
-            json.dumps({'entries': [{'id': 'ogre', 'name': 'Given Ogre', 'type': 'npc'}]})
-        )
+        self.fixture_record(other, 'codex', {'id': 'ogre', 'name': 'Given Ogre', 'type': 'npc'})
         Path(other.map_index).parent.mkdir(parents=True, exist_ok=True)
         Path(other.map_index).write_text(json.dumps({'items': []}))
         key = {'areas': [{'n': 1, 'name': 'Hall', 'npcs': ['ogre']}]}
@@ -102,28 +111,18 @@ class CampaignTests(unittest.TestCase):
         Path(self.studio.settings).write_text(json.dumps({'world_path': str(world)}))
         mine = foundry_library.world_key(config.world_info(str(world)))
         origin = {'uuid': 'Actor.abc', 'world_key': mine}
-        Path(self.studio.data, 'codex.json').write_text(
-            json.dumps(
-                {
-                    'entries': [
-                        {
-                            'id': 'hero',
-                            'name': 'Hero',
-                            'type': 'npc',
-                            'image': 'worlds/w1/hero.webp',
-                            'foundry': origin,
-                        },
-                        {
-                            'id': 'far',
-                            'name': 'Far',
-                            'type': 'npc',
-                            'foundry': dict(origin, world_key='other'),
-                        },
-                        {'id': 'own', 'name': 'Own', 'type': 'npc'},
-                    ]
-                }
-            )
-        )
+        for entry in (
+            {
+                'id': 'hero',
+                'name': 'Hero',
+                'type': 'npc',
+                'image': 'worlds/w1/hero.webp',
+                'foundry': origin,
+            },
+            {'id': 'far', 'name': 'Far', 'type': 'npc', 'foundry': dict(origin, world_key='other')},
+            {'id': 'own', 'name': 'Own', 'type': 'npc'},
+        ):
+            self.fixture_record(self.studio, 'codex', entry)
         key = {'areas': [{'n': 1, 'name': 'Hall', 'npcs': ['hero', 'far', 'own']}]}
         with campaign.using(self.studio):
             details = forge.key_for_foundry('hall', key, copy_art=False)['areas'][0]['npcs_detail']

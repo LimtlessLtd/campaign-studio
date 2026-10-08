@@ -22,8 +22,8 @@ Ranked by how much each holds back the goal.
 3. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
-4. **Data at scale** (W28, W54). Whole-document saves, 50-copy history, no deletion and dangling links
-   break down at real campaign sizes.
+4. **Data at scale** (W29, W54). Codex entries and threads now save separately; deletion, retained history
+   and other whole documents still need work at real campaign sizes.
 5. **Map breadth** (W26, W48–W50). One procedural generator. Other environments rely on the model drawing a
    grid, and large maps cannot be stocked in one response.
 6. **Verified integrations** (W43, W44, W51). Foundry imports and the live bridge have fixture coverage
@@ -87,18 +87,6 @@ their row and finding say enough.
   documents only for entries with no Foundry origin.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
-
-### W28 Per-record storage
-
-- Autosave PUTs the whole codex for any edit, and the server keeps 50 copies. At about 8 MB after a large
-  import, that dominates every save, poll and history write.
-- Store each codex entry and thread as its own document (`data/codex/<id>.json`,
-  `data/threads/<id>.json`); `doc_path` already allows one folder level. Each record keeps its own revision
-  and history.
-- A paged list route with type, tag, text and source filters replaces loading the whole codex; the codex
-  grid pages instead of rendering every card.
-- Multi-record changes keep using `commit_docs`, naming each record as a target. A schema migration splits
-  the single documents, with the usual verified backup and an older-fixture test.
 
 ### W30, W31 Campaign memory
 
@@ -223,7 +211,7 @@ their row and finding say enough.
   larger touch targets are phone-aware; the codex, thread, prep and proposal-review pages are laid out for
   a desktop. Work through each page at phone width, with a touch-emulated Chromium flow per page.
 - Keep the one-column layout reachable from the existing access-code and Caddy HTTPS setup in the README.
-  Autosave must survive a phone losing connection briefly (see W28's per-record saves).
+  Autosave must survive a phone losing connection briefly; W28's per-record saves reduce each retry's size.
 
 ### W58 One-click journal entry
 

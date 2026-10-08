@@ -136,7 +136,7 @@ lines; session prep, codex, threads and requests are 1,713; the Foundry import m
 | Exporting a map duplicates a linked actor or item that was imported from Foundry        | `key_for_foundry` drops `foundry.uuid` and the macro matches only Studio-tagged documents. Reproduced in the macro harness: the original actor plus a description-only copy                                                        | W25      |
 | Whole-map content drafts must describe every numbered area in one response              | Generated districts have 44 areas at 60 × 60 squares, 97 at 80 × 80, 146 at 120 × 80 and 311 at 160 × 120                                                                                                                          | W26      |
 | Content drafts must match each requested count exactly                                  | A draft one NPC short is rejected after the model has run; the schema sent to the model carries no counts                                                                                                                          | W26      |
-| Autosave sends whole documents and the server keeps 50 copies of each                   | Editing one codex entry PUTs the whole codex: about 8 MB per save at the size above, and about 400 MB of history                                                                                                                   | W28      |
+| Autosave sent whole codex and thread documents and kept 50 copies of each               | W28 moved entries and threads to individual files, bounded browser pages, and record-level revisions and history; one edit no longer sends the 8 MB codex                                                                          | Done W28 |
 | Maps, session preps and world maps cannot be deleted; deleting an entry leaves its ID   | IDs stay in areas, scenes, briefs and `related` lists; the map inspector hides them but still counts them                                                                                                                          | W29      |
 | The map inspector loads Foundry-imported portraits through `/files/`                    | 403 there and 200 through `/api/foundry/asset` for the same path; exports also drop these images                                                                                                                                   | W27, W25 |
 | Handouts asks for `DM/uploads` by name                                                  | Empty when `DM_HOME` is a folder with another name; reproduced                                                                                                                                                                     | W27      |
@@ -170,10 +170,9 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   rejected before import.
 - Foundry receives one map per macro run. Tokens are not placed, and session prep, scenes and handouts are
   not exported (W38–W41).
-- AI prompts now select bounded codex and thread context, but no played-session history exists yet (W30),
-  and world import still adds every actor and item to the codex (W24). A brief or map key larger than the
-  configured budget is refused before a provider call. Whole-map content drafts need every area in one
-  response (W26).
+- AI prompts now select bounded codex and thread context, but no played-session history exists yet (W30).
+  World import can select folders, though duplicate folder names still need ID-based selection (W24).
+  A brief or map key larger than the configured budget is refused before a provider call.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
