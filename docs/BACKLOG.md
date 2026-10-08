@@ -10,12 +10,11 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W65
+Next ID: W66
 
 | ID  | Priority | Work                                                                                                        | Acceptance criteria                                                            |
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate        |
-| W29 | 2        | Rename world maps (map trash, restore, codex-entry delete and prep archive are done)                        | A world map's name can be changed and its pins keep working                    |
 | W30 | 2        | Session log for each played session, shown on its prep and read by recaps and the context budget            | Shape, migration and browser flow; recent logs appear in the context           |
 | W31 | 2        | Import existing campaign memory: legacy folders, session summaries and Foundry lore journals                | Synthetic legacy folder and summaries import as reviewed proposals             |
 | W32 | 2        | Plan the next session: a pitch in; linked scenes, cast, maps, handouts and thread changes out               | One paragraph yields a fully linked prep; reapplying adds nothing twice        |
@@ -36,6 +35,7 @@ Next ID: W65
 | W61 | 2        | Preserve Foundry folder hierarchy when importing scenes, actors, items and journals                         | Imported records show parent folder paths; deprecated scenes stay grouped      |
 | W63 | 2        | Preview imported scene images, journal videos, and both NPC token and portrait art                          | Each asset opens or plays from Studio with safe path and media limits          |
 | W64 | 2        | Choose an imported Foundry scene as an overworld map and place other scenes on it                           | A selected scene becomes the base map; pins link to imported scenes            |
+| W65 | 2        | Edit Foundry scene settings in Studio: playlist and music, lighting, weather, grid and other fields         | A scene's music and settings edit in Studio and reach Foundry on export        |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                     | Two folders with one name import separately; older snapshots still open        |
 | W10 | 3        | Installer and performance budgets for very large maps                                                       | Clean-machine install test and measured time/memory at documented map sizes    |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped) | Services receive their `Campaign` explicitly (no process-wide active campaign) |

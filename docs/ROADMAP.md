@@ -22,7 +22,7 @@ Ranked by how much each holds back the goal.
 3. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
-4. **Data at scale** (W28, W29, W54). Whole-document saves, 50-copy history, no deletion and dangling links
+4. **Data at scale** (W28, W54). Whole-document saves, 50-copy history, no deletion and dangling links
    break down at real campaign sizes.
 5. **Map breadth** (W26, W48–W50). One procedural generator. Other environments rely on the model drawing a
    grid, and large maps cannot be stocked in one response.
@@ -99,14 +99,6 @@ their row and finding say enough.
   grid pages instead of rendering every card.
 - Multi-record changes keep using `commit_docs`, naming each record as a target. A schema migration splits
   the single documents, with the usual verified backup and an older-fixture test.
-
-### W29 Deletion and where used
-
-- IDs are referenced from map areas (`npcs`, `items`, `threads`), scenes (`npcs`), prep `threads`, map
-  briefs, `related` lists and art items. A server-side backlink index answers "where used" for any record;
-  W34's "appears in" uses the same index.
-- Deleting unlinks every reference in one `commit_docs` change. Maps, preps and world maps go to a trash
-  folder and stay recoverable until it is emptied.
 
 ### W30, W31 Campaign memory
 
@@ -273,6 +265,12 @@ their row and finding say enough.
 - **Proposal**: a validated AI draft awaiting review. Nothing changes until it is applied.
 - **Bundle**: everything a session's prep links, exported to Foundry together (W38).
 - **Reference library**: Foundry documents kept searchable without becoming codex entries (W24).
+
+### W65 Scene settings
+
+- Imported scenes already keep their Foundry document. Add an editable `settings` subset (playlist or
+  sound, darkness, weather, global light, grid size and units) with a validated shape, written back by the
+  scene export. Start with music, since that is what the owner asked for; leave unknown fields untouched.
 
 ## Deprioritised
 

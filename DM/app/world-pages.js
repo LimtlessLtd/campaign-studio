@@ -204,6 +204,7 @@ async function worldPage(arg, context) {
           icon('plus'),
           'Add pin',
         ),
+        h('button', { onclick: () => renameWorldMapDialog(current) }, 'Rename map'),
         h('button', { onclick: () => newWorldMapDialog(store) }, 'New world map'),
       ),
     ),
@@ -223,6 +224,22 @@ function renderWorldEmpty(view, store) {
       h('p', {}, 'Upload a picture of your world, then pin battle maps onto it.'),
       h('button', { class: 'primary', onclick: () => newWorldMapDialog(store) }, 'Add a world map'),
     ),
+  );
+}
+
+function renameWorldMapDialog(map) {
+  const form = { name: map.name };
+  modal(
+    'Rename world map',
+    'Pins stay where they are; only the name changes.',
+    h('div', {}, formInput(form, 'name', 'Name')),
+    async () => {
+      if (!form.name.trim()) throw new Error('Give the map a name.');
+      map.name = form.name.trim();
+      await flush(WORLD_DOC);
+      route(true);
+    },
+    'Rename',
   );
 }
 
