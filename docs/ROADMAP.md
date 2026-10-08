@@ -14,7 +14,7 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Campaign memory and AI context** (W24, W30). W23 now bounds drafts and prompt packs, and the world import
+1. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
@@ -41,21 +41,21 @@ into the threads.
 
 | Step                  | Today                                            | Rows          |
 | --------------------- | ------------------------------------------------ | ------------- |
-| 1. Start next session | "+ Next session" copies last session's checklist | W30, W34      |
+| 1. Start next session | Session recap drafts read the latest played logs | W34           |
 | 2. Pitch              | Session Forge drafts a linked prep               | W33           |
 | 3. Outline            | Whole-session review; no item-level choices yet  | W33           |
 | 4. Maps               | Session map briefs queue layout workflows        | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry          | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style             | W42           |
 | 7. Publish to Foundry | One map per macro run                            | W38–W40, W47  |
-| 8. Play and wrap up   | A "played" status                                | W30, W35      |
+| 8. Play and wrap up   | A manual session log and "played" status         | W35           |
 
 ## Milestone
 
 A synthetic campaign goes through the whole journey in Studio. A pitch becomes an outline the GM edits; two
 maps (one generated, one imported) are stocked; six NPCs get portraits, tokens and compendium bases; one
 bundle imports into the macro fixture; a wrap-up moves the threads; the next session's recap uses it. Rows
-W24–W26, W30, W33–W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
+W24–W26, W33–W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
 
 ## Design notes
 
@@ -88,12 +88,6 @@ their row and finding say enough.
   documents only for entries with no Foundry origin.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
-
-### W30 Campaign memory
-
-- A **session log** records what happened: date, players' summary, GM notes, outcomes, threads touched,
-  entities that appeared, loot awarded. Keep it with the session's prep so one session stays one document.
-  It is a shape change with a migration.
 
 ### W68 Session recordings
 
@@ -128,7 +122,9 @@ their row and finding say enough.
   and by hero.
 - W35 adds a `wrapup` workflow kind. The GM's notes or a recording summary go in. A proposed session log,
   thread changes, codex changes (status, allegiance, notes), new threads and hooks for the next pitch come
-  out, reviewed with W33.
+  out, reviewed with W33. Expand the existing prep log to include date, threads touched, entities that
+  appeared and loot awarded alongside its player summary, GM notes and outcomes. Migrate older logs
+  without losing their text.
 
 ### W36, W37 Readiness and party
 

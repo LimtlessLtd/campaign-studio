@@ -136,19 +136,26 @@ def validate_request(item, read_doc):
 
 
 def recent_logs(read_doc, prep_names, current='', limit=3):
-    """The newest session logs with text, from preps other than `current`, newest session first."""
+    """The newest earlier session logs with text, newest session first."""
+    current_prep = read_doc('prep/' + current) if current else None
+    current_n = current_prep.get('n') if isinstance(current_prep, dict) else None
+    if type(current_n) is not int:
+        current_n = None
     found = []
     for name in prep_names:
         prep = read_doc('prep/' + name)
         log = prep.get('log') if isinstance(prep, dict) else None
         if name == current or not isinstance(log, dict):
             continue
+        number = prep.get('n') if type(prep.get('n')) is int else 0
+        if current_n is not None and number >= current_n:
+            continue
         outcomes = [str(x) for x in log.get('outcomes') or [] if isinstance(x, str) and x.strip()]
         summary, notes = str(log.get('summary') or '').strip(), str(log.get('notes') or '').strip()
         if summary or notes or outcomes:
             found.append(
                 (
-                    prep.get('n') if type(prep.get('n')) is int else 0,
+                    number,
                     {
                         'session': name,
                         'title': str(prep.get('title') or ''),

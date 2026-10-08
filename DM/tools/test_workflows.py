@@ -676,6 +676,49 @@ class StudioIntegration(unittest.TestCase):
             'checklist': ['Print the notice'],
         }
 
+    def test_session_recap_pack_uses_prior_logs_but_not_the_selected_preps_log(self):
+        for n in (1, 2, 3, 4, 6):
+            campaign_core.write_doc(
+                f'prep/s{n}',
+                shapes.PREP.new(
+                    n=n,
+                    title=f'Session {n}',
+                    log={'summary': f'Outcome {n}', 'notes': '', 'outcomes': []},
+                ),
+            )
+        campaign_core.write_doc(
+            'prep/s5',
+            shapes.PREP.new(
+                n=5,
+                title='Next session',
+                log={'summary': 'Unplayed notes', 'notes': '', 'outcomes': []},
+            ),
+        )
+        self.seed(
+            'inbox',
+            {
+                'items': [
+                    {
+                        'id': 'req-recap',
+                        'kind': 'session',
+                        'session': 's5',
+                        'text': 'Plan the next chapter.',
+                        'status': 'new',
+                    }
+                ]
+            },
+        )
+        pack = self.request('/api/requests/req-recap/pack')
+        context = json.loads(pack['prompt'].split('REFERENCE DATA:\n', 1)[1])
+        self.assertEqual(
+            [log['session'] for log in context['recent_session_logs']], ['s4', 's3', 's2']
+        )
+        self.assertEqual(context['recent_session_logs'][0]['summary'], 'Outcome 4')
+        self.assertNotIn('Unplayed notes', pack['prompt'])
+        self.assertNotIn('Outcome 6', pack['prompt'])
+        self.assertIn('Treat played logs as canon', pack['prompt'])
+        self.assertIn('recap', pack['schema']['properties'])
+
     def test_session_pitch_stages_and_applies_linked_prep_once(self):
         slug, _ = self.import_map()
         self.seed(

@@ -14,7 +14,6 @@ Next ID: W69
 
 | ID  | Priority | Work                                                                                                                           | Acceptance criteria                                                                |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| W30 | 2        | Session log, remainder: recaps read the newest logs                                                                            | Shape, migration and browser flow; recent logs appear in the context               |
 | W33 | 2        | Proposal review, remainder: before/after diffs, redraft one item, item review for map and session workflows                    | Map and session drafts support item choices; changed records show diffs            |
 | W34 | 2        | Threads, remainder: links to maps and locations, clues, sort by hero (entry and session links, staleness sort, backlinks done) | A thread lists its clues and map pins; threads sort by hero                        |
 | W35 | 2        | Wrap-up after play: notes in; session log, thread, codex and next-hook changes out                                             | Applying updates threads and NPCs; the next recap draft uses the log               |
