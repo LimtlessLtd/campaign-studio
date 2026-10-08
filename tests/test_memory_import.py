@@ -204,6 +204,29 @@ class MemoryImportTests(unittest.TestCase):
         self.assertEqual(len(self.studio.stored('codex')['entries']), 1)
         self.studio.assert_shaped()
 
+    def test_imported_party_reaches_every_draft_context_and_new_map_briefs(self):
+        world = foundry_library.selected_world()
+        self.assertEqual(campaign_core.party_level(), 5)
+        self.assertNotIn('party', campaign_core.campaign_facts())
+        stats = {'level': 7, 'classes': [{'name': 'Fighter', 'levels': 7}], 'ac': 18, 'hp': 60}
+        campaign_core.write_doc(
+            'foundry-library',
+            {
+                'format': 'campaign-studio-foundry-library',
+                'schema': 1,
+                'world': {'id': world['id'], 'path': world['path']},
+                'documents': {
+                    'actors': [
+                        {'id': 'a1', 'name': 'Hero', 'type': 'character', 'stats': stats},
+                        {'id': 'a2', 'name': 'Goblin', 'type': 'npc', 'stats': {}},
+                    ]
+                },
+            },
+        )
+        for facts in (campaign_core.campaign_facts(), campaign_core.campaign_info()):
+            self.assertEqual((facts['party']['size'], facts['party']['average_level']), (1, 7.0))
+        self.assertEqual(campaign_core.party_level(), 7)
+
 
 if __name__ == '__main__':
     unittest.main()

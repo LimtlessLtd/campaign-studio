@@ -13,6 +13,7 @@ import ai_provider
 import commits
 import config
 import foundry_library
+import foundry_party
 import map_trash
 import request_workflow
 import workflow
@@ -538,12 +539,32 @@ def generate_cmd(p):
     return cmd, f'{name or kind} ({W}x{H})'
 
 
-def campaign_info():
-    """Campaign facts every AI draft sees: its name, world and the newest session logs."""
+def campaign_facts():
+    """Facts every AI draft sees: campaign name, world and, once imported, the party's size and level."""
     cfg = config.settings()
     info = {'name': cfg['campaign_name']}
     if cfg.get('world_path'):
-        info['world'] = config.world_info(cfg['world_path'])
+        world = config.world_info(cfg['world_path'])
+        info['world'] = world
+        snapshot = foundry_library.current_snapshot(read_json(doc_path('foundry-library')), world)
+        party = foundry_party.party(snapshot['documents'].get('actors', [])) if snapshot else {}
+        if party.get('size'):
+            info['party'] = party
+    return info
+
+
+def party_level():
+    """The imported party's average level, rounded, for new briefs; 5 when no party is known."""
+    try:
+        average = campaign_facts().get('party', {}).get('average_level', 0)
+    except (OSError, ValueError):
+        return 5
+    return max(1, min(30, round(average))) if average else 5
+
+
+def campaign_info():
+    """Campaign facts plus the newest session logs."""
+    info = campaign_facts()
     logs = request_workflow.recent_logs(request_read, list_docs('prep'))
     if logs:
         info['recent_session_logs'] = logs
@@ -551,15 +572,11 @@ def campaign_info():
 
 
 def request_pack(item):
-    cfg = config.settings()
-    campaign_info = {'name': cfg['campaign_name']}
-    if cfg.get('world_path'):
-        campaign_info['world'] = config.world_info(cfg['world_path'])
     return request_workflow.prompt_pack(
         item,
         request_read,
-        campaign_info,
-        cfg['context_budget_chars'],
+        campaign_facts(),
+        config.settings()['context_budget_chars'],
         prep_names=list_docs('prep'),
     )
 
