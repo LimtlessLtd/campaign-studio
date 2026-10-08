@@ -208,10 +208,40 @@ async function importRequestProposal(item) {
     'Validate & review',
   );
 }
+/* Items of a proposal the GM has unticked, by request ID, as the `kind:id` keys the server accepts. */
+const rejectedItems = new Map();
+const REVIEWED_KINDS = ['entries', 'threads', 'scenes', 'handouts'];
+function itemChoice(item, kind, row) {
+  const key = kind + ':' + row.id;
+  const rejected = rejectedItems.get(item.id) || new Set();
+  return h(
+    'div',
+    { class: 'card', style: 'margin:4px 0' },
+    h(
+      'label',
+      { class: 'row' },
+      h('input', {
+        type: 'checkbox',
+        checked: !rejected.has(key),
+        onchange: (event) => {
+          if (event.target.checked) rejected.delete(key);
+          else rejected.add(key);
+          rejectedItems.set(item.id, rejected);
+        },
+      }),
+      h('b', {}, row.name || row.title || row.id),
+      h('span', { class: 'muted' }, 'Include when applying'),
+    ),
+    h('pre', { class: 'file' }, JSON.stringify(row, null, 2)),
+  );
+}
 async function applyRequestProposal(item) {
   if (S.pending.inbox) await flush('inbox');
   try {
-    await post('/api/requests/' + item.id + '/apply', {});
+    await post('/api/requests/' + item.id + '/apply', {
+      rejected: [...(rejectedItems.get(item.id) || [])],
+    });
+    rejectedItems.delete(item.id);
     await load('inbox', { items: [] });
     await poll();
     route(true);
@@ -392,7 +422,9 @@ function requestCard(it, box, draw) {
                 'div',
                 {},
                 h('b', {}, key),
-                h('pre', { class: 'file' }, JSON.stringify(it.draft[key], null, 2)),
+                REVIEWED_KINDS.includes(key)
+                  ? it.draft[key].map((row) => itemChoice(it, key, row))
+                  : h('pre', { class: 'file' }, JSON.stringify(it.draft[key], null, 2)),
               ),
             ),
         )

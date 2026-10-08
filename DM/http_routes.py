@@ -1007,7 +1007,10 @@ class Handler(SimpleHTTPRequestHandler):
                 request_workflow.stage(item, p['draft'], request_read)
                 write_doc('inbox', box)
             else:
-                request_workflow.apply(item, request_read, commit_docs, box)
+                rejected = p.get('rejected') or []
+                if not isinstance(rejected, list) or not all(isinstance(k, str) for k in rejected):
+                    raise Invalid('Rejected items must be a list of keys.')
+                request_workflow.apply(item, request_read, commit_docs, box, rejected)
             return self.send_json(item)
 
     def _post_map_import(self, path, query, p):
