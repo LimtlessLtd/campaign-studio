@@ -46,6 +46,7 @@ from campaign_core import (
     import_foundry_snapshot,
     job_file,
     job_progress,
+    campaign_info,
     list_docs,
     list_images,
     list_jobs,
@@ -462,12 +463,9 @@ class Handler(SimpleHTTPRequestHandler):
             raise Invalid('Invalid workflow route.')
         value = workflow.get(parts[3])
         if len(parts) == 5 and parts[4] == 'pack':
-            campaign_info = {'name': config.settings()['campaign_name']}
-            if config.settings().get('world_path'):
-                campaign_info['world'] = config.world_info(config.settings()['world_path'])
             return self.send_json(
                 workflow.prompt_pack(
-                    value, campaign_info, for_run=query.get('for_run', [''])[0] == '1'
+                    value, campaign_info(), for_run=query.get('for_run', [''])[0] == '1'
                 )
             )
         return self.send_json(value)

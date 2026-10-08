@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Map drafts read session logs (W30, second slice):** AI map drafts (layout and content) now receive the newest three session logs in the campaign block, and the prompt tells the AI to treat them as canon. Recaps are not built yet, so W30 keeps only that part.
 - **Session log (W30, first slice):** each prep has a "Session log" (what the players did, GM notes, outcomes). General request drafts now receive the newest three logs from other sessions as `recent_session_logs`, and the prompt tells the AI to treat them as canon. Campaign data moves to schema 6 on start-up, with the usual verified backup first. Map drafts and recaps do not read logs yet. New row W68 (transcribe session videos).
 - **Remove a world map (W67, first slice):** the world map page has "Remove world map", which deletes only the Studio nomination and its pins after a confirmation. Battle maps and Foundry are untouched. New rows W66 (AI pins for named scenes) and W67 (never delete from Foundry; unlink everywhere).
 - **Rename a world map (W29, last slice):** the world map page has "Rename map". Pins reference the map by id, so they keep working. Preps and map trash, codex delete and prep archive were earlier slices; world maps still have no trash.
