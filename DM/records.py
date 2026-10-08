@@ -127,8 +127,34 @@ def choices(data, kind):
     return result
 
 
-def page(data, kind, *, offset=0, limit=40, query='', type='', tag='', source='', status='', pc=''):
-    """Search the records on the server; return a small, stable page to the browser."""
+def last_session(thread):
+    """Number of the newest session a thread touches (prep names look like s12); 0 when none."""
+    numbers = [
+        int(match.group(1))
+        for name in thread.get('sessions', [])
+        if isinstance(name, str) and (match := re.fullmatch(r's(\d{1,6})', name))
+    ]
+    return max(numbers, default=0)
+
+
+def page(
+    data,
+    kind,
+    *,
+    offset=0,
+    limit=40,
+    query='',
+    type='',
+    tag='',
+    source='',
+    status='',
+    pc='',
+    sort='',
+):
+    """Search the records on the server; return a small, stable page to the browser.
+
+    Threads sort by title, or with sort='stale' by the session they last touched, oldest first.
+    """
     if not (0 <= offset <= 1000000 and 1 <= limit <= 100):
         raise ValueError('Invalid page range.')
     query = query.strip().casefold()[:200]
@@ -189,6 +215,12 @@ def page(data, kind, *, offset=0, limit=40, query='', type='', tag='', source=''
             }
 
         sort_key = lambda row: (str(row.get('title', '')).casefold(), row['id'])
+        if sort == 'stale':
+            sort_key = lambda row: (
+                last_session(row),
+                str(row.get('title', '')).casefold(),
+                row['id'],
+            )
     found = sorted((record for record in all_records(data, kind) if include(record)), key=sort_key)
     return {
         'items': [summary(row) for row in found[offset : offset + limit]],

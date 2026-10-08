@@ -192,6 +192,7 @@ class SchemaTests(unittest.TestCase):
             (threads[1]['pcs'], threads[1]['source'], threads[1]['custom']), ([], '', 7)
         )
         self.assertEqual(threads[1]['status'], 'planned')
+        self.assertEqual((threads[1]['entries'], threads[1]['sessions']), ([], []))
         s1 = self.read('data/prep/s1.json')
         self.assertEqual((s1['handouts'], s1['scenes'][0]['npcs']), ([], []))
         self.assertEqual((s1['notes'], s1['checklist'][0]['done']), ('Keep.', True))

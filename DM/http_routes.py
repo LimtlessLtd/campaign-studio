@@ -449,6 +449,7 @@ class Handler(SimpleHTTPRequestHandler):
                 source=query.get('source', [''])[0],
                 status=query.get('status', [''])[0],
                 pc=query.get('pc', [''])[0],
+                sort=query.get('sort', [''])[0],
             )
         )
 
