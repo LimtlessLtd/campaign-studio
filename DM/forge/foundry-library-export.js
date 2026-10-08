@@ -19,6 +19,10 @@ const common = (doc) => ({
   uuid: doc.uuid,
   name: doc.name,
   folder: doc.folder?.name ?? '',
+  folderId: doc.folder?.id ?? '',
+  folderPath: [...(doc.folder?.ancestors ?? []).map((f) => f.name).reverse(), doc.folder?.name]
+    .filter(Boolean)
+    .join(' / '),
   type: doc.type ?? '',
   image: doc.img ?? '',
   // Copies of compendium documents rarely need campaign notes; the import skips them by default.
