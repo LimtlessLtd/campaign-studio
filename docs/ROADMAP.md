@@ -272,6 +272,19 @@ their row and finding say enough.
   sound, darkness, weather, global light, grid size and units) with a validated shape, written back by the
   scene export. Start with music, since that is what the owner asked for; leave unknown fields untouched.
 
+### W66 AI pins for named scenes
+
+- After a scene is chosen as the overworld map (W64), let the AI read its image text and pin labels and
+  match them to imported scenes by exact or near name (a label "Campess Port" and a scene "Campess Port").
+  Return a proposal, one pin per match with its position; the GM accepts, edits or rejects each (W33). Never
+  place a pin without review, and send the AI only what the job needs.
+
+### W67 Unlink and remove, never delete from Foundry
+
+- Rule: Studio never deletes anything from Foundry. It may remove links, nominations and detail it generated.
+  Give every linked record (world map nomination, pin, scene or entry link) an unlink or remove action that
+  states what stays in Foundry. Shipped so far: remove a world map (nomination and pins).
+
 ## Deprioritised
 
 - Foundry backup, upgrade and cutover tooling is complete; keep it to maintenance.

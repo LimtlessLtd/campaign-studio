@@ -205,6 +205,7 @@ async function worldPage(arg, context) {
           'Add pin',
         ),
         h('button', { onclick: () => renameWorldMapDialog(current) }, 'Rename map'),
+        h('button', { onclick: () => removeWorldMap(store, current) }, 'Remove world map'),
         h('button', { onclick: () => newWorldMapDialog(store) }, 'New world map'),
       ),
     ),
@@ -225,6 +226,20 @@ function renderWorldEmpty(view, store) {
       h('button', { class: 'primary', onclick: () => newWorldMapDialog(store) }, 'Add a world map'),
     ),
   );
+}
+
+async function removeWorldMap(store, map) {
+  const pins = map.pins.length;
+  if (
+    !confirm(
+      `Remove the world map "${map.name}" and its ${pins} pin${pins === 1 ? '' : 's'}? ` +
+        'Your battle maps and anything in Foundry stay as they are.',
+    )
+  )
+    return;
+  store.maps.splice(store.maps.indexOf(map), 1);
+  await flush(WORLD_DOC);
+  route(true);
 }
 
 function renameWorldMapDialog(map) {

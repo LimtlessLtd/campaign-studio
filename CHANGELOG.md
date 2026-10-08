@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Remove a world map (W67, first slice):** the world map page has "Remove world map", which deletes only the Studio nomination and its pins after a confirmation. Battle maps and Foundry are untouched. New rows W66 (AI pins for named scenes) and W67 (never delete from Foundry; unlink everywhere).
 - **Rename a world map (W29, last slice):** the world map page has "Rename map". Pins reference the map by id, so they keep working. Preps and map trash, codex delete and prep archive were earlier slices; world maps still have no trash.
 - **Selected record highlighted (W62, World Library):** the entry you open in a World Library list (scenes, journals, actors, items, media) is highlighted and marked `aria-pressed`, per category, and stays highlighted after changing page, searching or reloading the tab (kept in session storage). Other lists open their record on its own page, where the sidebar already marks the current section.
 - **Prep action spacing (W60):** the add-scene, add-handout and add-loot controls now clear the next section heading at desktop and phone widths.
