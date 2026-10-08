@@ -15,6 +15,7 @@ from pathlib import Path
 
 import config
 import foundry_leveldb
+import foundry_party
 import shapes
 import storage
 
@@ -27,7 +28,9 @@ COLLECTIONS = {
     'actors': ('actors', 'Actor'),
     'items': ('items', 'Item'),
 }
-EMBEDDED = {'journal': ('pages',)}
+EMBEDDED = {'journal': ('pages',), 'actors': ('items',)}
+# Embedded documents worth keeping: an actor's class items give a character's level, its other items do not.
+EMBEDDED_KEPT = {'actors': lambda child: child.get('type') == 'class'}
 MAX_DOCUMENTS = 5000
 MAX_NEDB_BYTES = 256 * 1024 * 1024
 MEDIA = {
@@ -244,6 +247,7 @@ def normalize_snapshot(payload, world, origin='macro', stamp='', omitted=None):
                     'image': _short(item.get('image'), 1000),
                     'summary': _short(item.get('summary'), 20000),
                     'compendium': item.get('compendium') is True,
+                    'stats': foundry_party.clean_stats(item.get('stats')),
                     'pages': [
                         {
                             'id': _short(page.get('id'), 128),
@@ -379,7 +383,8 @@ def _documents(world, name):
                 documents[identity] = {**document, '_id': identity}
             else:
                 parent, _, child = identity.partition('.')
-                children.setdefault(parent, {})[child] = {**document, '_id': child}
+                if EMBEDDED_KEPT.get(name, lambda _: True)(document):
+                    children.setdefault(parent, {})[child] = {**document, '_id': child}
         return documents, children
     # Foundry 10 and earlier keep one JSON document per line; a later line replaces an earlier one.
     if source.stat().st_size > MAX_NEDB_BYTES:
@@ -461,6 +466,10 @@ def _record(kind, document, children, folders, paths=None):
     elif kind == 'journals':
         record['pages'] = _journal_pages(document, children.get(identity, {}))
     elif kind == 'actors':
+        if document.get('type') == 'character':
+            record['stats'] = foundry_party.character_stats(
+                document, list(children.get(identity, {}).values())
+            )
         record['summary'] = _plain_text(
             _dig(
                 document,

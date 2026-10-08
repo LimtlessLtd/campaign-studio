@@ -137,7 +137,7 @@ their row and finding say enough.
   within the party's budget; a Foundry export newer than the prep's last change. Each failed check links to
   the action that fixes it.
 - W37 needs character levels and classes. In dnd5e they come from class items embedded in each actor (keys
-  `!actors.items!<actor>.<item>` in the world database), which the World Library reader skips today.
+  `!actors.items!<actor>.<item>` in the world database), which the World Library reader now reads into `stats` (`foundry_party`). Encounter budgets and map briefs do not use it yet.
 
 ### W38–W41, W46, W47 Publishing to Foundry
 
