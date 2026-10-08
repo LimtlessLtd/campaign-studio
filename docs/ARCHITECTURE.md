@@ -62,6 +62,7 @@ flowchart LR
 | `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                      |
 | `DM/transcription.py`                 | Local Whisper engines, recording checks, transcript bounds and the transcript shape |
 | `DM/tools/transcribe_worker.py`       | One local transcription in a child process; leaves segments for the server to store |
+| `DM/transcript_classifier.py`         | Transcript windows, the sorting prompt and schema, passage validation, GM review    |
 | `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge      |
 | `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                     |
 | `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                              |
@@ -71,6 +72,7 @@ flowchart LR
 | `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                             |
 | `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                    |
 | `DM/app/recordings-page.js`           | Recordings page: choose a file, watch the job, read and remove transcripts          |
+| `DM/app/transcript-review.js`         | Sorting controls, the passage review list and the table-lore list                   |
 | `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                      |
 | `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation               |
 | `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                               |
@@ -150,19 +152,21 @@ the shapes of the records in its lists (a map key's areas, an area's journal ent
 records with `Shape.new`, and the browser builds them with `blank(kind, fields)` from `GET /api/shapes`.
 Links and provenance such as `map`, `area`, `workflow` or `request` are optional extra fields.
 
-| Document                   | Shape         | Records in its lists                                                 |
-| -------------------------- | ------------- | -------------------------------------------------------------------- |
-| `data/codex/<id>.json`     | `codex_entry` | one codex entry; unsafe legacy IDs use a hashed storage key          |
-| `data/threads/<id>.json`   | `thread`      | one thread                                                           |
-| `data/art.json`            | `art`         | art items                                                            |
-| `data/world-maps.json`     | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
-| `data/prep/<session>.json` | `prep`        | scenes with thread clues, handouts, checklist items, loot            |
-| `maps/<slug>/key.json`     | `map_key`     | areas (with journal entries, events, loot), events                   |
+| Document                     | Shape         | Records in its lists                                                 |
+| ---------------------------- | ------------- | -------------------------------------------------------------------- |
+| `data/codex/<id>.json`       | `codex_entry` | one codex entry; unsafe legacy IDs use a hashed storage key          |
+| `data/threads/<id>.json`     | `thread`      | one thread                                                           |
+| `data/art.json`              | `art`         | art items                                                            |
+| `data/world-maps.json`       | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
+| `data/transcripts/<id>.json` | `transcript`  | segments, and the passages sorted from them (`transcript_passage`)   |
+| `data/table-lore.json`       | `table_lore`  | notes on gags the GM confirmed as banter (`table_lore_item`)         |
+| `data/prep/<session>.json`   | `prep`        | scenes with thread clues, handouts, checklist items, loot            |
+| `maps/<slug>/key.json`       | `map_key`     | areas (with journal entries, events, loot), events                   |
 
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 adds session pitch, scene plan and handout image-brief fields. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts and schema 11 adds their passages, sorting progress and the table-lore list. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -201,7 +205,7 @@ packs and background jobs use this selector; `/api/context/search` and per-draft
 the browser preview and pins.
 
 One worker runs per lane (forge, structured drafts, art, transcribe). The draft lane retains its `claude` key in saved jobs
-for compatibility. Lanes may run concurrently. `JobService` persists queue and
+for compatibility; it also runs the `classify` jobs that sort transcripts. Lanes may run concurrently. `JobService` persists queue and
 process transitions through an injectable runner (`SubprocessRunner`: `start`, then `feed`, `wait`, `terminate`); application callbacks settle image, workflow and inbox documents. State postprocessing
 happens under the server lock, before the job is reported complete. Exceptions fail the job and leave its
 worker available. On restart, the server checks the data schema, completes interrupted changes and migrates
@@ -246,8 +250,8 @@ Old `/api/claude` calls use the selected structured request runner. The OpenAI p
 it has not been exercised with a paid API call.
 
 The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
-recordings are transcribed locally (W68; classification and the thread ledger are W69–W73 in
-`docs/ROADMAP.md`). The OpenAI provider is optional.
+recordings are transcribed locally (W68) and sorted into play and banter (W69); the thread ledger and
+what follows are W70–W73 in `docs/ROADMAP.md`. The OpenAI provider is optional.
 
 ## Session recordings
 
@@ -266,10 +270,42 @@ then the job's stdin carries a JSON request (recording, engine settings, result 
 `faster-whisper` in-process, or `whisper-cpp` with ffmpeg), prints progress and writes its segments to
 `jobs/<id>.transcript`. It writes no campaign document. When the job finishes the server validates the
 segments (ordered, finite, text bounded to 2,000 characters a segment, 20,000 segments and 2 MB of text; a
-longer recording keeps its start and says so), writes `transcripts/<id>` (`shapes.TRANSCRIPT`, schema 10),
+longer recording keeps its start and says so), writes `transcripts/<id>` (`shapes.TRANSCRIPT`),
 and removes the staged result and the scratch audio, also after a failure, cancel or restart. A model is
 downloaded only when `transcription.allow_download` is set. Transcript text is what was said at the table:
 reference data, never instructions. The recording is only read; nothing is uploaded.
+
+### Play, banter and table lore
+
+A transcript is also what was joked about, so a second step separates the game from the table
+(`transcript_classifier.py`). `POST /api/transcripts/<id>/classify {restart?}` queues a `classify` job on the
+draft lane for the window at the transcript's cursor: whole segments up to 30,000 characters and the draft
+context budget. The prompt carries the instruction, the saved table-lore notes (newest first, 6,000
+characters at most), the last three earlier passages' gists and the numbered segments; the transcript is data,
+never instructions. The answer is `SCHEMA` (passages with first and last segment, kind, gist, an optional
+`remember` note and a matched `lore` ID) from the configured provider (Claude Code, or the OpenAI worker).
+`finish_classification` validates it in `passages_from`: numbers are clipped to the window, a passage that
+starts inside an earlier one keeps only what follows, a segment the model left out becomes an `unclear`
+passage, a `lore` ID must exist, and only banter keeps a note, so no segment is read as play by omission. It
+stores the passages (`passages`, each `confirmed: false`) and queues the next window until the cursor reaches
+the end (`classification.status` `done`). Each window is its own job, so Cancel, usage totals and restart
+recovery behave as for other drafts: a failed, cancelled or interrupted window sets `failed` with the
+reason and the cursor stays, and the same endpoint resumes from it. Work in earlier windows, including the
+GM's decisions, is kept; `restart` forgets passages but not table lore. A transcript is busy (409) while it
+is being transcribed or sorted, and transcribing a sorted recording again needs `replace: true`.
+
+`GET /api/transcripts/<id>/passages?show=pending|known|confirmed|all&offset=&limit=` pages the review list
+with times and an excerpt of each passage; list cards also carry `review` counts and the `plan` (requests and
+characters) shown before sorting starts. `POST /api/transcripts/<id>/review {decisions}` takes `{id, kind?,
+confirmed?, remember?}` items: only in-game or banter can be confirmed, and the transcript and table lore are
+written together with `commit_docs`. Confirming banter with a note saves `table-lore` item
+`<transcript>-<passage>`, one per passage, so repeats add nothing; undoing it, calling the passage play or
+emptying the note removes that item. `GET /api/table-lore` and `POST /api/table-lore/<id>/remove` manage the
+list (200 notes at most); removing an item clears the match on every passage that used it, in every
+transcript, in the same commit. Known-lore passages sit outside the pending count, and the GM can still call
+one in-game. The step's only output is `confirmed_play(transcript)`: passages the GM confirmed as in-game,
+with their segments and times. Banter, unclear and unconfirmed passages never leave it, whatever a model
+proposed. `table-lore` and transcripts are application-owned documents the generic document save refuses.
 
 ## Foundry boundary
 

@@ -20,7 +20,7 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Session recordings to next session** (W69–W73; W68 transcription is done). The owner's main use.
+1. **Session recordings to next session** (W70–W73; W68 transcription and W69 sorting are done). The owner's main use.
    Recordings are transcribed locally, split into real play and table banter, folded into a thread ledger, and
    turned into reviewed arc proposals and a next-session draft. Take these rows before the rest.
 2. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
@@ -98,7 +98,7 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W69–W73 Session recordings to next session
+### W70–W73 Session recordings to next session
 
 - Owner feedback (8 Oct): point AI at local session videos, transcribe the audio, work out which threads are
   still loose, then help create arcs and resolutions and the next session. The table's jokes and invented gags
@@ -109,11 +109,11 @@ their row and finding say enough.
   or required for any step here. A hosted transcription or API provider is out of scope. Long runs are costly
   against subscription limits: process one session at a time, chunk under `context_budget_chars`, estimate
   before a run and ask first (W44), and never resend settled sessions (the ledger and logs carry them).
-- **W69 classification.** A transcript is already stored (`transcripts/<id>`, `shapes.TRANSCRIPT`, each
-  segment `{start, end, text}`); this step adds the classification to each segment (a shape change with a
-  migration). Chunk the transcript and mark each passage **in-game**, **table banter** or
-  **unclear**, quoting it. The GM confirms in a review list; banter and invented gags are saved as table
-  lore (a small stored list) so later sessions skip them. Only confirmed in-game passages leave this step.
+- **Input from W68 and W69.** A transcript is stored (`transcripts/<id>`) with passages the GM confirmed as
+  in-game or table banter. Read confirmed play through `transcript_classifier.confirmed_play`, which returns
+  each passage with its segment numbers, times and text; never read unconfirmed, banter or unclear passages.
+  Table lore (`table-lore`) holds the gags to skip, and `docs/ARCHITECTURE.md` → Play, banter and table lore
+  describes the windows, the job chain and the review.
 - **W70 thread ledger.** From confirmed play, a proposal updates threads (open, resolved, foreshadowed), the
   session log and codex notes, each with a quoted passage and timestamp as evidence. The loose-threads report
   lists threads with no resolution, ranked by staleness (W34) and hero. This is W35's wrap-up fed by a
@@ -211,7 +211,7 @@ their row and finding say enough.
 - W44: record tokens, cost and time per AI job from the provider's output (the Claude CLI's JSON result
   reports usage and cost). Show totals per session and month, and ask before running a prompt above a
   configurable size. Subscription users have limits, not a bill: report usage against them and ask before a
-  transcript-sized run (W69–W72).
+  transcript-sized run (W70–W72); W69 already shows its request count and size first.
 - W51: an opt-in script runs drafts against synthetic campaigns and checks that links resolve, canon is
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.

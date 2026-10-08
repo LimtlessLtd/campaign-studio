@@ -29,6 +29,7 @@ import records
 import revisions
 import shapes
 import storage
+import transcript_classifier
 import transcription
 import workflow
 from campaign_core import (
@@ -66,8 +67,11 @@ from campaign_core import (
     request_item,
     request_pack,
     request_read,
+    remove_lore,
     restore_revision,
     rev_of,
+    review_passages,
+    start_classification,
     start_request,
     start_transcription,
     start_workflow,
@@ -109,7 +113,12 @@ ROUTES = {
         (lambda path: path == '/api/usage', '_get_usage'),
         (lambda path: path == '/api/recordings', '_get_recordings'),
         (lambda path: path == '/api/transcripts', '_get_transcripts'),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/passages'),
+            '_get_transcript_passages',
+        ),
         (lambda path: path.startswith('/api/transcripts/'), '_get_transcript'),
+        (lambda path: path == '/api/table-lore', '_get_table_lore'),
         (lambda path: path == '/api/maps/trash', '_get_map_trash'),
         (lambda path: path.startswith('/api/codex/') and path.endswith('/uses'), '_get_codex_uses'),
         (lambda path: path == '/api/jobs', '_get_jobs'),
@@ -155,6 +164,18 @@ ROUTES = {
         ),
         (lambda path: path.startswith('/api/requests/'), '_post_request'),
         (lambda path: path == '/api/transcripts/start', '_post_transcript_start'),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/classify'),
+            '_post_transcript_classify',
+        ),
+        (
+            lambda path: path.startswith('/api/transcripts/') and path.endswith('/review'),
+            '_post_transcript_review',
+        ),
+        (
+            lambda path: path.startswith('/api/table-lore/') and path.endswith('/remove'),
+            '_post_table_lore_remove',
+        ),
         (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/remove'),
             '_post_transcript_remove',
@@ -707,9 +728,20 @@ class Handler(SimpleHTTPRequestHandler):
             }
         )
 
+    @staticmethod
+    def _transcript_card(document):
+        """A transcript for lists: no segments or passages, but how sorted it is and what sorting asks."""
+        budget = config.settings()['context_budget_chars']
+        return dict(
+            transcription.summary(document),
+            review=transcript_classifier.counts(document),
+            plan=transcript_classifier.plan(document, budget),
+            whole=transcript_classifier.plan(document, budget, start=0),
+        )
+
     def _get_transcripts(self, path, query, p):
         items = [
-            transcription.summary(read_json(doc_path('transcripts/' + name), {}))
+            self._transcript_card(read_json(doc_path('transcripts/' + name), {}))
             for name in list_docs('transcripts')
         ]
         items.sort(key=lambda item: -item.get('created', 0))
@@ -722,21 +754,37 @@ class Handler(SimpleHTTPRequestHandler):
             raise Invalid('bad transcript id')
         return ident
 
-    def _get_transcript(self, path, query, p):
-        """One transcript with a window of its segments, so a long session loads in pieces."""
-        ident = self._transcript_id(path)
+    @staticmethod
+    def _stored_transcript(ident):
         document = read_json(doc_path('transcripts/' + ident))
         if document is None:
             raise NotFound('no such transcript')
+        return document
+
+    @staticmethod
+    def _window(query, limit):
+        """The offset and limit of a page of a long list, the limit bounded by `limit`."""
         offset = max(0, int(query.get('offset', ['0'])[0]))
-        limit = max(1, min(500, int(query.get('limit', ['200'])[0])))
+        return offset, max(1, min(limit, int(query.get('limit', [str(limit)])[0])))
+
+    def _get_transcript(self, path, query, p):
+        """One transcript with a window of its segments, so a long session loads in pieces."""
+        document = self._stored_transcript(self._transcript_id(path))
+        offset, limit = self._window(query, 500)
         return self.send_json(
             dict(
-                transcription.summary(document),
+                self._transcript_card(document),
                 offset=offset,
                 segments=document['segments'][offset : offset + limit],
             )
         )
+
+    def _get_transcript_passages(self, path, query, p):
+        """A page of a transcript's passages for the review list (pending, known, confirmed or all)."""
+        document = self._stored_transcript(self._transcript_id(path, '/passages'))
+        offset, limit = self._window(query, 50)
+        show = query.get('show', ['pending'])[0]
+        return self.send_json(transcript_classifier.listing(document, show, offset, limit))
 
     def _post_transcript_start(self, path, query, p):
         """Queue a local transcription. The recording is read where it lies and never copied."""
@@ -744,7 +792,48 @@ class Handler(SimpleHTTPRequestHandler):
         with LOCK:
             if transcript_busy(rec['id']):
                 raise Conflict('This recording is already being transcribed.')
+            made = read_json(doc_path('transcripts/' + rec['id']))
+            if made and (made['passages'] or made['classification']['status']):
+                if p.get('replace') is not True:
+                    raise Conflict(
+                        'This transcript has been sorted. Transcribing again discards its passages; '
+                        'send replace to confirm.'
+                    )
             return self.send_json(start_transcription(rec, str(p.get('session') or '')))
+
+    def _post_transcript_classify(self, path, query, p):
+        """Ask the signed-in AI to sort a transcript into play and table banter, a window at a time."""
+        ident = self._transcript_id(path, '/classify')
+        with LOCK:
+            if transcript_busy(ident):
+                raise Conflict('This transcript is already being transcribed or sorted.')
+            try:
+                return self.send_json(start_classification(ident, p.get('restart') is True))
+            except LookupError as error:
+                raise NotFound(str(error)) from error
+
+    def _post_transcript_review(self, path, query, p):
+        """Record the GM's decisions on passages; confirmed banter notes become table lore."""
+        try:
+            counts = review_passages(self._transcript_id(path, '/review'), p.get('decisions'))
+        except LookupError as error:
+            raise NotFound(str(error)) from error
+        return self.send_json({'counts': counts})
+
+    def _get_table_lore(self, path, query, p):
+        lore = read_json(doc_path('table-lore'), shapes.TABLE_LORE.new())
+        return self.send_json({'items': lore['items'], 'max': transcript_classifier.MAX_LORE})
+
+    def _post_table_lore_remove(self, path, query, p):
+        """Remove one table-lore note. The passages that saved it stay, as banter."""
+        ident = path[len('/api/table-lore/') : -len('/remove')]
+        if not transcript_classifier.LORE_ID.fullmatch(ident):
+            raise Invalid('bad table lore id')
+        try:
+            remove_lore(ident)
+        except LookupError as error:
+            raise NotFound(str(error)) from error
+        return self.send_json({'ok': True})
 
     def _post_transcript_remove(self, path, query, p):
         """Remove Studio's transcript. The recording itself is never opened for writing."""

@@ -19,7 +19,7 @@ import storage
 import records
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 10
+CURRENT = 11
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -81,7 +81,7 @@ def check(data, maps):
 # ---------- migrations ----------
 # Fields of every stored record at CURRENT (shapes.fields_digest()). When a shape changes, add a version
 # whose migration is fill_campaign, so stored records gain the new fields, then update this digest.
-SHAPES_DIGEST = 'a4216d823ace7a4fd83f0aef5cbe9470d205c83745d3f28c90954557fde12a47'
+SHAPES_DIGEST = '8be0e76d609a77c4b500afc13492926a2e428446a9f61ec133199863ffefa90e'
 
 
 def shaped_documents(data, maps):
@@ -93,6 +93,7 @@ def shaped_documents(data, maps):
             yield path, shape
     yield os.path.join(data, 'art.json'), shapes.ART
     yield os.path.join(data, 'world-maps.json'), shapes.WORLD_MAPS
+    yield os.path.join(data, 'table-lore.json'), shapes.TABLE_LORE
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'transcripts', '*.json'))):
         yield path, shapes.TRANSCRIPT
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'prep', '*.json'))):
@@ -136,7 +137,8 @@ def hash_foundry_imports(data, maps):
 # version 6 added the session log to each prep; version 7 splits the codex and thread collections into
 # individual record documents (a special step in planned_changes, not an entry here); version 8 added
 # links and touched sessions to each thread; version 9 adds the session pitch, scene plan and handout art brief;
-# version 10 added session recording transcripts (a campaign without any has nothing to fill).
+# version 10 added session recording transcripts (a campaign without any has nothing to fill); version 11
+# adds the passages and sorting progress of each transcript, and the table-lore list.
 MIGRATIONS = {
     0: fill_campaign,
     1: fill_campaign,
@@ -147,6 +149,7 @@ MIGRATIONS = {
     7: fill_campaign,
     8: fill_campaign,
     9: fill_campaign,
+    10: fill_campaign,
 }
 
 

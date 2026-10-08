@@ -185,6 +185,69 @@ class BrowserSmoke(unittest.TestCase):
         self.assertEqual(campaign_core.list_docs('transcripts'), [])
         self.assertTrue(recording.exists(), 'removing a transcript never touches the recording')
 
+    def test_a_transcript_is_sorted_reviewed_and_its_banter_remembered_on_phone_and_desktop(self):
+        import test_transcript_classifier as sorting
+
+        ident = 'rec-0123456789abcdef'
+        texts = list(sorting.SCRIPT)
+        texts[1] = 'Mira says <b>open</b> the gate of the church of Auril.'
+        campaign_core.write_doc('transcripts/' + ident, sorting.transcript(ident, texts))
+        self.addCleanup(patch.stopall)
+        patch.object(campaign_core.JOBS_SERVICE, 'runner', sorting.FakeClaude()).start()
+        patch('ai_provider.command', return_value=['claude', '-p']).start()
+        banter = '0:00:10–0:00:19'
+
+        self.page.set_viewport_size(NARROW)
+        self.open('#/recordings')
+        expect(self.page.get_by_text('Not sorted yet')).to_be_visible()
+        self.assert_accessible('sorting phone')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='Sort play from banter: session-one').click()
+        expect(self.page.get_by_text('Sorting started')).to_be_visible()
+        job, cmd, stdin = campaign_core.LANES['claude'].get_nowait()
+        campaign_core.execute_job(job, cmd, stdin)
+
+        review = self.page.get_by_role('button', name='Review passages: session-one')
+        expect(review).to_be_visible(timeout=15000)  # the page notices the finished job
+        review.click()
+        expect(
+            self.page.get_by_text('Mira says <b>open</b> the gate')
+        ).to_be_visible()  # text, not HTML
+        self.assertEqual(self.page.locator('.passage-text b').count(), 0)
+        self.assert_accessible('review phone')
+        self.page.set_viewport_size(DESKTOP)
+        self.assert_accessible('review desktop')
+
+        note = self.page.get_by_label(f'Table lore note for {banter} (optional)')
+        self.assertEqual(note.input_value(), sorting.HORSE)
+        self.page.get_by_role('button', name=f'Table banter, {banter}').click()
+        expect(
+            self.page.get_by_role('button', name='Confirm the 2 proposed passages on this page')
+        ).to_be_visible()
+        self.page.get_by_role('button', name='Confirm the 2 proposed passages on this page').click()
+        expect(
+            self.page.get_by_text('1 need a decision · 0 match known table lore · 3 confirmed.')
+        ).to_be_visible()
+        passages = {p['id']: p for p in self.stored('transcripts/' + ident)['passages']}
+        self.assertEqual(
+            {i: (p['kind'], p['confirmed']) for i, p in passages.items()},
+            {
+                'p0': ('play', True),
+                'p2': ('banter', True),
+                'p4': ('unclear', False),
+                'p5': ('play', True),
+            },
+        )
+        self.assertEqual([i['text'] for i in self.stored('table-lore')['items']], [sorting.HORSE])
+
+        self.page.get_by_role('button', name='Done reviewing').click()
+        expect(self.page.get_by_text(sorting.HORSE, exact=True)).to_be_visible()
+        self.assert_accessible('table lore desktop')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name=f'Remove table lore: {sorting.HORSE}').click()
+        expect(self.page.get_by_text('No table lore yet.')).to_be_visible()
+        self.assertEqual(self.stored('table-lore')['items'], [])
+
     def test_openai_settings_enable_structured_draft_controls(self):
         self.page.set_viewport_size(NARROW)
         with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'synthetic-key'}):

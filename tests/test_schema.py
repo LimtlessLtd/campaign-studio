@@ -366,6 +366,46 @@ class SchemaTests(unittest.TestCase):
             (filled['truncated'], filled['session'], filled['source']['size']), (False, '', 0)
         )
 
+    def test_version_ten_transcripts_gain_passages_and_sorting_progress_and_keep_their_words(self):
+        self.migrate()
+        schema.write_marker(self.data, 10, 'Synthetic version 10 campaign')
+        path = self.dm / 'data/transcripts/rec-0123456789abcdef.json'
+        path.parent.mkdir()
+        segments = [{'start': 1.5, 'end': 4, 'text': 'The party reaches the gate.'}]
+        older = {
+            'id': 'rec-0123456789abcdef',
+            'title': 'Session one',
+            'session': 's1',
+            'segments': segments,
+            'truncated': False,
+        }
+        path.write_text(json.dumps(older))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (10, schema.CURRENT))
+        migrated = self.read('data/transcripts/rec-0123456789abcdef.json')
+        self.assertEqual((migrated['passages'], migrated['classification']['status']), ([], ''))
+        self.assertEqual(migrated['classification']['cursor'], 0)
+        self.assertEqual((migrated['segments'], migrated['session']), (segments, 's1'))
+        backup = next(Path(self.backups).rglob('rec-0123456789abcdef.json'))
+        self.assertEqual(
+            json.loads(backup.read_text()), older
+        )  # the old file is kept before the change
+
+    def test_a_stored_table_lore_list_is_completed_from_its_shape(self):
+        self.migrate()
+        (self.dm / 'data/table-lore.json').write_text(
+            json.dumps({'items': [{'id': 'rec-0123456789abcdef-p1', 'text': 'A gag'}]})
+        )
+
+        filled = dict(schema.planned_changes(self.data, self.maps, 10))[
+            str(self.dm / 'data/table-lore.json')
+        ]
+
+        self.assertEqual(filled['items'][0]['text'], 'A gag')
+        self.assertEqual((filled['items'][0]['transcript'], filled['items'][0]['added']), ('', 0))
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

@@ -8,6 +8,7 @@ import re
 import shutil
 import sys
 import threading
+import time
 import campaign
 import ai_provider
 import commits
@@ -22,6 +23,7 @@ import records
 import schema
 import shapes
 import storage
+import transcript_classifier
 import transcription
 import usage
 from job_service import JobService
@@ -54,7 +56,7 @@ DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 # Documents the application owns: only their own routes and services change them.
 APP_OWNED_DOC = re.compile(
-    r'^(?:settings|foundry-library|codex|threads|(?:codex|threads|workflows|jobs|transcripts)/.+)$'
+    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts)/.+)$'
 )
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
@@ -342,6 +344,8 @@ def settle_failed_job(job, message):
         fail_request(job, message)
     if job.get('transcript'):
         transcription.discard(campaign.active().jobs, job['transcript'])
+    if job.get('classify'):
+        fail_classification(job, message)
 
 
 def fail_job(job, error):
@@ -374,6 +378,8 @@ def finish_job(job, code, tail):
         finish_request(job, code, tail)
     if job['kind'] == 'transcribe':
         finish_transcription(job, code, tail)
+    if job['kind'] == 'classify':
+        finish_classification(job, code, tail)
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -480,6 +486,46 @@ def finish_transcription(job, code, tail):
         job.update(status='failed', note=str(error))
     finally:
         transcription.discard(campaign.active().jobs, job['transcript'])
+
+
+def fail_classification(job, message):
+    """Stop the sorting of a transcript at the window that failed, unless the transcript has moved on."""
+    name = 'transcripts/' + job['classify']
+    document = read_json(doc_path(name))
+    if document and document['classification']['job'] == job['id']:
+        document['classification'].update(status='failed', job='', error=message[:1000])
+        write_doc(name, document)
+
+
+def finish_classification(job, code, tail):
+    """Store the passages a finished window proposed, then queue the next window or finish."""
+    name = 'transcripts/' + job['classify']
+    document = read_json(doc_path(name))
+    state = document and document['classification']
+    if not state or state['job'] != job['id'] or state['cursor'] != job['first']:
+        job.update(status='failed', note='The transcript changed while it was being sorted.')
+        return
+    try:
+        if code:
+            raise ValueError(tail[-1000:] or 'The AI command failed.')
+        with open(job_file(job['id'], 'log'), encoding='utf-8') as file:
+            raw = file.read()
+        lore = read_json(doc_path('table-lore'), shapes.TABLE_LORE.new())
+        found = transcript_classifier.passages_from(
+            workflow.parse_output(raw), job['first'], job['stop'], {i['id'] for i in lore['items']}
+        )
+        transcript_classifier.place(document, found, job['first'], job['stop'])
+        if job['stop'] >= len(document['segments']):
+            document['classification'].update(status='done', job='')
+        else:
+            try:
+                document['classification'].update(job=classification_job(document)['id'])
+            except ValueError as error:  # this window is kept; sorting stops before the next one
+                document['classification'].update(status='failed', job='', error=str(error))
+        write_doc(name, document)
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        job.update(status='failed', note=str(error))
+        fail_classification(job, str(error))
 
 
 def finish_request(job, code, tail):
@@ -640,8 +686,10 @@ def default_recordings():
 
 
 def transcript_busy(transcript):
+    """True while a job is transcribing this recording or sorting its transcript."""
     return any(
-        j.get('transcript') == transcript and j.get('status') in ('queued', 'running')
+        transcript in (j.get('transcript'), j.get('classify'))
+        and j.get('status') in ('queued', 'running')
         for j in JOBS_SERVICE.iter_jobs()
     )
 
@@ -666,6 +714,84 @@ def start_transcription(rec, session=''):
             session=session,
             engine={key: options[key] for key in ('provider', 'model', 'language')},
         )
+
+
+def classification_job(document):
+    """Queue the model request for the next unsorted window of a transcript."""
+    first = document['classification']['cursor']
+    stop = transcript_classifier.window_end(
+        document['segments'],
+        first,
+        transcript_classifier.window_size(config.settings()['context_budget_chars']),
+    )
+    lore = read_json(doc_path('table-lore'), shapes.TABLE_LORE.new())
+    return new_job(
+        'claude',
+        'classify',
+        f'Sort play from banter: {document["title"][:50]} ({first + 1}-{stop})',
+        ai_provider.command('classify', transcript_classifier.SCHEMA),
+        transcript_classifier.prompt(document, first, stop, lore),
+        classify=document['id'],
+        first=first,
+        stop=stop,
+    )
+
+
+def start_classification(ident, restart=False):
+    """Queue the sorting of a transcript from where it stopped, or from the start."""
+    with LOCK:
+        name = 'transcripts/' + ident
+        document = read_json(doc_path(name))
+        if document is None:
+            raise LookupError('No such transcript.')
+        if restart:
+            transcript_classifier.start_over(document)
+        elif document['classification']['status'] == 'done':
+            raise ValueError('This transcript is sorted. Sort it again to start over.')
+        job = classification_job(document)
+        document['classification'].update(status='running', job=job['id'], error='')
+        write_doc(name, document)
+        return job
+
+
+def unlink_lore(removed, skip=''):
+    """Changes that clear removed table-lore items from the passages of the other transcripts."""
+    changes = []
+    if removed:
+        for other in list_docs('transcripts'):
+            document = read_json(doc_path('transcripts/' + other))
+            if other != skip and transcript_classifier.unlink_lore(document, removed):
+                changes.append(('transcripts/' + other, document))
+    return changes
+
+
+def review_passages(ident, decisions):
+    """Record the GM's decisions on a transcript's passages, with the table lore they save or remove."""
+    with LOCK:
+        name = 'transcripts/' + ident
+        document = read_json(doc_path(name))
+        if document is None:
+            raise LookupError('No such transcript.')
+        lore = read_json(doc_path('table-lore'), shapes.TABLE_LORE.new())
+        before = json.dumps(lore, sort_keys=True)
+        saved = {item['id'] for item in lore['items']}
+        transcript_classifier.review(document, lore, decisions, int(time.time()))
+        removed = saved - {item['id'] for item in lore['items']}
+        changes = unlink_lore(removed, skip=ident)
+        if json.dumps(lore, sort_keys=True) != before:
+            changes.append(('table-lore', lore))
+        commit_docs('Review transcript ' + ident, changes + [(name, document)])
+        return transcript_classifier.counts(document)
+
+
+def remove_lore(ident):
+    """Remove a table-lore note. Transcripts keep their passages; those that matched it lose the match."""
+    with LOCK:
+        lore = read_json(doc_path('table-lore'), shapes.TABLE_LORE.new())
+        if ident not in {item['id'] for item in lore['items']}:
+            raise LookupError('No such table lore.')
+        lore['items'] = [item for item in lore['items'] if item['id'] != ident]
+        commit_docs('Remove table lore ' + ident, unlink_lore({ident}) + [('table-lore', lore)])
 
 
 def start_workflow(value):
