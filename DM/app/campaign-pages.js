@@ -866,7 +866,8 @@ async function newPrep(context) {
   const names = S.state.prep;
   const active = activePreps();
   const last = active.length ? await context.doc('prep/' + active[active.length - 1], null) : null;
-  const n = Math.max(lastSession().n, last ? last.n : 0) + 1;
+  const existingNumbers = names.map((name) => Number(/^s(\d+)$/.exec(name)?.[1] || 0));
+  const n = Math.max(lastSession().n, ...existingNumbers, last ? last.n : 0) + 1;
   const name = 's' + n;
   if (!names.includes(name)) {
     S.docs['prep/' + name] = blank('prep', {
