@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Prep action spacing (W60):** the add-scene, add-handout and add-loot controls now clear the next section heading at desktop and phone widths.
 - **Prep archive review:** starting a new session now skips every existing session number, including archived preps, so archiving the last active prep cannot reopen an archived one.
 - **Archive session preps (W29, fourth slice):** a prep page has "Archive session" and "Restore session" (a prep's `archived` flag; nothing is deleted). Archived preps leave the session-prep navigation, the dashboard's next session and the default prep opened, and are listed as "Archived sessions" on the other prep pages; `GET /api/state` returns `prep_archived`. Session numbers still count archived preps, and map/request session pickers still list them. Prep titles were already editable. Campaign data moves to schema 5 on start-up, with the usual verified backup first. World maps still have no rename.
 - **Buttons for the map trash (W29, third slice):** a map's Foundry tab has "Move map to trash", and the Maps page lists the trash with Restore and "Delete for good" (`POST /api/maps/trash/<id>/discard`, which removes the stored folder and cannot be undone). Restore now also returns the documents it re-linked so the browser drops stale copies. Preps and world maps still have no trash or rename.

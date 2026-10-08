@@ -530,6 +530,10 @@ textarea.plan {
 .rowedit input {
   padding: 5px 8px;
 }
+.prep-section-action {
+  display: flow-root;
+  padding: 4px 0 16px;
+}
 details.card {
   margin-bottom: 10px;
 }

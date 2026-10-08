@@ -670,15 +670,19 @@ async function prepPage(name, context) {
     h('h2', {}, 'Scenes'),
     scenesBox,
     h(
-      'button',
-      {
-        onclick: () => {
-          p.scenes.push(blank('scene', { id: uid('scene') }));
-          save(docName);
-          drawScenes();
+      'div',
+      { class: 'prep-section-action' },
+      h(
+        'button',
+        {
+          onclick: () => {
+            p.scenes.push(blank('scene', { id: uid('scene') }));
+            save(docName);
+            drawScenes();
+          },
         },
-      },
-      '+ Add scene',
+        '+ Add scene',
+      ),
     ),
     h('h2', {}, 'Handouts for this session'),
     ...p.handouts.map((handout) =>
@@ -713,26 +717,34 @@ async function prepPage(name, context) {
       ),
     ),
     h(
-      'button',
-      {
-        onclick: () => {
-          p.handouts.push(blank('handout', { id: uid('handout') }));
-          save(docName);
-          route(true);
+      'div',
+      { class: 'prep-section-action' },
+      h(
+        'button',
+        {
+          onclick: () => {
+            p.handouts.push(blank('handout', { id: uid('handout') }));
+            save(docName);
+            route(true);
+          },
         },
-      },
-      '+ Add handout',
+        '+ Add handout',
+      ),
     ),
     h('h2', {}, 'Loot for this session'),
-    rowsEditor(
-      docName,
-      p.loot,
-      [
-        ['item', 'Item', 3],
-        ['where', 'Where / who has it', 2],
-        ['value', 'Value', 1],
-      ],
-      () => blank('loot'),
+    h(
+      'div',
+      { class: 'prep-section-action' },
+      rowsEditor(
+        docName,
+        p.loot,
+        [
+          ['item', 'Item', 3],
+          ['where', 'Where / who has it', 2],
+          ['value', 'Value', 1],
+        ],
+        () => blank('loot'),
+      ),
     ),
     h(
       'div',

@@ -237,6 +237,31 @@ their row and finding say enough.
   of it from the changelog. Before a migration runs, show the version change, the document count affected
   and the backup folder, and keep the existing refusal of newer schemas. W52 adds restore from Settings.
 
+### W61 Foundry folder hierarchy
+
+- Keep each imported document's Foundry folder ID and parent chain, separate from editable Studio grouping.
+  Show that path in the World Library and imported record lists so a deprecated scene folder remains distinct.
+- Older snapshots without folder IDs still import. Reimport updates a changed Foundry folder without
+  overwriting a Studio-edited record; coordinate with W24's folder-ID picker.
+
+### W62 Visible selection
+
+- The currently opened item needs a persistent selected state in its list, starting with Foundry scenes.
+  Use the same route-derived state for click and keyboard navigation, and expose it to assistive technology.
+
+### W63 Imported media previews
+
+- Use the read-only Foundry asset route for scene backgrounds, journal video and both NPC portrait and
+  prototype-token art. Keep world provenance, path containment, content-type and size limits.
+- Show an explicit unavailable state for missing media or a disconnected world instead of an empty image.
+
+### W64 Imported overworld scene
+
+- A world map may take its image from a selected imported Foundry scene instead of an upload. Keep the
+  selected scene's world-scoped identity so the link survives a refresh or a scene rename.
+- Let the GM place pins for other imported scenes on that map. Keep the existing uploaded world maps and
+  battle-map links working; do not write to Foundry's database.
+
 ## Glossary
 
 - **Session**: one game night. Its prep is the plan; its log (W30) is what happened.

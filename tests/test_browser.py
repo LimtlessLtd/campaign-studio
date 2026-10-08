@@ -210,6 +210,22 @@ class BrowserSmoke(unittest.TestCase):
         self.assertTrue(self.stored('prep/s1')['archived'])
         self.assertFalse(self.stored('prep/s2')['archived'])
 
+    def test_prep_add_buttons_clear_the_next_heading(self):
+        self.open('#/prep/new')
+        for viewport in (DESKTOP, NARROW):
+            self.page.set_viewport_size(viewport)
+            for button, heading in (
+                ('+ Add scene', 'Handouts for this session'),
+                ('+ Add handout', 'Loot for this session'),
+                ('+ add', 'Checklist'),
+            ):
+                action = self.page.get_by_role('button', name=button, exact=True).bounding_box()
+                section = self.page.get_by_role('heading', name=heading).bounding_box()
+                self.assertIsNotNone(action)
+                self.assertIsNotNone(section)
+                gap = section['y'] - (action['y'] + action['height'])
+                self.assertGreaterEqual(gap, 16, (viewport['width'], button, heading, gap))
+
     def test_pin_editor_persists_across_navigation(self):
         slug, _brief = self.studio.import_map()
         self.open('#/maps/' + slug)
