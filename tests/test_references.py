@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 import campaign
 import campaign_core
 import http_routes
+import map_trash
 import references
 
 
@@ -175,6 +176,31 @@ class MapTrashTests(DeleteRouteTests):
         self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/discard', 'POST')[0], 404)
         self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')[0], 404)
         self.assertEqual(self.call('/api/maps/trash/..%2Fx/discard', 'POST')[0], 404)
+
+    def test_interrupted_delete_restores_the_folder_when_the_catalogue_is_unchanged(self):
+        folder = self.seed()
+        here = campaign.active()
+        index = campaign_core.read_json(campaign_core.doc_path('maps/index'))
+        trash_id = map_trash.put(here, 'docks', index['items'][0], {}, [])
+        self.assertFalse(folder.exists())
+
+        campaign_core.recover_commits()
+
+        self.assertTrue((folder / 'key.json').is_file())
+        self.assertFalse(Path(here.map_trash, trash_id).exists())
+
+    def test_interrupted_restore_returns_the_folder_to_trash(self):
+        folder = self.seed()
+        _, body = self.call('/api/maps/docks/delete', 'POST')
+        here = campaign.active()
+        map_trash.restore(here, body['trash'], 'docks')
+        self.assertTrue(folder.exists())
+
+        campaign_core.recover_commits()
+
+        self.assertFalse(folder.exists())
+        self.assertEqual(len(map_trash.listing(here)), 1)
+        self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')[0], 200)
 
 
 if __name__ == '__main__':

@@ -13,6 +13,7 @@ import ai_provider
 import commits
 import config
 import foundry_library
+import map_trash
 import request_workflow
 import workflow
 import revisions
@@ -200,7 +201,10 @@ def import_foundry_snapshot(snapshot, folders=None):
 def recover_commits():
     """Finish interrupted changes. Call before any read/modify/write of campaign documents."""
     with LOCK:
-        return JOURNAL.recover()
+        report = JOURNAL.recover()
+        if not report['conflicts']:
+            map_trash.reconcile(campaign.active())
+        return report
 
 
 def queue_forge(slug, label, populate=False):

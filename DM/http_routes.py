@@ -957,15 +957,11 @@ class Handler(SimpleHTTPRequestHandler):
             index['items'] = [m for m in index['items'] if m is not entry]
             brief = read_json(doc_path('mapbrief/' + slug), {})
             trash_id = map_trash.put(here, slug, entry, brief, links)
-            try:
-                commit_docs(
-                    f'Delete map {slug}',
-                    [(name, docs[name]) for name in changed] + [('maps/index', index)],
-                )
-            except Exception:
-                map_trash.take_back(here, trash_id, slug)
-                map_trash.discard(here, trash_id)
-                raise
+            commit_docs(
+                f'Delete map {slug}',
+                [(name, docs[name]) for name in changed] + [('maps/index', index)],
+            )
+            map_trash.phase(here, trash_id, 'trashed')
             storage.remove(here.map_brief(slug))
             return self.send_json({'ok': True, 'trash': trash_id, 'changed': changed})
 
@@ -986,7 +982,7 @@ class Handler(SimpleHTTPRequestHandler):
             docs = self._reference_docs()
             changed = references.relink_map(docs, meta.get('links', []))
             index['items'].append(meta['entry'])
-            map_trash.take_back(here, trash_id, slug)
+            map_trash.restore(here, trash_id, slug)
             commit_docs(
                 f'Restore map {slug}',
                 [(name, docs[name]) for name in changed]
