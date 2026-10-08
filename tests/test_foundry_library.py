@@ -318,6 +318,20 @@ class FoundryLibraryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'different connected world'):
             foundry_library.media_file(actor['image'], source_key)
 
+    def test_folder_paths_follow_parents_and_survive_bad_trees(self):
+        paths = foundry_library.folder_paths(
+            {
+                'a': {'name': 'Deprecated', 'folder': None},
+                'b': {'name': 'Old maps', 'folder': 'a'},
+                'orphan': {'name': 'Lost', 'folder': 'gone'},
+                'x': {'name': 'X', 'folder': 'y'},
+                'y': {'name': 'Y', 'folder': 'x'},
+            }
+        )
+        self.assertEqual(paths['b'], 'Deprecated / Old maps')
+        self.assertEqual((paths['a'], paths['orphan']), ('Deprecated', 'Lost'))
+        self.assertEqual(paths['x'], 'Y / X')
+
     def test_reads_documents_from_the_world_folder(self):
         self.world_folder()
         world = foundry_library.selected_world()
@@ -330,6 +344,8 @@ class FoundryLibraryTests(unittest.TestCase):
         empty, legend = documents['journals']
         self.assertEqual((legend['folder'], legend['uuid']), ('Handouts', 'JournalEntry.j1'))
         self.assertEqual(empty['folder'], '')
+        self.assertEqual((legend['folder_id'], legend['folder_path']), ('f1', 'Handouts'))
+        self.assertEqual((empty['folder_id'], empty['folder_path']), ('', ''))
         self.assertEqual([page['name'] for page in legend['pages']], ['First', 'Second'])
         self.assertEqual(legend['pages'][0]['image'], 'maps/a.png')
         self.assertEqual(legend['pages'][1]['text'], 'Hidden\ndoor\n& more')

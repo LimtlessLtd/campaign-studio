@@ -238,6 +238,8 @@ def normalize_snapshot(payload, world, origin='macro', stamp='', omitted=None):
                     'uuid': _short(item.get('uuid'), 256),
                     'name': _short(item.get('name'), 300),
                     'folder': _short(item.get('folder'), 300),
+                    'folder_id': _short(item.get('folderId'), 128),
+                    'folder_path': _short(item.get('folderPath'), 1000),
                     'type': _short(item.get('type'), 80),
                     'image': _short(item.get('image'), 1000),
                     'summary': _short(item.get('summary'), 20000),
@@ -417,7 +419,25 @@ def _journal_pages(document, children):
     return result
 
 
-def _record(kind, document, children, folders):
+def folder_paths(folder_documents):
+    """Map each Foundry folder ID to its path from the top ('Deprecated / Old maps').
+
+    A parent that is missing or loops back ends the path instead of failing the import.
+    """
+    paths = {}
+    for identity in folder_documents:
+        names = []
+        seen = set()
+        current = identity
+        while isinstance(current, str) and current in folder_documents and current not in seen:
+            seen.add(current)
+            names.append(str(folder_documents[current].get('name') or ''))
+            current = folder_documents[current].get('folder')
+        paths[identity] = ' / '.join(reversed(names))
+    return paths
+
+
+def _record(kind, document, children, folders, paths=None):
     identity = document.get('_id')
     folder = folders.get(document.get('folder'))
     record = {
@@ -425,6 +445,8 @@ def _record(kind, document, children, folders):
         'uuid': f'{COLLECTIONS[kind][1]}.{identity}',
         'name': document.get('name'),
         'folder': folder if isinstance(folder, str) else '',
+        'folderId': document.get('folder') if isinstance(folder, str) else '',
+        'folderPath': (paths or {}).get(document.get('folder'), ''),
         'type': document.get('type') if isinstance(document.get('type'), str) else '',
         'image': document.get('img') or '',
         'summary': '',
@@ -461,16 +483,17 @@ def read_world(world):
             'This world has no readable document databases. Use the export macro instead.'
         )
     try:
+        folder_documents = (_documents(world, 'folders') or ({}, {}))[0]
         folders = {
-            identity: document.get('name')
-            for identity, document in (_documents(world, 'folders') or ({}, {}))[0].items()
+            identity: document.get('name') for identity, document in folder_documents.items()
         }
+        paths = folder_paths(folder_documents)
         documents = {}
         omitted = {}
         for kind, (name, _) in COLLECTIONS.items():
             found, children = _documents(world, name) or ({}, {})
             records = [
-                _record(kind, document, children, folders)
+                _record(kind, document, children, folders, paths)
                 for document in found.values()
                 if isinstance(document.get('name'), str)
             ]

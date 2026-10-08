@@ -353,7 +353,9 @@ async function studioLibrary(_arg, context) {
               : 'FOUNDRY SNAPSHOT',
       ),
       h('h2', {}, item.name),
-      item.folder ? h('p', { class: 'muted' }, 'Folder: ' + item.folder) : null,
+      item.folder
+        ? h('p', { class: 'muted' }, 'Folder: ' + (item.folder_path || item.folder))
+        : null,
       item.type && kind !== 'assets' ? badge(item.type) : null,
       image,
       item.summary ? h('p', { class: 'library-text' }, item.summary) : null,
@@ -563,7 +565,7 @@ async function studioLibrary(_arg, context) {
                 onclick: () => showDetail(item),
               },
               h('b', {}, item.name),
-              h('small', {}, item.folder || item.path || item.type || ''),
+              h('small', {}, item.folder_path || item.folder || item.path || item.type || ''),
             ),
           )
         : h(
