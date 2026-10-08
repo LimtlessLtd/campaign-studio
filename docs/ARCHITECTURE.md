@@ -25,49 +25,50 @@ flowchart LR
 
 ## Modules
 
-| File                                  | Responsibility                                                                     |
-| ------------------------------------- | ---------------------------------------------------------------------------------- |
-| `DM/server.py`                        | Local server startup, interrupted-job recovery and worker threads                  |
-| `DM/http_routes.py`                   | HTTP routes, request validation, response handling and static files                |
-| `DM/campaign.py`                      | Where the active campaign's files live; inherited by job subprocesses (`DM_HOME`)  |
-| `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results        |
-| `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection |
-| `DM/config.py`                        | Local settings, world manifest and Data directory detection                        |
-| `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                     |
-| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts        |
-| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review    |
-| `DM/foundry_compat.py`                | Shared build, version and package relationship rules                               |
-| `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                           |
-| `DM/foundry_solver.py`                | Compatible build and dependency selection                                          |
-| `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion       |
-| `DM/memory_import.py`                 | Bounded legacy, summary and Foundry lore parsing into reviewed import candidates   |
-| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world    |
-| `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                       |
-| `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes              |
-| `DM/records.py`                       | Per-record codex/thread paths, collections and bounded list views                  |
-| `DM/references.py`, `DM/map_trash.py` | Where-used links, unlinking and recoverable map trash                              |
-| `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore        |
-| `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser  |
-| `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
-| `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply         |
-| `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply   |
-| `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                |
-| `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory       |
-| `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration         |
-| `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                           |
-| `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                              |
-| `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                     |
-| `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge     |
-| `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                    |
-| `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                             |
-| `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                              |
-| `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                    |
-| `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                           |
-| `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                            |
-| `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                   |
-| `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                     |
-| `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation              |
-| `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                              |
+| File                                  | Responsibility                                                                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `DM/server.py`                        | Local server startup, interrupted-job recovery and worker threads                   |
+| `DM/http_routes.py`                   | HTTP routes, request validation, response handling and static files                 |
+| `DM/campaign.py`                      | Where the active campaign's files live; inherited by job subprocesses (`DM_HOME`)   |
+| `DM/campaign_core.py`                 | Document revisions/history, map workflows and campaign-specific job results         |
+| `DM/job_service.py`                   | Queueing, subprocess execution, persistent job records, logs and restart detection  |
+| `DM/config.py`                        | Local settings, world manifest and Data directory detection                         |
+| `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                      |
+| `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts         |
+| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review     |
+| `DM/foundry_compat.py`                | Shared build, version and package relationship rules                                |
+| `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                            |
+| `DM/foundry_solver.py`                | Compatible build and dependency selection                                           |
+| `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion        |
+| `DM/foundry_party.py`                 | Character level, classes, AC and HP from actors and their class items; party totals |
+| `DM/memory_import.py`                 | Bounded legacy, summary and Foundry lore parsing into reviewed import candidates    |
+| `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world     |
+| `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                        |
+| `DM/commits.py`                       | Write-ahead journal that completes interrupted multi-document changes               |
+| `DM/records.py`                       | Per-record codex/thread paths, collections and bounded list views                   |
+| `DM/references.py`, `DM/map_trash.py` | Where-used links, unlinking and recoverable map trash                               |
+| `DM/schema.py`, `DM/migrate.py`       | Data schema version, migrations, verified pre-migration backups and restore         |
+| `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser   |
+| `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply           |
+| `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply          |
+| `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply    |
+| `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                 |
+| `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory        |
+| `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration          |
+| `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                            |
+| `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                               |
+| `DM/tools/image_worker.py`            | One configured image request; parent server applies its result                      |
+| `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge      |
+| `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                     |
+| `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                              |
+| `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                               |
+| `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                     |
+| `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                            |
+| `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                             |
+| `DM/app/studio.js`                    | Studio shell, dashboard, World Library, settings and image queue                    |
+| `DM/app/live-library.js`              | GM browser pairing, explicit live refresh and snapshot handoff                      |
+| `DM/app/app.js`                       | Route dispatch and startup; one abortable view context per navigation               |
+| `DM/packaging_source.py`              | Explicit source manifest archive and SHA-256 checksum                               |
 
 `http_routes.ROUTES` maps methods and paths to focused handlers. The dispatcher converts typed
 `Invalid`, `NotFound` and `Conflict` errors into JSON responses with 400, 404 and 409 statuses. Domain
@@ -237,6 +238,9 @@ prompt and an environment-provided API key; settings keep only the variable name
 same validation, GM review, cancellation and retry flow. Exported prompt packs permit other assistants.
 Old `/api/claude` calls use the selected structured request runner. The OpenAI path has synthetic tests;
 it has not been exercised with a paid API call.
+
+The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
+recordings are transcribed locally (planned, W68–W73 in `docs/ROADMAP.md`). The OpenAI provider is optional.
 
 ## Foundry boundary
 

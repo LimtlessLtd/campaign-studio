@@ -189,6 +189,7 @@ def prompt_pack(item, read_doc, campaign, budget_chars, prep_names, recent_logs)
         'A scene map is an existing map slug, a proposed map ID, or blank; area is zero until a new map '
         'has a keyed layout. Each clue names an existing or proposed thread ID. '
         'Thread changes concern existing threads; new threads go in threads. '
+        'Size encounters for campaign.party (size and average level) when it is present. '
         'Do not claim to have generated maps, images or Foundry documents. '
     )
     built, preview = prompt_context.build(
@@ -294,7 +295,7 @@ def base_hash(item, draft, read_doc):
     return hashlib.sha256(json.dumps(base, sort_keys=True).encode('utf-8')).hexdigest()
 
 
-def apply(item, read_doc, commit, inbox):
+def apply(item, read_doc, commit, inbox, party_level=5):
     draft = validate(item, item['draft'], read_doc)
     if item.get('draft_base') != base_hash(item, draft, read_doc):
         raise ValueError('The session prep or a linked thread changed after review. Draft again.')
@@ -444,7 +445,7 @@ def apply(item, read_doc, commit, inbox):
             'darkness': 0.15,
             'session': item['session'],
             'tone': 'Grounded fantasy',
-            'party_level': 5,
+            'party_level': party_level,
             'threads': prep['threads'][:50],
             'auto_content': False,
             'content': {

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import campaign
 import foundry_library
+import foundry_party
 import leveldb_writer as writer
 
 
@@ -260,6 +261,58 @@ class FoundryLibraryTests(unittest.TestCase):
         report = foundry_library.import_into_codex(snapshot, codex)
         self.assertEqual(report['added'], 3)
         self.assertEqual(report['skipped'], 0)
+
+    def test_read_world_reads_party_stats_from_class_items(self):
+        hero = {
+            '_id': 'a2',
+            'name': 'Hero',
+            'type': 'character',
+            'system': {'attributes': {'ac': {'value': 17}, 'hp': {'value': 20, 'max': 41}}},
+        }
+        goblin = {'_id': 'a3', 'name': 'Goblin', 'type': 'npc', 'system': {}}
+        self.database(
+            'actors',
+            {'a2': hero, 'a3': goblin},
+            [
+                (
+                    'items',
+                    'a2',
+                    'c1',
+                    {'name': 'Fighter', 'type': 'class', 'system': {'levels': 3}},
+                ),
+                ('items', 'a2', 'c2', {'name': 'Wizard', 'type': 'class', 'system': {'levels': 2}}),
+                ('items', 'a2', 'w1', {'name': 'Sword', 'type': 'weapon', 'system': {}}),
+                (
+                    'items',
+                    'a3',
+                    'c3',
+                    {'name': 'Fighter', 'type': 'class', 'system': {'levels': 9}},
+                ),
+            ],
+        )
+        snapshot = foundry_library.read_world(foundry_library.selected_world())
+        actors = {actor['name']: actor for actor in snapshot['documents']['actors']}
+        self.assertEqual(
+            actors['Hero']['stats'],
+            {
+                'level': 5,
+                'classes': [{'name': 'Fighter', 'levels': 3}, {'name': 'Wizard', 'levels': 2}],
+                'ac': 17,
+                'hp': 41,
+            },
+        )
+        self.assertEqual(actors['Goblin']['stats'], {})
+        party = foundry_party.party(snapshot['documents']['actors'])
+        self.assertEqual((party['size'], party['average_level']), (1, 5.0))
+        self.assertEqual(party['members'][0]['name'], 'Hero')
+
+    def test_party_stats_ignore_malformed_values(self):
+        stats = foundry_party.character_stats(
+            {'system': {'attributes': {'ac': {'flat': 14}, 'hp': {'max': 'lots'}}}},
+            [{'name': 'Rogue', 'system': {'levels': 99}}, {'name': 5, 'system': {'levels': 2}}],
+        )
+        self.assertEqual(stats, {'level': 0, 'classes': [], 'ac': 14, 'hp': None})
+        self.assertEqual(foundry_party.clean_stats('x'), {})
 
     def test_read_world_marks_compendium_copies(self):
         self.database(

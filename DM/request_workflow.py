@@ -367,10 +367,11 @@ def stage(item, draft, read_doc):
     return item
 
 
-def apply(item, read_doc, commit, inbox, rejected=()):
+def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
     """Apply the accepted part of a reviewed draft and the request's done status in one commit.
 
-    `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out.
+    `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out; `party_level` seeds new
+    session map briefs.
     """
     if item.get('applied'):
         raise ValueError(
@@ -383,7 +384,7 @@ def apply(item, read_doc, commit, inbox, rejected=()):
     if item['kind'] == 'session':
         if rejected:
             raise ValueError('Item-level selection is not available for a session proposal yet.')
-        return session_workflow.apply(item, read_doc, commit, inbox)
+        return session_workflow.apply(item, read_doc, commit, inbox, party_level)
     draft = validate(item, item['draft'], read_doc)
     if rejected:
         draft = without_rejected(draft, rejected)

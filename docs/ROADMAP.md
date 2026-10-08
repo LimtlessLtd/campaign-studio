@@ -5,6 +5,12 @@ NPCs with tokens and playable stats, images, journal entries and handouts, all l
 the open story threads, published to Foundry in one step, with what happened at the table folded back into
 the threads afterwards.
 
+The owner's aim is their own table (8 October 2026): recordings of past sessions become transcripts, the
+transcripts show which story threads are still loose, and Claude helps write the arcs and resolutions and the
+next session. Everything runs on the owner's computer through their Claude (and Codex) subscriptions: no API
+keys, no hosted transcription and no upload of recordings. The project stays open source, so the general
+machinery lives in the application and campaign material stays in the owner's private data.
+
 `docs/BACKLOG.md` holds the work and its order. This file holds what a row has no room for: why it matters,
 its boundaries and the design to follow, under the row's ID. The evidence behind the rows is in
 `docs/CODE_REVIEW.md` → Product and scale audit. Delete a row's note in the PR that completes the row, and
@@ -14,24 +20,27 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
+1. **Session recordings to next session** (W68–W73). The owner's main use. Recordings are transcribed
+   locally, split into real play and table banter, folded into a thread ledger, and turned into reviewed arc
+   proposals and a next-session draft. Take these rows before the rest.
+2. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
-2. **Session workflow** (W33–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
+3. **Session workflow** (W33–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
    Item-level review, readiness and folding played outcomes back into threads remain.
-3. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
+4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
-4. **Data at scale** (W29, W54). Codex entries and threads now save separately; deletion, retained history
+5. **Data at scale** (W29, W54). Codex entries and threads now save separately; deletion, retained history
    and other whole documents still need work at real campaign sizes.
-5. **Map breadth** (W26, W48–W50). One procedural generator. Other environments rely on the model drawing a
+6. **Map breadth** (W26, W48–W50). One procedural generator. Other environments rely on the model drawing a
    grid, and large maps cannot be stocked in one response.
-6. **Verified integrations** (W43, W44, W51). Foundry imports and the live bridge have fixture coverage
+7. **Verified integrations** (W43, W44, W51). Foundry imports and the live bridge have fixture coverage
    only, AI cost is invisible, and prompt changes have no evaluation.
-7. **Browser code** (W55). About 6,200 lines of global-scope script with syntax checks only. The session and
+8. **Browser code** (W55). About 6,200 lines of global-scope script with syntax checks only. The session and
    review screens will add thousands more.
-8. **Process focus** (W45). Backup, upgrade and cutover tooling (3,721 lines) is larger than session prep,
+9. **Process focus** (W45). Backup, upgrade and cutover tooling (3,721 lines) is larger than session prep,
    codex, threads and requests together (1,713). Take rows in order; the upgrade area is maintenance only.
 
 ## The session journey
@@ -41,7 +50,7 @@ into the threads.
 
 | Step                  | Today                                            | Rows          |
 | --------------------- | ------------------------------------------------ | ------------- |
-| 1. Start next session | Session recap drafts read the latest played logs | W34           |
+| 1. Start next session | Recap drafts read the latest earlier session logs | W34           |
 | 2. Pitch              | Session Forge drafts a linked prep               | W33           |
 | 3. Outline            | Whole-session review; no item-level choices yet  | W33           |
 | 4. Maps               | Session map briefs queue layout workflows        | W26, W48      |
@@ -89,17 +98,43 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W68 Session recordings
+### W68–W73 Session recordings to next session
 
-- Owner feedback (8 Oct): point AI at local video files, transcribe the audio, and work out which threads are
-  still unresolved. The table's jokes and invented gags (for example a player's made-up animal form) must not
-  become canon, while real play (for example destroying a named temple) must.
-- Files stay on disk: the GM picks a path and Studio never uploads or copies a recording. Transcription is a
-  job behind a provider adapter (local Whisper or a hosted API), with the usual usage ledger and an ask before a
-  large job. The transcript is reference data, never instructions.
-- A second pass classifies each passage as **in-game**, **table banter** or **unclear**, quoting the passage
-  for the GM to confirm. Only confirmed in-game passages feed a W35 wrap-up proposal: session log, thread changes
-  and new threads. Nothing applies unreviewed. The GM can mark a passage as banter so later runs remember it.
+- Owner feedback (8 Oct): point AI at local session videos, transcribe the audio, work out which threads are
+  still loose, then help create arcs and resolutions and the next session. The table's jokes and invented gags
+  (a player's made-up animal form) must not become canon, while real play (destroying a named temple) must.
+  The owner wants this to run automatically between sessions, not as a chore.
+- **Subscription only.** Claude and Codex subscriptions cannot listen to audio, so transcription is a local
+  step. Drafting uses the signed-in Claude Code CLI (`ai_provider.ClaudeCLI`, `claude -p`); no API key is read
+  or required for any step here. A hosted transcription or API provider is out of scope. Long runs are costly
+  against subscription limits: process one session at a time, chunk under `context_budget_chars`, estimate
+  before a run and ask first (W44), and never resend settled sessions (the ledger and logs carry them).
+- **W68 transcription.** A job behind a provider adapter that runs a local Whisper model (faster-whisper or
+  whisper.cpp, the owner's choice in Settings; no model download without asking). The GM picks a file or a
+  folder; Studio never copies or uploads a recording and stores only a bounded, timestamped transcript as
+  reference data, never instructions. Extract the audio with ffmpeg when the container needs it. Speaker
+  labels are optional; the table is small enough that a name pass in W69 may do. Tests use a fake adapter and
+  a tiny synthetic clip; real model runs are owner-assisted.
+- **W69 classification.** Chunk the transcript and mark each passage **in-game**, **table banter** or
+  **unclear**, quoting it. The GM confirms in a review list; banter and invented gags are saved as table
+  lore (a small stored list) so later sessions skip them. Only confirmed in-game passages leave this step.
+- **W70 thread ledger.** From confirmed play, a proposal updates threads (open, resolved, foreshadowed), the
+  session log and codex notes, each with a quoted passage and timestamp as evidence. The loose-threads report
+  lists threads with no resolution, ranked by staleness (W34) and hero. This is W35's wrap-up fed by a
+  transcript instead of notes.
+- **W71 arcs and resolutions.** For each loose thread (or a chosen few), a proposal of two or three
+  options: a resolution, an escalation and a twist, each naming the codex entries, NPCs, locations and party
+  members it uses. Accepted options become thread changes, hooks and a seed for the next pitch. Reviewed with
+  W33; nothing applies unreviewed.
+- **W72 automatic run.** One action, and a scheduled Claude task, takes a folder of new recordings through
+  W68–W71 and then Session Forge (W32), leaving only reviews: banter confirmations, the ledger and the next
+  draft. It runs on the owner's computer with their signed-in CLI, skips recordings already processed (a
+  stored fingerprint), reports usage, and stops cleanly if a limit is reached. The scheduled-task prompt and
+  folder paths are the owner's private configuration, not source.
+- **W73 Codex.** Check what `codex exec` can return as structured output without tools or an API key. If it
+  meets the contract in `AGENTS.md` (no filesystem or shell tools, JSON schema, cancellable), add it as a
+  second provider; otherwise record what it lacks and keep Claude as the only automatic drafter. Prompt packs
+  already export for any assistant meanwhile.
 
 ### W33 Item-level proposal review
 
@@ -133,7 +168,7 @@ their row and finding say enough.
   within the party's budget; a Foundry export newer than the prep's last change. Each failed check links to
   the action that fixes it.
 - W37 needs character levels and classes. In dnd5e they come from class items embedded in each actor (keys
-  `!actors.items!<actor>.<item>` in the world database), which the World Library reader skips today.
+  `!actors.items!<actor>.<item>` in the world database), which the World Library reader now reads into `stats` (`foundry_party`). Every AI draft's `campaign.party` carries the roster's size and average level, and Session Forge map briefs take that level. Encounter budget checks do not use it yet.
 
 ### W38–W41, W46, W47 Publishing to Foundry
 
@@ -179,7 +214,8 @@ their row and finding say enough.
   synthetic map and checklist; the owner runs Foundry. Record exact versions, and turn failures into rows.
 - W44: record tokens, cost and time per AI job from the provider's output (the Claude CLI's JSON result
   reports usage and cost). Show totals per session and month, and ask before running a prompt above a
-  configurable size.
+  configurable size. Subscription users have limits, not a bill: report usage against them and ask before a
+  transcript-sized run (W68–W72).
 - W51: an opt-in script runs drafts against synthetic campaigns and checks that links resolve, canon is
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.
