@@ -10,12 +10,12 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W68
+Next ID: W69
 
 | ID  | Priority | Work                                                                                                        | Acceptance criteria                                                                |
 | --- | -------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | W28 | 2        | Per-record storage for codex entries and threads, with paged lists and per-record autosave                  | Editing one entry of 2,000 sends under 10 KB; older codex files migrate            |
-| W30 | 2        | Session log for each played session, shown on its prep and read by recaps and the context budget            | Shape, migration and browser flow; recent logs appear in the context               |
+| W30 | 2        | Session log, remainder: map drafts and recaps read the newest logs                                          | Shape, migration and browser flow; recent logs appear in the context               |
 | W31 | 2        | Import existing campaign memory: legacy folders, session summaries and Foundry lore journals                | Synthetic legacy folder and summaries import as reviewed proposals                 |
 | W32 | 2        | Plan the next session: a pitch in; linked scenes, cast, maps, handouts and thread changes out               | One paragraph yields a fully linked prep; reapplying adds nothing twice            |
 | W33 | 2        | Review every proposal item by item: accept, edit, reject or redraft one item, with diffs                    | A partly accepted proposal writes only the accepted items                          |
@@ -38,6 +38,7 @@ Next ID: W68
 | W65 | 2        | Edit Foundry scene settings in Studio: playlist and music, lighting, weather, grid and other fields         | A scene's music and settings edit in Studio and reach Foundry on export            |
 | W66 | 2        | AI proposes pins on the overworld map for scenes whose names match its labels                               | A scene named like a map label gets a reviewed pin proposal; none apply unreviewed |
 | W67 | 2        | Studio never deletes from Foundry: every link and Studio-made detail can be unlinked or removed             | Each linked record offers unlink or remove; Foundry data is never touched          |
+| W68 | 2        | Transcribe local session videos with AI; split real play from banter; list loose threads                    | A fixture recording yields in-game events, flagged banter and open threads         |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                     | Two folders with one name import separately; older snapshots still open            |
 | W10 | 3        | Installer and performance budgets for very large maps                                                       | Clean-machine install test and measured time/memory at documented map sizes        |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped) | Services receive their `Campaign` explicitly (no process-wide active campaign)     |

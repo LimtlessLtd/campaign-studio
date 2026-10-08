@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 
 import context as prompt_context
+import request_workflow
 
 
 class ContextTests(unittest.TestCase):
@@ -93,6 +94,23 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(preview['missing_pins'], ['deleted-entry'])
         with self.assertRaisesRegex(ValueError, 'no longer exists'):
             prompt_context.clean_pins(['deleted-entry'], entries)
+
+    def test_recent_session_logs_are_the_newest_three_and_skip_the_current_session(self):
+        preps = {
+            f's{n}': {'n': n, 'title': f'T{n}', 'log': {'summary': f'Done {n}', 'outcomes': ['x']}}
+            for n in (2, 9, 10, 11)
+        }
+        preps['s12'] = {
+            'n': 12,
+            'title': 'Empty',
+            'log': {'summary': '', 'notes': '', 'outcomes': []},
+        }
+        preps['s13'] = {'n': 13, 'title': 'Old shape'}
+        logs = request_workflow.recent_logs(
+            lambda name: preps.get(name.split('/')[1]), list(preps), current='s11'
+        )
+        self.assertEqual([log['session'] for log in logs], ['s10', 's9', 's2'])
+        self.assertEqual(logs[0]['summary'], 'Done 10')
 
 
 if __name__ == '__main__':

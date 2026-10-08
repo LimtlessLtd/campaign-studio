@@ -493,7 +493,11 @@ def request_pack(item):
     if cfg.get('world_path'):
         campaign_info['world'] = config.world_info(cfg['world_path'])
     return request_workflow.prompt_pack(
-        item, request_read, campaign_info, cfg['context_budget_chars']
+        item,
+        request_read,
+        campaign_info,
+        cfg['context_budget_chars'],
+        prep_names=list_docs('prep'),
     )
 
 
