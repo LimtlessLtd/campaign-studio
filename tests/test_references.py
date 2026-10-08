@@ -167,6 +167,15 @@ class MapTrashTests(DeleteRouteTests):
         self.assertEqual(self.call('/api/maps/trash')[1]['items'], [])
         self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')[0], 404)
 
+    def test_discard_removes_a_trashed_map_for_good(self):
+        self.seed()
+        _, body = self.call('/api/maps/docks/delete', 'POST')
+        self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/discard', 'POST')[0], 200)
+        self.assertEqual(self.call('/api/maps/trash')[1]['items'], [])
+        self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/discard', 'POST')[0], 404)
+        self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')[0], 404)
+        self.assertEqual(self.call('/api/maps/trash/..%2Fx/discard', 'POST')[0], 404)
+
 
 if __name__ == '__main__':
     unittest.main()
