@@ -160,7 +160,24 @@ it.
 4. **Choose work** in this order: open PRs left behind (below), unreviewed merged PRs, then a fix the relay
    made this run's task, then the highest-priority unclaimed backlog item. When no numbered item remains, claim and run the standing
    full-project audit (RA1) in `docs/BACKLOG.md`; repeat whenever the backlog becomes empty again.
-5. **Finish** with `MERGED #N` in the claim thread, naming anything left undone.
+5. **Finish** with `MERGED #N` in the claim thread, naming anything left undone, then clean up (below).
+
+### Clean up after yourself
+
+Anything you create to do a task is removed when the task ends, so the owner's folders stay tidy:
+
+- Work in a git worktree only when the main checkout is not yours, and create it outside the owner's
+  folders (the system temp or your scratchpad directory), never as a sibling folder of the checkout such as `cs-<agent>-work`.
+  If a worktree must live elsewhere, name it in the claim thread.
+- After the PR merges (or you release the work), run `git worktree remove --force <path>` and
+  `git worktree prune`, then delete your merged local branches with `git branch -d`. Copies of
+  `node_modules`, patches, scratch scripts, logs, screenshots and fixture output go with the worktree or
+  the temp directory; none may be left in the repository or the owner's folders.
+- At the start of a run, remove leftovers from earlier runs that are clearly yours (a worktree whose branch
+  has merged and whose tree is clean, an empty or missing worktree registration). Leave anything with
+  uncommitted work, another agent's checkout, and the owner's own files alone; mention it in the claim
+  thread instead.
+- Never delete a branch or folder you did not create, and never delete unmerged work without the owner's say.
 
 ### Open PRs left behind
 
@@ -174,7 +191,7 @@ all more than 2 hours old and its author is not you. Check these first, before n
    check mergeability. Note what is done, what is missing and what has since collided with `main`
    (migration or schema numbers, backlog IDs, changelog, manifest).
 3. **Bring it up to date** by merging `origin/main` into the PR's own branch (not a rebase, never a force-push),
-   in a separate worktree. Resolve conflicts so the author's intent survives and `main`'s newer work is kept.
+   in a separate worktree (removed when you finish). Resolve conflicts so the author's intent survives and `main`'s newer work is kept.
    Renumber anything that collided, such as schema versions, and fix the tests, docs and changelog to match.
 4. **Finish and verify**: complete small gaps, run every required check, and push to the same branch so
    the PR and its history stay intact. Wait for CI on the new head commit. Apply the review checklist to
