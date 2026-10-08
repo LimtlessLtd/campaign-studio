@@ -340,6 +340,18 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(self.read('data/codex.json')['entries'][0]['id'], 'ui-npc')
         self.assertEqual(self.read('data/threads.json')['threads'][0]['id'], 'ui')
 
+    def test_restoring_schema_six_removes_records_added_after_the_backup(self):
+        self.migrate()
+        saved = schema.backup(self.data, self.maps, self.backups, 'synthetic-current')
+        extra = self.dm / 'data/codex/later.json'
+        extra.write_text(json.dumps(shapes.CODEX_ENTRY.new(id='later', type='npc', name='Later')))
+
+        schema.restore(saved, self.data, self.maps)
+
+        self.assertEqual(schema.version(self.data, self.maps), schema.CURRENT)
+        self.assertFalse(extra.exists())
+        self.assertTrue((self.dm / 'data/codex/ui-npc.json').exists())
+
     def test_newer_schema_is_refused_without_changes(self):
         (self.dm / 'data' / schema.MARKER).write_text(
             json.dumps({'format': schema.FORMAT, 'version': schema.CURRENT + 1})
