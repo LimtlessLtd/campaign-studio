@@ -50,6 +50,7 @@ from campaign_core import (
     job_file,
     job_progress,
     campaign_info,
+    party_level,
     list_docs,
     list_images,
     list_jobs,
@@ -1011,7 +1012,9 @@ class Handler(SimpleHTTPRequestHandler):
                 rejected = p.get('rejected') or []
                 if not isinstance(rejected, list) or not all(isinstance(k, str) for k in rejected):
                     raise Invalid('Rejected items must be a list of keys.')
-                request_workflow.apply(item, request_read, commit_docs, box, rejected)
+                request_workflow.apply(
+                    item, request_read, commit_docs, box, rejected, party_level()
+                )
             return self.send_json(item)
 
     def _post_map_import(self, path, query, p):
