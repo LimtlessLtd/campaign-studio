@@ -34,13 +34,20 @@ def write(path, value, durable=False):
 
 def create(slug, brief, kind='content', instruction=''):
     wid = 'wf-' + datetime.datetime.now().strftime('%Y%m%d%H%M%S') + '-' + os.urandom(3).hex()
+    value = new_record(wid, slug, brief, kind, instruction)
+    save(value)
+    return value
+
+
+def new_record(wid, slug, brief, kind='content', instruction='', status='queued'):
+    """Build a map workflow without writing it; callers may commit it with linked records."""
     value = {
         'id': wid,
         'map': slug,
         'kind': kind,
         'brief': deepcopy(brief),
         'instruction': instruction,
-        'status': 'queued',
+        'status': status,
         'created': datetime.datetime.now().isoformat(timespec='seconds'),
         'draft': None,
         'error': '',
@@ -48,7 +55,6 @@ def create(slug, brief, kind='content', instruction=''):
         'base': map_base(slug),
         'context_pins': [],
     }
-    save(value)
     return value
 
 

@@ -89,6 +89,34 @@ class MemoryImportTests(unittest.TestCase):
         self.assertEqual(self.apply('folder', shown, self.root)['skipped'], 4)
         self.studio.assert_shaped()
 
+    def test_malformed_legacy_fields_are_sanitised_and_bad_session_id_is_rejected(self):
+        data = self.root / 'data'
+        data.mkdir()
+        (data / 'codex.json').write_text(
+            json.dumps({'entries': [{'id': 'odd', 'name': 'Odd', 'type': {'bad': 1}}]}),
+            encoding='utf-8',
+        )
+        (data / 'threads.json').write_text(
+            json.dumps({'threads': [{'id': 'rumour', 'title': 'Rumour', 'status': []}]}),
+            encoding='utf-8',
+        )
+        shown = self.preview('folder', self.root)
+        self.assertEqual(len(shown['items']), 2)
+        self.apply('folder', shown, self.root)
+        self.assertEqual(self.studio.stored('codex')['entries'][0]['type'], 'lore')
+        self.assertEqual(self.studio.stored('threads')['threads'][0]['status'], 'open')
+
+        summary = self.root / 'bad.json'
+        summary.write_text(
+            json.dumps({'session': {'bad': 1}, 'summary': 'A malformed session.'}),
+            encoding='utf-8',
+        )
+        self.studio.request(
+            '/api/memory/preview',
+            {'kind': 'summaries', 'path': str(summary)},
+            expected=400,
+        )
+
     def test_summary_file_fills_empty_log_and_refuses_changed_preview(self):
         first = self.root / 'Session 1.md'
         first.write_text('# First session\nThe party escaped.\n', encoding='utf-8')

@@ -576,6 +576,204 @@ class StudioIntegration(unittest.TestCase):
             'notes': 'The rival captain is nearby.',
         }
 
+    def session_proposal(self, existing_map):
+        encounter = {
+            'creatures': [{'name': 'Harbour watcher', 'count': 2}],
+            'difficulty': 'moderate',
+            'terrain': 'Slippery quay',
+            'tactics': 'Delay the party',
+            'resolution': 'Talk or fight',
+        }
+
+        def scene(ident, title, map_ref, area, npcs, clues):
+            return {
+                'id': ident,
+                'title': title,
+                'purpose': 'Move the investigation forward',
+                'where': 'The harbour',
+                'map': map_ref,
+                'area': area,
+                'npcs': npcs,
+                'encounter': encounter,
+                'clues': clues,
+                'read_aloud': 'The tide rises.',
+                'notes': 'The captain knows more than she says.',
+            }
+
+        return {
+            'summary': 'The party follows the watch captain into a smuggler plot.',
+            'recap': 'Last time, the church bell fell.',
+            'goals': ['Find the smugglers'],
+            'maps': [
+                {
+                    'id': 'quay',
+                    'name': 'Flooded Quay',
+                    'prompt': 'A flooded harbour with a watch post.',
+                    'theme': 'city',
+                    'width': 40,
+                    'height': 40,
+                }
+            ],
+            'entries': [
+                {
+                    'id': 'watcher',
+                    'type': 'npc',
+                    'name': 'Harbour Watcher',
+                    'public': 'A watch officer.',
+                    'secrets': 'Works for the smugglers.',
+                    'notes': 'AC 12; HP 10.',
+                    'image_prompt': 'Watch officer portrait',
+                }
+            ],
+            'threads': [
+                {
+                    'id': 'smugglers',
+                    'title': 'The smuggler network',
+                    'detail': 'Find its leader.',
+                    'status': 'open',
+                }
+            ],
+            'thread_changes': [
+                {
+                    'id': 'old-thread',
+                    'status': 'foreshadowed',
+                    'update': 'The bell is their signal.',
+                }
+            ],
+            'scenes': [
+                scene(
+                    'arrival',
+                    'Arrival',
+                    existing_map,
+                    1,
+                    ['existing-npc'],
+                    [
+                        {'thread': 'old-thread', 'text': 'A painted bell mark.'},
+                    ],
+                ),
+                scene(
+                    'quay-scene',
+                    'At the quay',
+                    'quay',
+                    0,
+                    ['watcher'],
+                    [
+                        {'thread': 'smugglers', 'text': 'A marked crate.'},
+                    ],
+                ),
+                scene('aftermath', 'Aftermath', '', 0, [], []),
+            ],
+            'handouts': [
+                {
+                    'id': 'notice',
+                    'title': 'Harbour notice',
+                    'player_text': 'Meet at the quay.',
+                    'secrets': 'A forged seal.',
+                    'image_prompt': 'Weathered notice',
+                }
+            ],
+            'loot': [{'item': 'Copper seal', 'where': 'Quay', 'value': '10 gp'}],
+            'checklist': ['Print the notice'],
+        }
+
+    def test_session_pitch_stages_and_applies_linked_prep_once(self):
+        slug, _ = self.import_map()
+        self.seed(
+            'codex',
+            {
+                'entries': [
+                    shapes.CODEX_ENTRY.new(id='existing-npc', type='npc', name='Old Captain')
+                ]
+            },
+        )
+        self.seed(
+            'threads',
+            {
+                'threads': [
+                    shapes.THREAD.new(
+                        id='old-thread', title='The bell', detail='A church bell fell.'
+                    )
+                ]
+            },
+        )
+        campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))
+        item = {
+            'id': 'req-session',
+            'kind': 'session',
+            'session': 's1',
+            'text': 'Follow the smuggler lead into the flooded quay.',
+            'status': 'new',
+            'settings': {'hours': 4, 'combat': 2, 'social': 3, 'threads': ['old-thread']},
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        pack = self.request('/api/requests/req-session/pack')
+        self.assertEqual(pack['schema']['properties']['scenes']['minItems'], 3)
+        self.assertIn('Follow the smuggler lead', pack['prompt'])
+        draft = self.session_proposal(slug)
+        broken = copy.deepcopy(draft)
+        broken['scenes'][1]['map'] = 'no-such-map'
+        self.request('/api/requests/req-session/stage', {'draft': broken}, expected=400)
+        self.assertEqual(self.stored('prep/s1')['pitch'], '')
+        self.request('/api/requests/req-session/stage', {'draft': draft})
+        self.request(
+            '/api/requests/req-session/apply',
+            {'rejected': ['entries:watcher']},
+            expected=400,
+        )
+        changed = self.stored('prep/s1')
+        changed['notes'] = 'GM edited this while reviewing.'
+        campaign_core.write_doc('prep/s1', changed)
+        self.request('/api/requests/req-session/apply', {}, expected=400)
+        self.request('/api/requests/req-session/stage', {'draft': draft})
+        box = self.stored('inbox')
+        with self.crash_after(3), self.assertRaises(Crash):
+            request_workflow.apply(
+                box['items'][0], campaign_core.request_read, campaign_core.commit_docs, box
+            )
+        self.assertEqual(campaign_core.recover_commits()['conflicts'], [])
+        self.request('/api/requests/req-session/apply', {}, expected=409)
+        applied = self.stored('inbox')['items'][0]
+        self.assertEqual(applied['status'], 'done')
+        self.assertEqual(len(applied['created_maps']), 1)
+        new_slug = applied['created_maps'][0]['slug']
+        prep = self.stored('prep/s1')
+        self.assertEqual(prep['pitch'], item['text'])
+        self.assertEqual(prep['notes'], 'GM edited this while reviewing.')
+        self.assertEqual(len(prep['scenes']), 3)
+        self.assertEqual(prep['scenes'][0]['map'], slug)
+        self.assertEqual(prep['scenes'][0]['area'], 1)
+        self.assertEqual(prep['scenes'][1]['map'], new_slug)
+        self.assertEqual(prep['scenes'][1]['npcs'], ['req-session-watcher'])
+        self.assertEqual(prep['scenes'][1]['clues'][0]['thread'], 'req-session-smugglers')
+        self.assertEqual(prep['threads'], ['old-thread', 'req-session-smugglers'])
+        self.assertEqual(self.stored('mapbrief/' + new_slug)['session'], 's1')
+        self.assertEqual(self.stored('workflows/wf-' + new_slug)['status'], 'ready')
+        map_pack = self.request('/api/workflow/wf-' + new_slug + '/pack')
+        self.assertIn('Flooded Quay', map_pack['prompt'])
+        self.request(
+            '/api/workflow/wf-' + new_slug + '/stage',
+            {
+                'draft': {
+                    'summary': 'A first layout for the quay.',
+                    'operations': [
+                        {'type': 'rect', 'row': 0, 'col': 0, 'width': 40, 'height': 40, 'fill': ','}
+                    ],
+                    'areas': [{'n': 1, 'name': 'Watch post', 'kind': 'post', 'at': [4, 4]}],
+                }
+            },
+        )
+        self.assertEqual(self.stored('workflows/wf-' + new_slug)['status'], 'review')
+        self.assertEqual(len(self.stored('art')['items']), 2)
+        self.assertEqual(
+            self.stored('threads')['threads'][0]['detail'].count('The bell is their signal.'), 1
+        )
+        self.assertEqual(
+            [thread['sessions'] for thread in self.stored('threads')['threads']],
+            [['s1'], ['s1']],
+        )
+        self.assertEqual(len(self.stored('codex')['entries']), 2)
+        self.assert_shaped()
+
     def test_general_request_review_apply_and_retry(self):
         prep = shapes.PREP.new(n=1, title='Session 1', notes='Existing notes.')
         campaign_core.write_doc('prep/s1', prep)

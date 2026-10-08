@@ -26,3 +26,9 @@ API key in the server environment and select a model in Settings to use that pro
 in settings. Portable users can export/import proposals with
 any assistant able to follow the supplied schema. General Requests use their own structured entity/prep
 schema and GM review flow. Use the map workflow for map-based content.
+
+For a complete session, open its prep and choose **Plan whole session**. The session proposal uses a bounded
+context that begins with recent played-session logs and selected threads. Review the recap, scene links,
+map briefs, NPCs, handouts and thread changes before applying. New map briefs wait for separate layout
+proposals and GM review in the map studio; art briefs wait in the image queue. Applying a session never
+imports anything into Foundry.

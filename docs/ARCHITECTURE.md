@@ -50,6 +50,7 @@ flowchart LR
 | `DM/shapes.py`                        | Each stored record's fields and defaults, defined once for Python and the browser  |
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply          |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply         |
+| `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory       |
 | `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration         |
@@ -149,13 +150,13 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 | `data/threads/<id>.json`   | `thread`      | one thread                                                           |
 | `data/art.json`            | `art`         | art items                                                            |
 | `data/world-maps.json`     | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
-| `data/prep/<session>.json` | `prep`        | scenes, handouts, checklist items, loot                              |
+| `data/prep/<session>.json` | `prep`        | scenes with thread clues, handouts, checklist items, loot            |
 | `maps/<slug>/key.json`     | `map_key`     | areas (with journal entries, events, loot), events                   |
 
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 split codex and thread collections into individual documents. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 adds session pitch, scene plan and handout image-brief fields. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -178,6 +179,12 @@ journals, events, threads and art briefs. The model never calls persistence dire
 General Requests stage bounded JSON for codex entries, threads and session prep. The GM reviews additions
 before applying; stable request-prefixed IDs and a prep application marker make interrupted writes retryable.
 Editing request text or session after drafting invalidates the proposal.
+The `session` request kind uses `DM/session_workflow.py`: a pitch, length, combat/social mix and selected threads
+produce a recap and three to six scenes with validated NPC, thread, map and area links. It also proposes
+up to two map briefs, handouts, art and thread changes. Apply checks the prep and affected threads against
+the staged review snapshot, then commits the prep, records, art, map briefs and ready layout workflows with
+the request's done status last. Map briefs remain pending until their separate layout workflow is reviewed;
+the session apply makes no Foundry write or paid call.
 
 Map and request drafts share `DM/context.py`. It reserves identity for linked and pinned codex records,
 summarises active threads, then fills the remaining budget with linked details, name matches and a compact

@@ -662,7 +662,9 @@ async function mapStudio(slugArg, context) {
             {},
             jobs.some((j) => j.status === 'failed')
               ? 'The layout needs attention'
-              : 'Building the first layout',
+              : workspace.workflows.some((w) => w.status === 'ready' || w.status === 'queued')
+                ? 'Ready for a layout proposal'
+                : 'Building the first layout',
           ),
           h('p', { class: 'muted' }, brief.prompt),
           jobs.map((job) => jobBox(job, context.signal)),
