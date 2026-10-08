@@ -229,6 +229,8 @@ class SettingsAndRecordingTests(TranscriptionCase):
             [item['name'] for item in transcription.recordings(str(self.recording))],
             ['session-one.mp4'],
         )
+        with self.assertRaisesRegex(ValueError, 'existing folder'):
+            transcription.recordings(str(self.root / 'missing'))
 
     def test_segments_are_cleaned_ordered_and_bounded(self):
         raw = [
@@ -356,8 +358,7 @@ class TranscriptionJobTests(TranscriptionCase):
         self.assertEqual((self.recording.read_bytes(), self.recording.stat().st_mtime_ns), before)
         copies = [
             path
-            for folder in (self.root / 'Studio', Path(tempfile.gettempdir()) / 'none')
-            for path in folder.rglob('*')
+            for path in (self.root / 'Studio').rglob('*')
             if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == digest
         ]
         self.assertEqual(copies, [], 'the recording must never be copied into the campaign')

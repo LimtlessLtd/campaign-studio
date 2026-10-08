@@ -25,6 +25,7 @@ import campaign
 import config
 import shapes
 import storage
+from job_service import NO_WINDOW
 
 MEDIA = (
     '.mp4',
@@ -48,7 +49,6 @@ MAX_TEXT_CHARS = 2_000_000
 ID = re.compile(r'rec-[0-9a-f]{16}\Z')
 LANGUAGE = re.compile(r'[a-z]{2,3}\Z')
 WHISPER_CPP_PROGRESS = re.compile(r'progress\s*=\s*(\d{1,3})%')
-NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
 
 class FasterWhisper:
@@ -247,7 +247,10 @@ def recording(value):
 def recordings(value):
     """The recordings in a folder (not its subfolders), newest first, or the one file named."""
     value = value if isinstance(value, str) else ''
-    if not Path(value).expanduser().is_dir():
+    here = Path(value).expanduser()
+    if not here.is_dir():
+        if not here.exists():
+            raise ValueError('Choose an existing folder of recordings, or one recording file.')
         return [recording(value)]
     found = []
     with os.scandir(storage.local_path(value)) as entries:
