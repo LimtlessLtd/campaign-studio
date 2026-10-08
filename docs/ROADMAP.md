@@ -48,16 +48,16 @@ Ranked by how much each holds back the goal.
 The order a GM works in. Step 8 writes the log that step 1 reads, which is what ties each session back
 into the threads.
 
-| Step                  | Today                                            | Rows          |
-| --------------------- | ------------------------------------------------ | ------------- |
+| Step                  | Today                                             | Rows          |
+| --------------------- | ------------------------------------------------- | ------------- |
 | 1. Start next session | Recap drafts read the latest earlier session logs | W34           |
-| 2. Pitch              | Session Forge drafts a linked prep               | W33           |
-| 3. Outline            | Whole-session review; no item-level choices yet  | W33           |
-| 4. Maps               | Session map briefs queue layout workflows        | W26, W48      |
-| 5. Cast               | Free-text stats and one image per entry          | W25, W41, W46 |
-| 6. Art                | One image per click, no shared style             | W42           |
-| 7. Publish to Foundry | One map per macro run                            | W38–W40, W47  |
-| 8. Play and wrap up   | A manual session log and "played" status         | W35           |
+| 2. Pitch              | Session Forge drafts a linked prep                | W33           |
+| 3. Outline            | Whole-session review; no item-level choices yet   | W33           |
+| 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
+| 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
+| 6. Art                | One image per click, no shared style              | W42           |
+| 7. Publish to Foundry | One map per macro run                             | W38–W40, W47  |
+| 8. Play and wrap up   | A manual session log and "played" status          | W35           |
 
 ## Milestone
 
