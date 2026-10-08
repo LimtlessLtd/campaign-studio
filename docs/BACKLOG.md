@@ -34,7 +34,6 @@ Next ID: W65
 | W57 | 2        | Phone-first editing of codex, threads, preps and proposal review                                            | Touch-emulated flow edits an entry, thread and scene, then applies a proposal  |
 | W58 | 2        | One-click journal entry: text, links to entries and an image prompt                                         | One click yields reviewed linked text and a ready image prompt                 |
 | W61 | 2        | Preserve Foundry folder hierarchy when importing scenes, actors, items and journals                         | Imported records show parent folder paths; deprecated scenes stay grouped      |
-| W62 | 2        | Highlight the selected record in navigation lists, including Foundry scenes                                 | Selection is visible after click, keyboard navigation and page reload          |
 | W63 | 2        | Preview imported scene images, journal videos, and both NPC token and portrait art                          | Each asset opens or plays from Studio with safe path and media limits          |
 | W64 | 2        | Choose an imported Foundry scene as an overworld map and place other scenes on it                           | A selected scene becomes the base map; pins link to imported scenes            |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                     | Two folders with one name import separately; older snapshots still open        |

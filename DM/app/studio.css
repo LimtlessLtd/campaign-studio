@@ -1510,6 +1510,11 @@ hr {
   padding: 12px;
   overflow-wrap: anywhere;
 }
+.library-entry.on {
+  border-color: var(--ember);
+  background: #263422;
+  box-shadow: inset 3px 0 0 var(--ember);
+}
 .library-entry b,
 .library-entry small {
   display: block;
