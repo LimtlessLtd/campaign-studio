@@ -213,6 +213,30 @@ their row and finding say enough.
   warnings as you paint and checkpoints before saving.
 - W50: the floors of one place share a key. Stairs link them as Foundry Regions or as separate linked scenes.
 
+### W57 Phone-first editing
+
+- The owner wants to manage and edit the campaign from a phone. Today only world-map pin placement and
+  larger touch targets are phone-aware; the codex, thread, prep and proposal-review pages are laid out for
+  a desktop. Work through each page at phone width, with a touch-emulated Chromium flow per page.
+- Keep the one-column layout reachable from the existing access-code and Caddy HTTPS setup in the README.
+  Autosave must survive a phone losing connection briefly (see W28's per-record saves).
+
+### W58 One-click journal entry
+
+- A "Draft with AI" button on a journal entry asks for no prompt. It sends the entry, its location or codex
+  neighbours and their linked records (through the W23 context budget) and returns a proposal: body text
+  that may mention other entries, the entry ids it links to, and a ready image prompt.
+- It uses the existing propose, validate, review, apply path (W33 gives item-by-item review). The image
+  prompt can feed W42's batch art step; this row does not generate the image itself.
+- Today the location "Generate" button asks for a free-text instruction first and returns a separate
+  workflow to open.
+
+### W59 Migration notice
+
+- Start-up migrations already take a verified backup first (`DM/schema.py`), but the owner only learns
+  of it from the changelog. Before a migration runs, show the version change, the document count affected
+  and the backup folder, and keep the existing refusal of newer schemas. W52 adds restore from Settings.
+
 ## Glossary
 
 - **Session**: one game night. Its prep is the plan; its log (W30) is what happened.

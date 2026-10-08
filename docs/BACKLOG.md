@@ -10,7 +10,7 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W57
+Next ID: W60
 
 | ID  | Priority | Work                                                                                                                              | Acceptance criteria                                                              |
 | --- | -------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -31,6 +31,8 @@ Next ID: W57
 | W42 | 2        | Art pipeline: style guide, templates per kind, batch per prep, token cut-outs, adapters                                           | One action fills every missing image for a prep; fake-provider tests             |
 | W43 | 2        | Live Foundry check with the owner on their v12 dnd5e versions (owner-assisted)                                                    | Exact versions and results recorded; failures become backlog rows                |
 | W44 | 2        | AI usage ledger, remainder: totals per session; ask before prompts over a set size (per-job done)                                 | A large prompt asks first; totals per session                                    |
+| W57 | 2        | Phone-first editing of codex, threads, preps and proposal review                                                                  | Touch-emulated flow edits an entry, thread and scene, then applies a proposal    |
+| W58 | 2        | One-click journal entry: text, links to entries and an image prompt                                                               | One click yields reviewed linked text and a ready image prompt                   |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                                           | Two folders with one name import separately; older snapshots still open          |
 | W10 | 3        | Installer and performance budgets for very large maps                                                                             | Clean-machine install test and measured time/memory at documented map sizes      |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped)                       | Services receive their `Campaign` explicitly (no process-wide active campaign)   |
@@ -45,3 +47,4 @@ Next ID: W57
 | W54 | 3        | Retention for job logs, map revision images and document history                                                                  | Limits are configurable and pruning is tested                                    |
 | W55 | 3        | Browser code as ES modules with `// @ts-check`; split `mapStudio`; Ruff F and B rules                                             | Type check and wider lint run in CI with no behaviour change                     |
 | W56 | 3        | Move single-campaign names out of source: readable folders to settings, names from the codex                                      | No single-campaign names in source; generator test uses codex names              |
+| W59 | 3        | Show the schema change and backup folder before a migration runs                                                                  | The notice appears for an older campaign; the backup it names restores           |
