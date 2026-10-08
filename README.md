@@ -101,6 +101,14 @@ prep or create one. Foundry journal text stays GM reference material in lore ent
 Foundry world are read only; images and other media are not copied. If a source changes after preview, Studio
 asks you to review it again. A source is limited to 5,000 files and 40 MB for one preview.
 
+From a session prep, **Plan whole session** turns one pitch into a reviewable proposal for a recap, goals,
+three to six scenes, cast, thread changes, handouts, loot and a checklist. Choose the session length, combat
+and social focus, and threads to push. Applying the reviewed draft links the records and queues up to two
+new map briefs as layout workflows. Open each map brief in Maps & locations to draft and review its layout;
+the session action does not generate or export a map or publish anything to Foundry. Recent played-session
+logs enter the draft as reference material. Proposals are reviewed as a whole; item-by-item acceptance is
+planned in W33.
+
 Image briefs are queued with their content. Upload artwork, or configure a local HTTP / remote HTTPS
 image endpoint. The request contract is `{model, prompt, size, n: 1}`; the response must include
 `data[0].b64_json`. Use an environment variable for the API key; settings store its name only.

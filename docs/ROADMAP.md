@@ -16,10 +16,10 @@ Ranked by how much each holds back the goal.
 
 1. **Campaign memory and AI context** (W24, W30). W23 now bounds drafts and prompt packs, and the world import
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
-   a reviewed memory import; session recaps still need W32. Every
-   AI feature depends on improving this context.
-2. **Session workflow** (W32–W37). Studio prepares maps and single records well. Nothing turns a pitch into
-   a session, or a played session back into threads.
+   a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
+   history and context.
+2. **Session workflow** (W33–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
+   Item-level review, readiness and folding played outcomes back into threads remain.
 3. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
@@ -42,9 +42,9 @@ into the threads.
 | Step                  | Today                                            | Rows          |
 | --------------------- | ------------------------------------------------ | ------------- |
 | 1. Start next session | "+ Next session" copies last session's checklist | W30, W34      |
-| 2. Pitch              | Nowhere to say what the session is about         | W32           |
-| 3. Outline            | One request per NPC, item, encounter or handout  | W32, W33      |
-| 4. Maps               | A wizard per map; scenes name maps in free text  | W26, W32, W48 |
+| 2. Pitch              | Session Forge drafts a linked prep               | W33           |
+| 3. Outline            | Whole-session review; no item-level choices yet  | W33           |
+| 4. Maps               | Session map briefs queue layout workflows        | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry          | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style             | W42           |
 | 7. Publish to Foundry | One map per macro run                            | W38–W40, W47  |
@@ -55,7 +55,7 @@ into the threads.
 A synthetic campaign goes through the whole journey in Studio. A pitch becomes an outline the GM edits; two
 maps (one generated, one imported) are stocked; six NPCs get portraits, tokens and compendium bases; one
 bundle imports into the macro fixture; a wrap-up moves the threads; the next session's recap uses it. Rows
-W24–W26, W30, W32–W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
+W24–W26, W30, W33–W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
 
 ## Design notes
 
@@ -107,21 +107,13 @@ their row and finding say enough.
   for the GM to confirm. Only confirmed in-game passages feed a W35 wrap-up proposal: session log, thread changes
   and new threads. Nothing applies unreviewed. The GM can mark a passage as banter so later runs remember it.
 
-### W32, W33 Session Forge and review
+### W33 Item-level proposal review
 
-- **Session Forge** is a `session` workflow kind built like requests: a bounded schema, validation, review,
-  then one `commit_docs` change with the workflow record last and IDs prefixed with the workflow ID, so
-  applying twice adds nothing.
-- Input: a pitch paragraph, the prep it belongs to, and a few settings (length, combat and social mix,
-  threads to push). Context: W23, led by the last session's log and the threads ranked by staleness.
-- The draft holds a recap; goals; 3–6 scenes; up to two new map briefs; new NPCs and items as proposed codex
-  entries (optionally with a W41 compendium base); handouts with player text, secrets and an image prompt;
-  loot; thread changes and new threads; a checklist.
-- Each scene has a purpose, a location (an existing map location, a map from this draft, or free text), NPC
-  IDs, an encounter (creatures with counts, target difficulty, terrain, tactics, ways it can end), clues
-  tied to thread IDs, and read-aloud text.
-- Applying writes the prep, codex entries and thread changes, queues each new map as a map workflow linked
-  to its scene, and queues art briefs. A scene's `map` then holds a map slug and location number.
+- Session Forge (W32) now accepts a pitch and settings, validates a bounded proposal, and applies its linked
+  prep, records, art briefs and map layout workflows in one recoverable change. Its review shows the whole
+  proposal, with an editable JSON import. A scene's map points to a stored slug, while the location number
+  stays zero until a new map has a keyed layout. Recent logs lead its context; W34 will provide reliable
+  thread staleness fields for better ranking. W41 adds compendium bases for proposed NPCs.
 - W33 renders every proposal kind as cards with accept, edit, reject and "redraft this one". Applying
   writes only accepted items; an edited item is validated again. Changes to existing records show before
   and after.

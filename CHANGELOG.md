@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Session Forge (W32):** a prep's "Plan whole session" action takes a pitch, length, combat/social mix and selected threads. A bounded structured proposal contains a recap, three to six linked scenes, up to two new map briefs, cast, handouts, thread changes, loot and a checklist. The GM reviews the whole draft before one recoverable apply; IDs and an apply marker prevent duplicates. New maps wait as linked layout workflows and art waits in the image queue. Schema 8 fills new prep, scene and handout fields after a verified backup. Synthetic apply, crash recovery, browser and map workflow checks pass; no paid AI or live Foundry call was made.
 - **Memory import relay fix (#75):** malformed legacy record types and session IDs now produce sanitised candidates or a clear validation error instead of a server error.
 - **Reviewed memory import (W31):** the Import memory page previews older Studio/DM-screen codex and threads, JSON/Markdown session summaries, and selected Foundry journal folders. The GM selects candidates before one recoverable apply; stable IDs and log collision checks make reruns safe. Sources and Foundry remain read only.
 - **World removal review:** removing imported data now leaves the World Library snapshot absent across navigation instead of immediately reading it back. The remove button disappears when no imported data remains, and bulk unlinking scans references once for the whole removed set.

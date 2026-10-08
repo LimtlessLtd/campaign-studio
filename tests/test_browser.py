@@ -267,6 +267,60 @@ class BrowserSmoke(unittest.TestCase):
                 gap = section['y'] - (action['y'] + action['height'])
                 self.assertGreaterEqual(gap, 16, (viewport['width'], button, heading, gap))
 
+    def test_session_pitch_review_and_linked_prep_at_phone_width(self):
+        map_slug, _ = self.studio.import_map()
+        self.studio.seed(
+            'codex',
+            {
+                'entries': [
+                    fixtures.shapes.CODEX_ENTRY.new(
+                        id='existing-npc', type='npc', name='Old Captain'
+                    )
+                ]
+            },
+        )
+        self.studio.seed(
+            'threads',
+            {
+                'threads': [
+                    fixtures.shapes.THREAD.new(
+                        id='old-thread', title='The bell', detail='A church bell fell.'
+                    )
+                ]
+            },
+        )
+        campaign_core.write_doc('prep/s1', fixtures.shapes.PREP.new(n=1, title='Session 1'))
+        self.open('#/prep/s1')
+        self.page.get_by_role('button', name='Plan whole session').click()
+        self.page.get_by_placeholder('e.g. The party follows the smuggler lead').fill(
+            'Follow the smugglers into the flooded quay.'
+        )
+        self.page.get_by_label('Length (hours)').fill('5')
+        self.page.get_by_role('button', name='Save for later').click()
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        item = self.stored('inbox')['items'][0]
+        self.assertEqual(item['kind'], 'session')
+        self.assertEqual(item['settings']['hours'], 5)
+        self.studio.request(
+            '/api/requests/' + item['id'] + '/stage',
+            {'draft': self.studio.session_proposal(map_slug)},
+        )
+        self.page.reload()
+        self.page.set_viewport_size(NARROW)
+        expect(self.page.get_by_text('Ready to review')).to_be_visible()
+        self.assert_accessible('session proposal review at phone width')
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_text('Flooded Quay').first).to_be_visible()
+        self.page.reload()
+        expect(self.page.locator('.scene input[placeholder="Scene title"]').nth(1)).to_have_value(
+            'At the quay'
+        )
+        self.assertEqual(self.stored('prep/s1')['scenes'][1]['npcs'], [item['id'] + '-watcher'])
+        self.assert_accessible('linked session prep at phone width')
+        slug = self.stored('inbox')['items'][0]['created_maps'][0]['slug']
+        self.open('#/maps/' + slug)
+        expect(self.page.get_by_role('heading', name='Ready for a layout proposal')).to_be_visible()
+
     def test_codex_pages_and_thread_edits_save_individual_records(self):
         self.studio.seed(
             'codex',

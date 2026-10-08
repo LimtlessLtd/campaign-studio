@@ -98,12 +98,27 @@ THREAD = Shape('thread', ['id', 'title'], dict(status='open', detail='', pcs=[],
 ART_ITEM = Shape(
     'art_item', ['id', 'prompt'], dict(title='', codex='', image='', status='queued', created=0)
 )
+SCENE_CLUE = Shape('scene_clue', [], dict(thread='', text=''))
 SCENE = Shape(
     'scene',
     ['id'],
-    dict(title='', where='', map='', npcs=[], encounter='', notes='', done=False),
+    dict(
+        title='',
+        purpose='',
+        where='',
+        map='',
+        area=0,
+        npcs=[],
+        encounter='',
+        encounter_detail=dict(creatures=[], difficulty='', terrain='', tactics='', resolution=''),
+        clues=[],
+        read_aloud='',
+        notes='',
+        done=False,
+    ),
+    {'clues': SCENE_CLUE},
 )
-HANDOUT = Shape('handout', ['id'], dict(title='', player_text='', secrets=''))
+HANDOUT = Shape('handout', ['id'], dict(title='', player_text='', secrets='', image_prompt=''))
 CHECKLIST_ITEM = Shape('checklist_item', [], dict(text='', done=False))
 LOOT = Shape('loot', [], dict(item='', where='', value=''))
 JOURNAL = Shape('journal', ['id'], dict(title='', text='', secrets=''))
@@ -136,6 +151,7 @@ PREP = Shape(
         date='',
         status='planning',
         archived=False,
+        pitch='',
         recap='',
         goals=[],
         threads=[],
@@ -165,6 +181,7 @@ SHAPES = {
         CODEX_ENTRY,
         THREAD,
         ART_ITEM,
+        SCENE_CLUE,
         SCENE,
         HANDOUT,
         CHECKLIST_ITEM,
