@@ -156,7 +156,7 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 adds session pitch, scene plan and handout image-brief fields. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 adds session pitch, scene plan and handout image-brief fields. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
