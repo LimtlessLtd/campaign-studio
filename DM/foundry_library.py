@@ -484,7 +484,9 @@ def read_world(world):
         )
     try:
         folder_documents = (_documents(world, 'folders') or ({}, {}))[0]
-        folders = {identity: document.get('name') for identity, document in folder_documents.items()}
+        folders = {
+            identity: document.get('name') for identity, document in folder_documents.items()
+        }
         paths = folder_paths(folder_documents)
         documents = {}
         omitted = {}
