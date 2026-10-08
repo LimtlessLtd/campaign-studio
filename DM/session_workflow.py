@@ -170,11 +170,14 @@ def prompt_pack(item, read_doc, campaign, budget_chars, prep_names, recent_logs)
             t.get('id', ''),
         )
     )
+    prep_context = dict(prep)
+    # The selected prep's own log is not a previous session for its recap.
+    prep_context.pop('log', None)
     base = {
         'campaign': campaign,
         'recent_session_logs': recent_logs(read_doc, prep_names, item['session']),
         'request': {'pitch': item['text'], 'session': item['session'], 'settings': settings},
-        'prep': prep,
+        'prep': prep_context,
         'thread_priority': [t['id'] for t in active[:12]],
     }
     instruction = (
