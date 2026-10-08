@@ -311,6 +311,40 @@ def expand_entry(codex, item, focus, prefix, proposed_ids):
     entry.setdefault('expanded_by', []).append(item['id'])
 
 
+REVIEWABLE = ('entries', 'threads', 'scenes', 'handouts')
+
+
+def reviewable_keys(draft):
+    """The `kind:id` keys a GM can accept or reject one at a time."""
+    return {f'{kind}:{row["id"]}' for kind in REVIEWABLE for row in draft.get(kind, [])}
+
+
+def without_rejected(draft, rejected):
+    """The draft minus rejected items, with links to a rejected entry removed from what stays."""
+    rejected = set(rejected or ())
+    if not rejected:
+        return draft
+    if rejected - reviewable_keys(draft):
+        raise ValueError('A rejected item is not in this proposal.')
+    kept = {
+        **draft,
+        **{
+            kind: [row for row in draft[kind] if f'{kind}:{row["id"]}' not in rejected]
+            for kind in REVIEWABLE
+        },
+    }
+    gone = {key.split(':', 1)[1] for key in rejected if key.startswith('entries:')}
+    kept['scenes'] = [
+        {**scene, 'npcs': [npc for npc in scene['npcs'] if npc not in gone]}
+        for scene in kept['scenes']
+    ]
+    kept['focus'] = {
+        **kept['focus'],
+        'links': [link for link in kept['focus']['links'] if link not in gone],
+    }
+    return kept
+
+
 def stage(item, draft, read_doc):
     if item.get('applied'):
         raise ValueError(
@@ -326,8 +360,11 @@ def stage(item, draft, read_doc):
     return item
 
 
-def apply(item, read_doc, commit, inbox):
-    """Apply a reviewed draft and the request's done status (inside inbox) in one commit."""
+def apply(item, read_doc, commit, inbox, rejected=()):
+    """Apply the accepted part of a reviewed draft and the request's done status in one commit.
+
+    `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out.
+    """
     if item.get('applied'):
         raise ValueError(
             'This request was already applied. Start a new request for further changes.'
@@ -337,8 +374,14 @@ def apply(item, read_doc, commit, inbox):
     if item.get('draft_source') != input_hash(item):
         raise ValueError('The request changed after drafting. Make a new proposal.')
     if item['kind'] == 'session':
+        if rejected:
+            raise ValueError('Item-level selection is not available for a session proposal yet.')
         return session_workflow.apply(item, read_doc, commit, inbox)
     draft = validate(item, item['draft'], read_doc)
+    if rejected:
+        draft = without_rejected(draft, rejected)
+        if not any(draft[kind] for kind in REVIEWABLE) and not any(draft['focus'].values()):
+            raise ValueError('Accept at least one item, or leave the request unapplied.')
     prefix = item['id'] + '-'
 
     def check(rows, ids):

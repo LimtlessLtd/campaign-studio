@@ -308,6 +308,7 @@ class BrowserSmoke(unittest.TestCase):
         self.page.reload()
         self.page.set_viewport_size(NARROW)
         expect(self.page.get_by_text('Ready to review')).to_be_visible()
+        expect(self.page.get_by_text('Include when applying')).to_have_count(0)
         self.assert_accessible('session proposal review at phone width')
         self.page.get_by_role('button', name='Apply to campaign').click()
         expect(self.page.get_by_text('Flooded Quay').first).to_be_visible()
@@ -320,6 +321,43 @@ class BrowserSmoke(unittest.TestCase):
         slug = self.stored('inbox')['items'][0]['created_maps'][0]['slug']
         self.open('#/maps/' + slug)
         expect(self.page.get_by_role('heading', name='Ready for a layout proposal')).to_be_visible()
+
+    def test_request_item_choices_clear_when_proposal_is_restaged(self):
+        campaign_core.write_doc('prep/s1', fixtures.shapes.PREP.new(n=1, title='Session 1'))
+        campaign_core.write_doc(
+            'inbox',
+            {
+                'items': [
+                    {
+                        'id': 'req-review',
+                        'kind': 'encounter',
+                        'text': 'Create a harbour encounter.',
+                        'session': 's1',
+                        'status': 'new',
+                    }
+                ]
+            },
+        )
+        self.studio.request(
+            '/api/requests/req-review/stage',
+            {'draft': self.studio.request_proposal()},
+        )
+        self.open('#/inbox')
+        self.page.set_viewport_size(NARROW)
+        watcher = self.page.get_by_role('checkbox', name=re.compile('Harbour Watcher'))
+        expect(watcher).to_be_checked()
+        self.assert_accessible('item review at phone width')
+        watcher.uncheck()
+        self.page.get_by_role('button', name='Edit proposal').click()
+        self.page.get_by_role('button', name='Validate & review').click()
+        expect(
+            self.page.get_by_role('checkbox', name=re.compile('Harbour Watcher'))
+        ).to_be_checked()
+        self.page.get_by_role('checkbox', name=re.compile('Harbour Watcher')).uncheck()
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_role('button', name='New follow-up')).to_be_visible()
+        self.assertEqual(self.stored('codex')['entries'], [])
+        self.assertEqual(self.stored('prep/s1')['scenes'][0]['npcs'], [])
 
     def test_codex_pages_and_thread_edits_save_individual_records(self):
         self.studio.seed(

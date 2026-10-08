@@ -114,9 +114,9 @@ their row and finding say enough.
   proposal, with an editable JSON import. A scene's map points to a stored slug, while the location number
   stays zero until a new map has a keyed layout. Recent logs lead its context; W34 will provide reliable
   thread staleness fields for better ranking. W41 adds compendium bases for proposed NPCs.
-- W33 renders every proposal kind as cards with accept, edit, reject and "redraft this one". Applying
-  writes only accepted items; an edited item is validated again. Changes to existing records show before
-  and after.
+- General requests now offer item choices for entries, threads, scenes and handouts. W33 extends this to
+  session and map proposals, adds "redraft this one" and shows before/after changes to existing records.
+  Applying writes only accepted items; an edited item is validated again.
 
 ### W34, W35 Threads and wrap-up
 
