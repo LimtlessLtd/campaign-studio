@@ -166,7 +166,7 @@ it.
 Anything you create to do a task is removed when the task ends, so the owner's folders stay tidy:
 
 - Work in a git worktree only when the main checkout is not yours, and create it outside the owner's
-  folders (the system temp or your scratchpad directory), never as a sibling such as `E:\DnD\cs-<agent>-work`.
+  folders (the system temp or your scratchpad directory), never as a sibling folder of the checkout such as `cs-<agent>-work`.
   If a worktree must live elsewhere, name it in the claim thread.
 - After the PR merges (or you release the work), run `git worktree remove --force <path>` and
   `git worktree prune`, then delete your merged local branches with `git branch -d`. Copies of
