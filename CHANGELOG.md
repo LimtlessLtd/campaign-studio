@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Memory import relay fix (#75):** malformed legacy record types and session IDs now produce sanitised candidates or a clear validation error instead of a server error.
 - **Reviewed memory import (W31):** the Import memory page previews older Studio/DM-screen codex and threads, JSON/Markdown session summaries, and selected Foundry journal folders. The GM selects candidates before one recoverable apply; stable IDs and log collision checks make reruns safe. Sources and Foundry remain read only.
 - **World removal review:** removing imported data now leaves the World Library snapshot absent across navigation instead of immediately reading it back. The remove button disappears when no imported data remains, and bulk unlinking scans references once for the whole removed set.
 - **Remove an imported world (W67, second slice):** the World Library page has "Remove imported data" (`POST /api/foundry/world/remove` with the world key). One recoverable commit deletes the world's codex entries (each unlinked from other entries, threads, preps, art and requests) and its library snapshot, whose last copy stays in history. The Foundry world folder is never written to. Entries imported from other worlds and entries made in Studio stay. Review relay: owner feedback posts are now marked with a reaction once folded in.
