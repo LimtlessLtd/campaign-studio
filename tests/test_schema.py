@@ -246,6 +246,20 @@ class SchemaTests(unittest.TestCase):
             },
         )
 
+    def test_version_five_prep_gains_an_empty_session_log(self):
+        self.migrate()
+        schema.write_marker(self.data, 5, 'Synthetic version 5 campaign')
+        prep = self.dm / 'data/prep/s9.json'
+        prep.parent.mkdir(exist_ok=True)
+        prep.write_text(json.dumps({'n': 9, 'title': 'Nine'}))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (5, schema.CURRENT))
+        self.assertEqual(
+            self.read('data/prep/s9.json')['log'], {'summary': '', 'notes': '', 'outcomes': []}
+        )
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

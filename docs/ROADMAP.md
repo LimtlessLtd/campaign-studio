@@ -109,6 +109,18 @@ their row and finding say enough.
   already reads their JSON), session summaries as JSON or one Markdown file per session, and chosen Foundry
   journal folders marked as lore. Each import arrives as a reviewed proposal, and its text is reference data.
 
+### W68 Session recordings
+
+- Owner feedback (8 Oct): point AI at local video files, transcribe the audio, and work out which threads are
+  still unresolved. The table's jokes and invented gags (for example a player's made-up animal form) must not
+  become canon, while real play (for example destroying a named temple) must.
+- Files stay on disk: the GM picks a path and Studio never uploads or copies a recording. Transcription is a
+  job behind a provider adapter (local Whisper or a hosted API), with the usual usage ledger and an ask before a
+  large job. The transcript is reference data, never instructions.
+- A second pass classifies each passage as **in-game**, **table banter** or **unclear**, quoting the passage
+  for the GM to confirm. Only confirmed in-game passages feed a W35 wrap-up proposal: session log, thread changes
+  and new threads. Nothing applies unreviewed. The GM can mark a passage as banter so later runs remember it.
+
 ### W32, W33 Session Forge and review
 
 - **Session Forge** is a `session` workflow kind built like requests: a bounded schema, validation, review,
