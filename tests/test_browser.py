@@ -198,6 +198,17 @@ class BrowserSmoke(unittest.TestCase):
             self.context.request.get(self.studio.url + image.get_attribute('src')).status, 200
         )
 
+        self.open('#/library')
+        self.page.get_by_role('button', name='Actors & NPCs').click()
+        picked = self.page.locator('.library-entry.on')
+        expect(picked).to_have_count(0)
+        self.page.locator('.library-entry', has_text='Mira').click()
+        expect(picked).to_have_count(1)
+        expect(picked).to_have_attribute('aria-pressed', 'true')
+        self.page.reload()
+        self.page.get_by_role('button', name='Actors & NPCs').click()
+        expect(picked).to_contain_text('Mira')
+
     def test_archiving_the_last_prep_keeps_new_session_number_unique(self):
         self.open('#/prep/new')
         expect(self.page).to_have_url(self.studio.url + '/#/prep/s1')
