@@ -471,7 +471,7 @@ function jobBox(job, signal) {
 async function prepPage(name, context) {
   const main = context.view;
   if (!name) {
-    const names = S.state.prep;
+    const names = activePreps();
     return go('#/prep/' + (names[names.length - 1] || 'new'), true);
   }
   if (name === 'new') return newPrep(context);
@@ -575,7 +575,7 @@ async function prepPage(name, context) {
       ),
     );
   drawScenes();
-  const others = S.state.prep.filter((n) => n !== name);
+  const others = activePreps().filter((n) => n !== name);
   render(
     main,
     h(
@@ -587,8 +587,42 @@ async function prepPage(name, context) {
         { class: 'row' },
         others.slice(-4).map((n) => h('a', { class: 'btn', href: '#/prep/' + n }, n.toUpperCase())),
         h('button', { onclick: newPrep }, '+ Next session'),
+        h(
+          'button',
+          {
+            title: p.archived
+              ? 'Bring this session back into the active list'
+              : 'Hide this session from the active list; nothing is deleted',
+            onclick: async () => {
+              p.archived = !p.archived;
+              await flush(docName);
+              const set = S.state.prep_archived || (S.state.prep_archived = []);
+              if (p.archived) set.push(name);
+              else S.state.prep_archived = set.filter((n) => n !== name);
+              go('#/prep', true);
+            },
+          },
+          p.archived ? 'Restore session' : 'Archive session',
+        ),
       ),
     ),
+    (S.state.prep_archived || []).filter((n) => n !== name).length
+      ? h(
+          'div',
+          { class: 'row' },
+          h('span', { class: 'muted' }, 'Archived sessions'),
+          S.state.prep_archived
+            .filter((n) => n !== name)
+            .map((n) => h('a', { class: 'btn', href: '#/prep/' + n }, n.toUpperCase())),
+        )
+      : null,
+    p.archived
+      ? h(
+          'div',
+          { class: 'card' },
+          'This session is archived. Restore it to bring it back to the list.',
+        )
+      : null,
     h(
       'div',
       { class: 'three' },
@@ -822,9 +856,16 @@ async function makePanel(session, context) {
   return panel;
 }
 
+/* Session names not archived, oldest first. Archived preps stay in `S.state.prep` for numbering. */
+function activePreps() {
+  const archived = S.state.prep_archived || [];
+  return S.state.prep.filter((n) => !archived.includes(n));
+}
+
 async function newPrep(context) {
   const names = S.state.prep;
-  const last = names.length ? await context.doc('prep/' + names[names.length - 1], null) : null;
+  const active = activePreps();
+  const last = active.length ? await context.doc('prep/' + active[active.length - 1], null) : null;
   const n = Math.max(lastSession().n, last ? last.n : 0) + 1;
   const name = 's' + n;
   if (!names.includes(name)) {
