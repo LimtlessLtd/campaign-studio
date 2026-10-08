@@ -114,9 +114,10 @@ def _record_candidates(reader, folder, source, kind):
         key = _key(source, item_kind, identity)
         provenance = {'source': source, 'id': identity}
         if kind == 'codex':
+            entry_type = row.get('type')
             record = shapes.CODEX_ENTRY.new(
                 id='memory-' + key,
-                type=row.get('type') if row.get('type') in TYPES else 'lore',
+                type=entry_type if isinstance(entry_type, str) and entry_type in TYPES else 'lore',
                 name=_short(row.get('name'), 300) or identity,
                 group=_short(row.get('group'), 300),
                 status=_short(row.get('status'), 80),
@@ -138,10 +139,11 @@ def _record_candidates(reader, folder, source, kind):
             )
             title = record['name']
         else:
+            status = row.get('status')
             record = shapes.THREAD.new(
                 id='memory-' + key,
                 title=_short(row.get('title'), 300) or identity,
-                status=row.get('status') if row.get('status') in STATUSES else 'open',
+                status=status if isinstance(status, str) and status in STATUSES else 'open',
                 detail=_short(row.get('detail')),
                 source='Imported campaign memory',
                 memory_import=provenance,
@@ -158,6 +160,8 @@ def _record_candidates(reader, folder, source, kind):
 def _session_number(identity, value=None):
     if isinstance(value, dict) and type(value.get('n')) is int and 0 <= value['n'] <= 99999:
         return value['n']
+    if not isinstance(identity, str):
+        return 0
     matched = NUMBER.fullmatch(identity)
     return int(matched.group(1)) if matched else 0
 

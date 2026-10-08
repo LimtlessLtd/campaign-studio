@@ -170,8 +170,9 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   rejected before import.
 - Foundry receives one map per macro run. Tokens are not placed, and session prep, scenes and handouts are
   not exported (W38–W41).
-- AI prompts now select bounded codex and thread context, but no played-session history exists yet (W30).
-  World import can select folders, though duplicate folder names still need ID-based selection (W24).
+- AI prompts now select bounded codex and thread context; recent played-session logs feed map and request
+  drafts, including Session Forge recaps (W30). World import can select folders, though duplicate folder names
+  still need ID-based selection (W24).
   A brief or map key larger than the configured budget is refused before a provider call.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical

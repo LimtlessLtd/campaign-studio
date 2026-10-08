@@ -13,6 +13,7 @@ const TYPES = {
   lore: 'Lore',
 };
 const KINDS = {
+  session: 'Plan whole session',
   'battle map': 'Battle map',
   npc: 'NPC',
   item: 'Item',
@@ -191,6 +192,7 @@ async function sendToAI(item) {
   if (S.pending.inbox) await flush('inbox');
   try {
     await post('/api/requests/' + item.id + '/run', {});
+    rejectedItems.delete(item.id);
   } catch (e) {
     alert(e.message);
     return;
@@ -208,6 +210,7 @@ async function importRequestProposal(item) {
     formInput(f, 'text', 'Proposal JSON', { type: 'textarea', rows: 12 }),
     async () => {
       await post('/api/requests/' + item.id + '/stage', { draft: JSON.parse(f.text) });
+      rejectedItems.delete(item.id);
       await load('inbox', { items: [] });
       route(true);
     },
@@ -238,7 +241,7 @@ function itemChoice(item, kind, row) {
       h('b', {}, row.name || row.title || row.id),
       h('span', { class: 'muted' }, 'Include when applying'),
     ),
-    h('pre', { class: 'file' }, JSON.stringify(row, null, 2)),
+    h('pre', { class: 'file', tabindex: 0 }, JSON.stringify(row, null, 2)),
   );
 }
 async function applyRequestProposal(item) {
@@ -280,7 +283,7 @@ function requestCard(it, box, draw) {
   const isMap = ['battle map', 'stock map'].includes(it.kind);
   return h(
     'div',
-    { class: 'card', style: 'margin-bottom:10px' + (it.status === 'done' ? ';opacity:.8' : '') },
+    { class: 'card', style: 'margin-bottom:10px' },
     h(
       'div',
       { class: 'spread' },
@@ -360,7 +363,11 @@ function requestCard(it, box, draw) {
               {
                 onclick: async () => {
                   if (it.applied) {
-                    await addRequest({ kind: it.kind, session: it.session || '' });
+                    await addRequest({
+                      kind: it.kind,
+                      session: it.session || '',
+                      ...(it.kind === 'session' ? { settings: it.settings } : {}),
+                    });
                     route(true);
                   } else {
                     it.status = 'new';
@@ -390,9 +397,17 @@ function requestCard(it, box, draw) {
     ),
     field('inbox', it, 'text', {
       type: 'textarea',
-      rows: 2,
-      placeholder: 'What do you want made?',
+      rows: it.kind === 'session' ? 5 : 2,
+      placeholder:
+        it.kind === 'session' ? 'What is the next session about?' : 'What do you want made?',
     }),
+    it.kind === 'session' && it.settings
+      ? h(
+          'p',
+          { class: 'muted' },
+          `${it.settings.hours} hours · combat ${it.settings.combat}/5 · social ${it.settings.social}/5`,
+        )
+      : null,
     h(
       'label',
       {},
@@ -413,24 +428,50 @@ function requestCard(it, box, draw) {
       ),
     ),
     it.result
-      ? h('div', {}, h('label', {}, 'Result'), h('pre', { class: 'file' }, it.result))
+      ? h('div', {}, h('label', {}, 'Result'), h('pre', { class: 'file', tabindex: 0 }, it.result))
       : null,
     it.error ? h('p', { class: 'err' }, it.error) : null,
+    it.created_maps?.length
+      ? h(
+          'div',
+          { class: 'row' },
+          h('span', { class: 'muted' }, 'Map briefs:'),
+          it.created_maps.map((map) =>
+            h('a', { class: 'chip', href: '#/maps/' + map.slug }, map.name),
+          ),
+        )
+      : null,
     it.status === 'review' && it.draft
       ? h(
           'details',
           { open: true },
           h('summary', {}, 'Review additions'),
-          ...['entries', 'threads', 'scenes', 'handouts', 'goals', 'loot', 'checklist', 'notes']
+          ...[
+            'recap',
+            'goals',
+            'maps',
+            'entries',
+            'threads',
+            'thread_changes',
+            'scenes',
+            'handouts',
+            'loot',
+            'checklist',
+            'notes',
+          ]
             .filter((key) => it.draft[key]?.length)
             .map((key) =>
               h(
                 'div',
                 {},
                 h('b', {}, key),
-                REVIEWED_KINDS.includes(key)
+                it.kind !== 'session' && REVIEWED_KINDS.includes(key)
                   ? it.draft[key].map((row) => itemChoice(it, key, row))
-                  : h('pre', { class: 'file' }, JSON.stringify(it.draft[key], null, 2)),
+                  : h(
+                      'pre',
+                      { class: 'file', tabindex: 0 },
+                      JSON.stringify(it.draft[key], null, 2),
+                    ),
               ),
             ),
         )
@@ -597,6 +638,22 @@ async function prepPage(name, context) {
             field(docName, sc, 'where', { label: 'Where' }),
             field(docName, sc, 'map', { label: 'Battle map / Foundry scene' }),
           ),
+          sc.map ? h('a', { class: 'chip', href: '#/maps/' + sc.map }, 'Open linked map') : null,
+          field(docName, sc, 'purpose', { label: 'Purpose of this scene' }),
+          h(
+            'label',
+            {},
+            'Map location number (0 until a new map is keyed)',
+            h('input', {
+              type: 'number',
+              min: 0,
+              value: sc.area || 0,
+              oninput: (e) => {
+                sc.area = Math.max(0, Number(e.target.value) || 0);
+                save(docName);
+              },
+            }),
+          ),
           h('label', {}, 'Who is there'),
           picker(docName, (sc.npcs = sc.npcs || []), codexChoices, {
             placeholder: 'Add from the codex…',
@@ -606,8 +663,138 @@ async function prepPage(name, context) {
             type: 'textarea',
             rows: 2,
           }),
+          sc.encounter_detail
+            ? h(
+                'details',
+                {},
+                h('summary', {}, 'Encounter plan'),
+                h(
+                  'div',
+                  { class: 'two' },
+                  field(docName, sc.encounter_detail, 'difficulty', { label: 'Target difficulty' }),
+                  field(docName, sc.encounter_detail, 'terrain', { label: 'Terrain' }),
+                ),
+                field(docName, sc.encounter_detail, 'tactics', {
+                  label: 'Tactics',
+                  type: 'textarea',
+                  rows: 2,
+                }),
+                field(docName, sc.encounter_detail, 'resolution', {
+                  label: 'Ways this can end',
+                  type: 'textarea',
+                  rows: 2,
+                }),
+                ...sc.encounter_detail.creatures.map((creature) =>
+                  h(
+                    'div',
+                    { class: 'row' },
+                    field(docName, creature, 'name', { label: 'Creature' }),
+                    h(
+                      'label',
+                      {},
+                      'Count',
+                      h('input', {
+                        type: 'number',
+                        min: 1,
+                        max: 100,
+                        value: creature.count,
+                        oninput: (e) => {
+                          creature.count = Math.max(1, Number(e.target.value) || 1);
+                          save(docName);
+                        },
+                      }),
+                    ),
+                    h(
+                      'button',
+                      {
+                        class: 'danger',
+                        onclick: () => {
+                          sc.encounter_detail.creatures.splice(
+                            sc.encounter_detail.creatures.indexOf(creature),
+                            1,
+                          );
+                          save(docName);
+                          drawScenes();
+                        },
+                      },
+                      'Remove creature',
+                    ),
+                  ),
+                ),
+                h(
+                  'button',
+                  {
+                    onclick: () => {
+                      sc.encounter_detail.creatures.push({ name: '', count: 1 });
+                      save(docName);
+                      drawScenes();
+                    },
+                  },
+                  '+ Creature',
+                ),
+              )
+            : null,
+          sc.clues?.length
+            ? h(
+                'div',
+                {},
+                h('label', {}, 'Thread clues'),
+                ...sc.clues.map((clue) =>
+                  h(
+                    'div',
+                    { class: 'row' },
+                    h(
+                      'select',
+                      {
+                        'aria-label': 'Clue thread',
+                        onchange: (e) => {
+                          clue.thread = e.target.value;
+                          save(docName);
+                        },
+                      },
+                      threadChoices().map((t) =>
+                        h(
+                          'option',
+                          {
+                            value: t.id,
+                            selected: t.id === clue.thread,
+                          },
+                          t.name,
+                        ),
+                      ),
+                    ),
+                    field(docName, clue, 'text', { label: 'Clue' }),
+                    h(
+                      'button',
+                      {
+                        class: 'danger',
+                        onclick: () => {
+                          sc.clues.splice(sc.clues.indexOf(clue), 1);
+                          save(docName);
+                          drawScenes();
+                        },
+                      },
+                      'Remove clue',
+                    ),
+                  ),
+                ),
+              )
+            : null,
+          h(
+            'button',
+            {
+              onclick: () => {
+                sc.clues ||= [];
+                sc.clues.push(blank('scene_clue'));
+                save(docName);
+                drawScenes();
+              },
+            },
+            '+ Thread clue',
+          ),
+          field(docName, sc, 'read_aloud', { label: 'Read-aloud text', type: 'textarea', rows: 3 }),
           field(docName, sc, 'notes', {
-            label: 'Notes, read-aloud text, twists',
+            label: 'GM notes and twists',
             type: 'textarea',
             rows: 4,
           }),
@@ -675,6 +862,7 @@ async function prepPage(name, context) {
       }),
     ),
     field(docName, p, 'recap', { label: 'Recap to open with', type: 'textarea', rows: 4 }),
+    field(docName, p, 'pitch', { label: 'Session pitch', type: 'textarea', rows: 4 }),
     h(
       'div',
       { class: 'two' },
@@ -754,6 +942,11 @@ async function prepPage(name, context) {
           type: 'textarea',
           rows: 3,
         }),
+        field(docName, handout, 'image_prompt', {
+          label: 'Image brief',
+          type: 'textarea',
+          rows: 2,
+        }),
         h(
           'button',
           {
@@ -825,6 +1018,7 @@ async function prepPage(name, context) {
 /* "Make for this session": requests tied to this prep, plus maps generated for it */
 async function makePanel(session, context) {
   const box = await context.doc('inbox', { items: [] });
+  const prep = await context.doc('prep/' + session, null);
   const maps = (await context.doc('maps/index', { items: [] })).items.filter(
     (m) => m.session === session,
   );
@@ -856,6 +1050,8 @@ async function makePanel(session, context) {
     );
   };
   const hints = {
+    session:
+      'e.g. The party follows the smuggler lead into the flooded quarter, where the watch captain needs their help.',
     npc: 'e.g. A harbour captain: proud, by the book and hiding a divided loyalty.',
     item: 'e.g. An enchanted reward for resolving the temple dispute.',
     encounter: 'e.g. A patrol boards the party’s ship; negotiation may avoid combat.',
@@ -864,12 +1060,66 @@ async function makePanel(session, context) {
   };
   const open = (kind) => {
     const ta = h('textarea', { rows: 3, placeholder: hints[kind] || '' });
+    const settings = {
+      hours: 4,
+      combat: 2,
+      social: 2,
+      threads: [...(prep?.threads || [])].slice(0, 12),
+    };
+    const threadBox = h('div');
+    const drawThreads = () =>
+      render(
+        threadBox,
+        h('label', {}, 'Threads to push'),
+        h(
+          'div',
+          { class: 'row' },
+          settings.threads.map((id) =>
+            h(
+              'button',
+              {
+                class: 'small',
+                onclick: () => {
+                  settings.threads = settings.threads.filter((value) => value !== id);
+                  drawThreads();
+                },
+              },
+              'Remove ' + (threadChoices().find((t) => t.id === id)?.name || id),
+            ),
+          ),
+        ),
+        h(
+          'select',
+          {
+            'aria-label': 'Add a thread to the session',
+            onchange: (e) => {
+              if (
+                e.target.value &&
+                !settings.threads.includes(e.target.value) &&
+                settings.threads.length < 12
+              )
+                settings.threads.push(e.target.value);
+              drawThreads();
+            },
+          },
+          h('option', { value: '' }, 'Add a thread…'),
+          threadChoices()
+            .filter((t) => !settings.threads.includes(t.id))
+            .map((t) => h('option', { value: t.id }, t.name)),
+        ),
+      );
+    if (kind === 'session') drawThreads();
     const submit = async (now) => {
       if (!ta.value.trim()) {
         ta.focus();
         return;
       }
-      const item = await addRequest({ kind, text: ta.value.trim(), session });
+      const item = await addRequest({
+        kind,
+        text: ta.value.trim(),
+        session,
+        ...(kind === 'session' ? { settings } : {}),
+      });
       render(formBox);
       draw();
       if (now) await sendToAI(item);
@@ -881,6 +1131,33 @@ async function makePanel(session, context) {
         { class: 'card', style: 'margin:10px 0;background:var(--bg2)' },
         h('b', {}, 'New ' + (KINDS[kind] || kind).toLowerCase()),
         ta,
+        kind === 'session'
+          ? h(
+              'div',
+              {},
+              h(
+                'p',
+                { class: 'muted' },
+                'One pitch drafts a recap, linked scenes, map briefs, cast, handouts and thread changes for review.',
+              ),
+              h(
+                'div',
+                { class: 'three' },
+                formInput(settings, 'hours', 'Length (hours)', { type: 'number', min: 1, max: 12 }),
+                formInput(settings, 'combat', 'Combat focus (0–5)', {
+                  type: 'number',
+                  min: 0,
+                  max: 5,
+                }),
+                formInput(settings, 'social', 'Social focus (0–5)', {
+                  type: 'number',
+                  min: 0,
+                  max: 5,
+                }),
+              ),
+              threadBox,
+            )
+          : null,
         h(
           'div',
           { class: 'row', style: 'margin-top:8px' },
@@ -904,6 +1181,7 @@ async function makePanel(session, context) {
       h(
         'div',
         { class: 'row' },
+        h('button', { class: 'primary', onclick: () => open('session') }, 'Plan whole session'),
         ['npc', 'item', 'encounter', 'handout', 'other'].map((k) =>
           h('button', { onclick: () => open(k) }, '+ ' + KINDS[k]),
         ),
@@ -913,7 +1191,7 @@ async function makePanel(session, context) {
     h(
       'p',
       { class: 'muted', style: 'margin:6px 0 0' },
-      'Describe what you need. Review the structured draft before adding it to the codex or this session prep. Use the map studio for maps and keyed locations.',
+      'Draft a complete session from one pitch, or request individual pieces. Review every proposal before applying it. New map briefs wait in the map workflow.',
     ),
     formBox,
     list,

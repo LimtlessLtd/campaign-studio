@@ -290,6 +290,58 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(self.read('data/threads/ui.json')['title'], 'From the UI')
         self.assertEqual(self.read('data/threads/old.json')['custom'], 7)
 
+    def test_version_seven_prep_gains_session_plan_fields_without_losing_notes(self):
+        schema.write_marker(self.data, 7, 'Synthetic version 7 campaign')
+        path = self.dm / 'data/prep/s1.json'
+        old = {
+            'n': 1,
+            'title': 'Session 1',
+            'recap': 'A hand-written recap.',
+            'scenes': [{'id': 'gate', 'title': 'At the gate', 'notes': 'Keep this twist.'}],
+            'handouts': [{'id': 'notice', 'title': 'Notice', 'player_text': 'Read me.'}],
+        }
+        path.write_text(json.dumps(old))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (7, schema.CURRENT))
+        self.assertTrue(result['backup'])
+        prep = self.read('data/prep/s1.json')
+        self.assertEqual(prep['recap'], old['recap'])
+        self.assertEqual(prep['pitch'], '')
+        self.assertEqual(prep['scenes'][0]['notes'], 'Keep this twist.')
+        self.assertEqual(prep['scenes'][0]['clues'], [])
+        self.assertEqual(prep['scenes'][0]['encounter_detail']['creatures'], [])
+        self.assertEqual(prep['handouts'][0]['image_prompt'], '')
+        self.assertEqual(self.migrate()['status'], 'current')
+        self.assertEqual(self.read('data/prep/s1.json'), prep)
+
+    def test_version_eight_adds_session_plan_without_losing_thread_links(self):
+        self.migrate()
+        schema.write_marker(self.data, 8, 'Synthetic version 8 campaign')
+        thread_path = self.dm / 'data/threads/ui.json'
+        thread = self.read('data/threads/ui.json')
+        thread['entries'] = ['ui-npc']
+        thread['sessions'] = ['s1']
+        thread_path.write_text(json.dumps(thread))
+        prep_path = self.dm / 'data/prep/s1.json'
+        prep = self.read('data/prep/s1.json')
+        prep.pop('pitch', None)
+        prep['scenes'][0].pop('clues', None)
+        prep['handouts'] = [{'id': 'notice', 'title': 'Notice', 'player_text': 'Keep this.'}]
+        prep_path.write_text(json.dumps(prep))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (8, schema.CURRENT))
+        self.assertTrue(result['backup'])
+        self.assertEqual(self.read('data/threads/ui.json'), thread)
+        migrated = self.read('data/prep/s1.json')
+        self.assertEqual(migrated['pitch'], '')
+        self.assertEqual(migrated['scenes'][0]['clues'], [])
+        self.assertEqual(migrated['handouts'][0]['player_text'], 'Keep this.')
+        self.assertEqual(migrated['handouts'][0]['image_prompt'], '')
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

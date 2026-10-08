@@ -119,13 +119,19 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
             h('input', {
               type: 'checkbox',
               checked: item.done,
+              'aria-label': 'Mark ' + text + ' done',
               onchange: (e) => {
                 item.done = e.target.checked;
                 save(docName);
                 draw();
               },
             }),
-          h('input', { type: 'text', value: text, oninput: (e) => set(e.target.value) }),
+          h('input', {
+            type: 'text',
+            value: text,
+            'aria-label': placeholder + ' ' + (i + 1),
+            oninput: (e) => set(e.target.value),
+          }),
           h(
             'button',
             {
@@ -145,6 +151,7 @@ function listEditor(docName, arr, { checklist = false, placeholder = 'Add…' } 
       h('input', {
         type: 'text',
         placeholder,
+        'aria-label': placeholder,
         onkeydown: (e) => {
           if (e.key !== 'Enter' || !e.target.value.trim()) return;
           const text = e.target.value.trim();

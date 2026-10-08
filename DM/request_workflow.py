@@ -8,11 +8,23 @@ from copy import deepcopy
 
 import shapes
 import context as prompt_context
+import session_workflow
 import workflow
 
 REQUEST_ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 PREP_ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
-KINDS = {'npc', 'item', 'encounter', 'handout', 'plot', 'other', 'event', 'journal', 'expand'}
+KINDS = {
+    'npc',
+    'item',
+    'encounter',
+    'handout',
+    'plot',
+    'other',
+    'event',
+    'journal',
+    'expand',
+    'session',
+}
 ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
 STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
 
@@ -92,6 +104,8 @@ SCHEMA = workflow.obj(
 
 def input_hash(item):
     source = {key: item.get(key, '') for key in ('id', 'kind', 'text', 'session', 'codex')}
+    if item.get('kind') == 'session':
+        source['settings'] = item.get('settings') or {}
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode('utf-8')).hexdigest()
 
 
@@ -114,8 +128,10 @@ def validate_request(item, read_doc):
     if session:
         if not PREP_ID.fullmatch(str(session)) or read_doc('prep/' + session) is None:
             raise ValueError('The linked session prep no longer exists.')
-    elif item['kind'] in ('encounter', 'handout', 'event', 'journal'):
+    elif item['kind'] in ('encounter', 'handout', 'event', 'journal', 'session'):
         raise ValueError('Link a session prep to this request first.')
+    if item['kind'] == 'session':
+        session_workflow.options(item, read_doc)
     return session
 
 
@@ -150,6 +166,10 @@ def prompt_pack(
     item, read_doc, campaign, budget_chars=prompt_context.DEFAULT_BUDGET, prep_names=()
 ):
     session = validate_request(item, read_doc)
+    if item['kind'] == 'session':
+        return session_workflow.prompt_pack(
+            item, read_doc, campaign, budget_chars, prep_names, recent_logs
+        )
     codex = read_doc('codex') or {'entries': []}
     threads = read_doc('threads') or {'threads': []}
     prep = read_doc('prep/' + session) if session else None
@@ -221,6 +241,8 @@ def prompt_pack(
 
 def validate(item, draft, read_doc):
     session = validate_request(item, read_doc)
+    if item['kind'] == 'session':
+        return session_workflow.validate(item, draft, read_doc)
     if not isinstance(draft, dict):
         raise ValueError('The proposal must be a JSON object.')
     if len(json.dumps(draft, ensure_ascii=False)) > 240000:
@@ -332,6 +354,8 @@ def stage(item, draft, read_doc):
     item.update(
         status='review', draft=clean, draft_source=input_hash(item), result=clean['summary']
     )
+    if item['kind'] == 'session':
+        item['draft_base'] = session_workflow.base_hash(item, clean, read_doc)
     item.pop('error', None)
     return item
 
@@ -349,6 +373,10 @@ def apply(item, read_doc, commit, inbox, rejected=()):
         raise ValueError('This request has no proposal awaiting review.')
     if item.get('draft_source') != input_hash(item):
         raise ValueError('The request changed after drafting. Make a new proposal.')
+    if item['kind'] == 'session':
+        if rejected:
+            raise ValueError('Item-level selection is not available for a session proposal yet.')
+        return session_workflow.apply(item, read_doc, commit, inbox)
     draft = validate(item, item['draft'], read_doc)
     if rejected:
         draft = without_rejected(draft, rejected)
