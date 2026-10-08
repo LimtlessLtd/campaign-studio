@@ -209,6 +209,17 @@ class BrowserSmoke(unittest.TestCase):
         self.page.get_by_role('button', name='Actors & NPCs').click()
         expect(picked).to_contain_text('Mira')
 
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='Remove imported data').click()
+        expect(self.page.locator('.library-status')).to_contain_text('No documents read yet')
+        self.assertIsNone(self.stored('foundry-library'))
+        self.assertTrue((world / 'world.json').is_file())
+        self.open('#/codex')
+        self.open('#/library')
+        expect(self.page.locator('.library-status')).to_contain_text('No documents read yet')
+        expect(self.page.get_by_role('button', name='Remove imported data')).to_have_count(0)
+        self.assertIsNone(self.stored('foundry-library'))
+
     def test_archiving_the_last_prep_keeps_new_session_number_unique(self):
         self.open('#/prep/new')
         expect(self.page).to_have_url(self.studio.url + '/#/prep/s1')

@@ -99,9 +99,10 @@ Images are generated individually when you press **Generate image**. Different p
 
 ## Foundry
 
-**World Library** browses media in the connected Foundry User Data folder. It also reads the world's scenes,
-journals, actors and items straight from the world's database files when you open the page, with no macro
-and without changing Foundry; it shows when they were read and re-reads after Foundry saves changes. If a
+**World Library** browses media in the connected Foundry User Data folder. Choose **Read again now** to read
+the world's scenes, journals, actors and items straight from its database files, with no macro and without
+changing Foundry. The page shows when they were read and refreshes a saved snapshot after Foundry changes.
+Removing imported Studio data leaves its snapshot absent until you choose to read or import it again. If a
 world's files cannot be read, download the export Script macro, run it as GM in Foundry, and import the JSON
 snapshot instead. **Import world into Studio** adds actors, items and scenes to the codex in one action;
 first-run setup also runs it and reports failures. AI drafts use a configurable context budget (64,000

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **World removal review:** removing imported data now leaves the World Library snapshot absent across navigation instead of immediately reading it back. The remove button disappears when no imported data remains, and bulk unlinking scans references once for the whole removed set.
 - **Remove an imported world (W67, second slice):** the World Library page has "Remove imported data" (`POST /api/foundry/world/remove` with the world key). One recoverable commit deletes the world's codex entries (each unlinked from other entries, threads, preps, art and requests) and its library snapshot, whose last copy stays in history. The Foundry world folder is never written to. Entries imported from other worlds and entries made in Studio stay. Review relay: owner feedback posts are now marked with a reaction once folded in.
 - **Map drafts read session logs (W30, second slice):** AI map drafts (layout and content) now receive the newest three session logs in the campaign block, and the prompt tells the AI to treat them as canon. Recaps are not built yet, so W30 keeps only that part.
 - **Session log (W30, first slice):** each prep has a "Session log" (what the players did, GM notes, outcomes). General request drafts now receive the newest three logs from other sessions as `recent_session_logs`, and the prompt tells the AI to treat them as canon. Campaign data moves to schema 6 on start-up, with the usual verified backup first (schema 7 followed with W28). Map drafts and recaps do not read logs yet. New row W68 (transcribe session videos).

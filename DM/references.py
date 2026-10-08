@@ -103,13 +103,33 @@ def remove(docs, entry_id):
 
 
 def remove_many(docs, entry_ids):
-    """`remove` for each ID that exists, in one pass over the same documents. Returns changed names."""
-    changed = set()
-    for entry_id in entry_ids:
-        try:
-            changed.update(remove(docs, entry_id))
-        except KeyError:
-            continue
+    """Delete several entries and unlink their references in one pass over the documents."""
+    codex = docs.get(CODEX)
+    entries = codex.get('entries') if codex else None
+    if not isinstance(entries, list):
+        return []
+    wanted = set(entry_ids)
+    present = {
+        e['id']
+        for e in entries
+        if isinstance(e, dict) and isinstance(e.get('id'), str) and e['id'] in wanted
+    }
+    if not present:
+        return []
+    codex['entries'] = [
+        entry for entry in entries if not isinstance(entry, dict) or entry.get('id') not in present
+    ]
+    changed = {CODEX}
+    for name, _, owner, field, is_list in _links(docs):
+        if is_list:
+            linked = _ids(owner, field)
+            kept = [value for value in linked if not isinstance(value, str) or value not in present]
+            if len(kept) != len(linked):
+                owner[field] = kept
+                changed.add(name)
+        elif isinstance(owner.get(field), str) and owner[field] in present:
+            owner[field] = ''
+            changed.add(name)
     return sorted(changed, key=lambda name: (name != CODEX, name))
 
 

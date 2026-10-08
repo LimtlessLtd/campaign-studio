@@ -64,6 +64,16 @@ class ReferenceTests(unittest.TestCase):
         docs = sample()
         self.assertEqual(references.remove(docs, 'sword'), ['codex', 'mapkey/docks'])
 
+    def test_remove_many_unlinks_two_entries_without_touching_other_links(self):
+        docs = sample()
+        changed = references.remove_many(docs, ['mira', 'bram', 'missing'])
+        self.assertEqual(changed[0], 'codex')
+        self.assertEqual([entry['id'] for entry in docs['codex']['entries']], ['sword'])
+        self.assertEqual(docs['threads']['threads'][0]['pcs'], [])
+        self.assertEqual(docs['prep/s1']['scenes'][0]['npcs'], [])
+        self.assertEqual(docs['mapkey/docks']['areas'][0]['items'], ['sword'])
+        self.assertEqual(references.remove_many(docs, ['mira', 'bram']), [])
+
     def test_unknown_entry_and_malformed_documents(self):
         with self.assertRaises(KeyError):
             references.remove(sample(), 'nobody')
