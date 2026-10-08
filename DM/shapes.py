@@ -94,7 +94,11 @@ CODEX_ENTRY = Shape(
     ['id', 'type', 'name'],
     dict(group='', status='', public='', secrets='', notes='', image='', files=[], tags=[]),
 )
-THREAD = Shape('thread', ['id', 'title'], dict(status='open', detail='', pcs=[], source=''))
+THREAD = Shape(
+    'thread',
+    ['id', 'title'],
+    dict(status='open', detail='', pcs=[], source='', entries=[], sessions=[]),
+)
 ART_ITEM = Shape(
     'art_item', ['id', 'prompt'], dict(title='', codex='', image='', status='queued', created=0)
 )

@@ -55,7 +55,12 @@ class ShapeTests(unittest.TestCase):
         thread = {'id': 't', 'title': 'T', 'status': 'open', 'detail': '', 'pcs': 'Ash'}
         self.assertEqual(
             shapes.THREADS.problems({'threads': [thread]}),
-            ['threads.threads[0].pcs is string, not array', 'threads.threads[0].source is missing'],
+            [
+                'threads.threads[0].pcs is string, not array',
+                'threads.threads[0].source is missing',
+                'threads.threads[0].entries is missing',
+                'threads.threads[0].sessions is missing',
+            ],
         )
 
     def test_browser_builds_records_from_known_shapes(self):

@@ -313,6 +313,39 @@ class BrowserSmoke(unittest.TestCase):
         )
         self.assert_accessible('per-record threads')
 
+    def test_threads_link_entries_and_sort_by_staleness(self):
+        self.studio.seed(
+            'codex',
+            {'entries': [fixtures.shapes.CODEX_ENTRY.new(id='mira', type='npc', name='Mira')]},
+        )
+        self.studio.seed(
+            'threads',
+            {
+                'threads': [
+                    fixtures.shapes.THREAD.new(id='fresh', title='Fresh lead', sessions=['s9']),
+                    fixtures.shapes.THREAD.new(id='stale', title='Zed forgotten promise'),
+                ]
+            },
+        )
+        self.open('#/threads')
+        expect(self.page.locator('.card input[type="text"]').first).to_have_value('Fresh lead')
+        self.page.get_by_label('Thread order').select_option('stale')
+        expect(self.page.locator('.card input[type="text"]').first).to_have_value(
+            'Zed forgotten promise'
+        )
+        expect(self.page.get_by_text('Last touched in session 9')).to_be_visible()
+        self.page.get_by_placeholder('Link a codex entry…').first.fill('Mira')
+        self.page.get_by_role('button', name='Mira').first.click()
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        stored = [
+            fixtures.records.read(self.studio.dm / 'data', 'threads', key)
+            for key in ('fresh', 'stale')
+        ]
+        self.assertEqual([t['entries'] for t in stored], [[], ['mira']])
+        self.open('#/codex/mira')
+        expect(self.page.get_by_role('link', name='Thread: Zed forgotten promise')).to_be_visible()
+        self.assert_accessible('thread links')
+
     def test_pin_editor_persists_across_navigation(self):
         slug, _brief = self.studio.import_map()
         self.open('#/maps/' + slug)

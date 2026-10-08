@@ -119,6 +119,12 @@ const hero = (id) =>
   S.state.public.heroes.find((x) => x.id === id) ||
   S.recordIndex.codex.find((x) => x.id === id) || { name: id };
 const pcChoices = () => PCS.map((id) => ({ id, name: hero(id).name }));
+const sessionChoices = () => S.state.prep.map((name) => ({ id: name, name: name.toUpperCase() }));
+const touched = (thread) => {
+  const numbers = thread.sessions.map((name) => Number(/^s(\d+)$/.exec(name)?.[1] || 0));
+  const last = Math.max(0, ...numbers);
+  return last ? `Last touched in session ${last}` : 'Not touched in any session yet';
+};
 const pcName = (id) => hero(id).name.split(' ')[0];
 const lastSession = () =>
   S.state.public.sessions.reduce((a, b) => (b.n > a.n ? b : a), {
@@ -947,6 +953,7 @@ async function threadsPage(_arg, context) {
   const main = context.view;
   await recordChoices('threads', context.signal);
   let filter = S.threadFilter || 'all';
+  let sort = S.threadSort || '';
   let offset = 0;
   const limit = 30;
   let result = { items: [], total: 0 };
@@ -961,6 +968,8 @@ async function threadsPage(_arg, context) {
         S.base[name] = clone(x);
         S.revs[name] = rev;
       }
+      S.docs[name].entries ||= [];
+      S.docs[name].sessions ||= [];
       return S.docs[name];
     });
     render(
@@ -1018,12 +1027,26 @@ async function threadsPage(_arg, context) {
                       cls: 'pc',
                     }),
                   ),
-                  x.source &&
-                    h(
-                      'div',
-                      { class: 'muted', style: 'font-size:12px;margin-top:4px' },
-                      'From ' + x.source,
-                    ),
+                  h(
+                    'div',
+                    { style: 'margin-top:6px' },
+                    picker(recordName('threads', x.id), x.entries, codexChoices, {
+                      placeholder: 'Link a codex entry…',
+                    }),
+                  ),
+                  h(
+                    'div',
+                    { style: 'margin-top:6px' },
+                    picker(recordName('threads', x.id), x.sessions, sessionChoices, {
+                      placeholder: 'Touched in session…',
+                    }),
+                  ),
+                  h(
+                    'div',
+                    { class: 'muted', style: 'font-size:12px;margin-top:4px' },
+                    touched(x),
+                    x.source && ' · From ' + x.source,
+                  ),
                 ),
               ),
             )
@@ -1066,6 +1089,7 @@ async function threadsPage(_arg, context) {
   };
   const loadPage = async () => {
     const params = new URLSearchParams({ offset, limit });
+    if (sort) params.set('sort', sort);
     if (THREAD_STATES.includes(filter)) params.set('status', filter);
     else if (filter !== 'all') params.set('pc', filter);
     result = await context.api('/api/records/threads?' + params);
@@ -1119,6 +1143,24 @@ async function threadsPage(_arg, context) {
     ),
     h('p', { class: 'sub' }, 'Plot threads, promises and fortunes: what the story owes each hero.'),
     filters,
+    h(
+      'label',
+      { class: 'row' },
+      'Order ',
+      h(
+        'select',
+        {
+          'aria-label': 'Thread order',
+          onchange: (event) => {
+            sort = S.threadSort = event.target.value;
+            offset = 0;
+            loadPage();
+          },
+        },
+        h('option', { value: '', selected: !sort }, 'By title'),
+        h('option', { value: 'stale', selected: sort === 'stale' }, 'Stalest first'),
+      ),
+    ),
     list,
     pages,
   );
@@ -1370,6 +1412,22 @@ async function codexEntry(e, id, main, context) {
       });
   }
   const sessions = sessionsMentioning(e);
+  const usedIn = h('div', { class: 'row' }, h('span', { class: 'muted' }, 'Loading…'));
+  context
+    .api(`/api/codex/${id}/uses`)
+    .then(({ uses }) =>
+      render(
+        usedIn,
+        uses.length
+          ? uses.map((use) =>
+              use.where.startsWith('Thread: ')
+                ? h('a', { class: 'chip', href: '#/threads' }, use.where)
+                : h('span', { class: 'chip' }, use.where),
+            )
+          : h('span', { class: 'muted' }, 'nowhere yet'),
+      ),
+    )
+    .catch(() => render(usedIn, h('span', { class: 'muted' }, 'Could not load')));
   render(
     main,
     h(
@@ -1456,6 +1514,8 @@ async function codexEntry(e, id, main, context) {
             ? sessions.map((n) => h('span', { class: 'chip' }, 'S' + n))
             : h('span', { class: 'muted' }, 'none yet'),
         ),
+        h('label', {}, 'Threads, scenes and maps that use this entry'),
+        usedIn,
       ),
       h(
         'div',

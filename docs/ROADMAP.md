@@ -128,6 +128,9 @@ their row and finding say enough.
 
 ### W34, W35 Threads and wrap-up
 
+- First W34 slice done: a thread links codex entries (`entries`) and sessions it touched (`sessions`, prep
+  names); the threads page can sort stalest first, and a codex entry lists the threads that use it through
+  the `references` link scan (schema 8). Still to do: map and location links, clues, sort by hero.
 - Threads gain links (codex entries, maps and locations, sessions), clues (text, where it is found, and
   planned, planted or found), and the last session that touched them. The threads page sorts by staleness
   and by hero.
