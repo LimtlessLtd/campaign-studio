@@ -192,6 +192,13 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   choices, an idempotent retry and a phone/desktop browser flow. No real Claude draft has judged option
   quality, and the review shows each option's text rather than a before/after diff of the thread (W33). An
   option plans a thread but never marks it resolved: the GM does that after the table plays it.
+- The automatic run (W72) is tested with fake Whisper and Claude programs on a synthetic session: the policy
+  tables, a whole session from recording to applied draft, failures and a limit, one AI request at a time, a
+  step the GM did by hand, the routes, the client and a phone/desktop browser flow. No real recording, model or
+  Claude run has been made, so its request counts and cost are unmeasured, and the wording it reads as "a
+  usage limit" is a guess (W74). It starts a step after a job or a review, not on a timer: a press (the
+  button, or the scheduled client) resumes a run that stopped after a failure, a limit or a server restart. One
+  session is followed at a time, and a new recording is not added to a run already in progress.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.

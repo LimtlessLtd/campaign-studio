@@ -57,25 +57,39 @@ def record(job, raw):
         job['usage'] = found
 
 
+def _blank(month=''):
+    return {'month': month, 'jobs': 0, 'cost_usd': 0.0, 'seconds': 0.0, 'unpriced': 0} | {
+        field: 0 for field in TOKEN_FIELDS
+    }
+
+
+def _add(row, used):
+    row['jobs'] += 1
+    for field in TOKEN_FIELDS:
+        row[field] += _count(used.get(field))
+    row['seconds'] = round(row['seconds'] + (used.get('seconds') or 0), 1)
+    if used.get('cost_usd') is None:
+        row['unpriced'] += 1
+    else:
+        row['cost_usd'] = round(row['cost_usd'] + used['cost_usd'], 6)
+
+
 def totals(jobs):
     """Sum job usage per month (by job creation date, newest first) and overall."""
     months = {}
     for job in jobs:
         used = job.get('usage')
-        if not used:
-            continue
-        month = datetime.datetime.fromtimestamp(job.get('created', 0)).strftime('%Y-%m')
-        row = months.setdefault(
-            month,
-            {'month': month, 'jobs': 0, 'cost_usd': 0.0, 'seconds': 0.0, 'unpriced': 0}
-            | {field: 0 for field in TOKEN_FIELDS},
-        )
-        row['jobs'] += 1
-        for field in TOKEN_FIELDS:
-            row[field] += _count(used.get(field))
-        row['seconds'] = round(row['seconds'] + (used.get('seconds') or 0), 1)
-        if used.get('cost_usd') is None:
-            row['unpriced'] += 1
-        else:
-            row['cost_usd'] = round(row['cost_usd'] + used['cost_usd'], 6)
+        if used:
+            month = datetime.datetime.fromtimestamp(job.get('created', 0)).strftime('%Y-%m')
+            _add(months.setdefault(month, _blank(month)), used)
     return {'months': sorted(months.values(), key=lambda row: row['month'], reverse=True)}
+
+
+def combined(jobs):
+    """The usage of `jobs` as one row, whatever months they span (for one run's report)."""
+    row = _blank()
+    for job in jobs:
+        if job.get('usage'):
+            _add(row, job['usage'])
+    del row['month']
+    return row

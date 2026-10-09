@@ -464,6 +464,46 @@ class SchemaTests(unittest.TestCase):
         )
         self.assertEqual(self.migrate()['status'], 'current')  # a second run changes nothing
 
+    def test_version_thirteen_arcs_stay_intact_and_a_stored_run_is_completed(self):
+        self.migrate()
+        schema.write_marker(self.data, 13, 'Synthetic version 13 campaign')
+        arc = shapes.ARC.new(
+            id='arc-0123abcd', status='applied', threads=['church'], choices=['o1']
+        )
+        arcs = self.dm / 'data/arcs'
+        arcs.mkdir()
+        (arcs / 'arc-0123abcd.json').write_text(json.dumps(arc))
+        runs = self.dm / 'data/auto-runs'
+        runs.mkdir()
+        (runs / 'run-0123abcd.json').write_text(  # a run written before it held a note
+            json.dumps(
+                {
+                    'id': 'run-0123abcd',
+                    'session': 's1',
+                    'recordings': [{'id': 'rec-0123456789abcdef', 'name': 'one.mp4'}],
+                }
+            )
+        )
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (13, schema.CURRENT))
+        self.assertEqual(self.read('data/arcs/arc-0123abcd.json'), arc)
+        run = self.read('data/auto-runs/run-0123abcd.json')
+        self.assertEqual(
+            (run['session'], run['note'], run['finished'], run['request']), ('s1', '', 0, '')
+        )
+        self.assertEqual(
+            (
+                run['recordings'][0]['name'],
+                run['recordings'][0]['path'],
+                run['recordings'][0]['size'],
+            ),
+            ('one.mp4', '', 0),
+        )
+        self.assertEqual(shapes.AUTO_RUN.problems(run), [])
+        self.assertEqual(self.migrate()['status'], 'current')  # a second run changes nothing
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

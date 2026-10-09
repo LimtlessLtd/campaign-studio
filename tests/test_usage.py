@@ -80,6 +80,16 @@ class UsageTests(unittest.TestCase):
         self.assertEqual(months[0]['unpriced'], 1)
         self.assertEqual(months[0]['seconds'], 10.4)
 
+    def test_combined_adds_jobs_of_any_month_into_one_row(self):
+        priced = usage.from_output(CLAUDE_RESULT)
+        free = dict(priced, cost_usd=None, seconds=2)
+        row = usage.combined([{'usage': priced}, {'usage': free}, {}])
+        self.assertEqual((row['jobs'], row['unpriced']), (2, 1))
+        self.assertEqual(row['output_tokens'], 680)
+        self.assertEqual(row['cost_usd'], 0.0421)
+        self.assertNotIn('month', row)
+        self.assertEqual(usage.combined([])['jobs'], 0)
+
 
 if __name__ == '__main__':
     unittest.main()

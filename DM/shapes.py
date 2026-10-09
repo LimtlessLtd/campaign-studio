@@ -257,6 +257,27 @@ ARC = Shape(
     {'options': ARC_OPTION},
 )
 
+# The automatic run (W72): which recordings of one session it follows and the records it made along the way.
+# Everything else (what is done, what waits for the GM) is read from the transcripts, ledgers, arcs and
+# request, so the run holds no state that could disagree with them.
+AUTO_RUN_RECORDING = Shape('auto_run_recording', ['id'], dict(name='', path='', size=0, modified=0))
+AUTO_RUN = Shape(
+    'auto_run',
+    ['id'],
+    dict(
+        session='',
+        folder='',
+        recordings=[],
+        arc='',
+        next_session='',
+        request='',
+        note='',
+        created=0,
+        finished=0,
+    ),
+    {'recordings': AUTO_RUN_RECORDING},
+)
+
 WORLD_PIN = Shape('world_pin', ['id'], dict(label='', map='', x=0.5, y=0.5, note=''))
 WORLD_MAP = Shape('world_map', ['id', 'name'], dict(image='', pins=[]), {'pins': WORLD_PIN})
 WORLD_MAPS = Shape('world_maps', [], dict(maps=[]), {'maps': WORLD_MAP})
@@ -292,6 +313,8 @@ SHAPES = {
         LEDGER,
         ARC_OPTION,
         ARC,
+        AUTO_RUN_RECORDING,
+        AUTO_RUN,
     )
 }
 

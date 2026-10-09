@@ -20,7 +20,7 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Session recordings to next session** (W72–W73; W68 transcription, W69 sorting, W70 ledger and W71 arc options are done). The owner's main use.
+1. **Session recordings to next session** (W73; W68 transcription, W69 sorting, W70 ledger, W71 arc options and W72 the automatic run are done). The owner's main use.
    Recordings are transcribed locally, split into real play and table banter, folded into a thread ledger, and
    turned into reviewed arc proposals and a next-session draft. Take these rows before the rest.
 2. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
@@ -98,7 +98,7 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W72–W73 Session recordings to next session
+### W73 Session recordings: a Codex provider
 
 - Owner feedback (8 Oct): point AI at local session videos, transcribe the audio, work out which threads are
   still loose, then help create arcs and resolutions and the next session. The table's jokes and invented gags
@@ -114,15 +114,29 @@ their row and finding say enough.
   each passage with its segment numbers, times and text; never read unconfirmed, banter or unclear passages.
   Table lore (`table-lore`) holds the gags to skip, and `docs/ARCHITECTURE.md` → Play, banter and table lore
   describes the windows, the job chain and the review.
-- **W72 automatic run.** One action, and a scheduled Claude task, takes a folder of new recordings through
-  transcription (W68), W69–W71 and then Session Forge (W32), leaving only reviews: banter confirmations, the ledger and the next
-  draft. It runs on the owner's computer with their signed-in CLI, skips recordings already processed (a
-  stored fingerprint), reports usage, and stops cleanly if a limit is reached. The scheduled-task prompt and
-  folder paths are the owner's private configuration, not source.
 - **W73 Codex.** Check what `codex exec` can return as structured output without tools or an API key. If it
   meets the contract in `AGENTS.md` (no filesystem or shell tools, JSON schema, cancellable), add it as a
   second provider; otherwise record what it lacks and keep Claude as the only automatic drafter. Prompt packs
   already export for any assistant meanwhile.
+
+### W74 Live check of recordings to draft
+
+- Everything from W68 to W72 is tested with fake engines and a fake Claude, so nothing here is known about a
+  real recording. With the owner, on a recording they choose (their own data: record counts and findings, never
+  its text, in a public PR): run **Automatic run** end to end and record the Whisper engine and model, speed,
+  the transcript size, the number of sorting and ledger windows, the requests, tokens and cost Claude Code
+  reported, and how many passages the GM had to correct.
+- Check what the Claude CLI prints and returns when a subscription limit is reached. `auto_run.LIMIT` is a
+  guess at its wording; replace it with what was seen, and test it with that text.
+- Turn each failure or surprise into a row. Judge quality honestly: did banter such as a made-up animal form
+  stay out of the ledger, and did a real event (a destroyed temple) reach it with the right quote?
+
+### W75 Split campaign_core
+
+- `campaign_core.py` holds document storage and the write-ahead journal, every job result handler, the
+  recording, ledger, arc and automatic-run workflows, and map apply. Split it along those lines, keeping
+  `FINISHERS` and `SETTLERS` as the one place a job kind is registered and `commit_docs` the one multi-document
+  write. Move functions without changing them; run the full suite before and after.
 
 ### W33 Item-level proposal review
 
@@ -203,7 +217,8 @@ their row and finding say enough.
 - W44: record tokens, cost and time per AI job from the provider's output (the Claude CLI's JSON result
   reports usage and cost). Show totals per session and month, and ask before running a prompt above a
   configurable size. Subscription users have limits, not a bill: report usage against them and ask before a
-  transcript-sized run (W72); W69 already shows its request count and size first.
+  transcript-sized run; W69 shows its request count and size first, and the automatic run (W72) reports its
+  requests, tokens and the cost Claude Code reports, so only totals per session remain.
 - W51: an opt-in script runs drafts against synthetic campaigns and checks that links resolve, canon is
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.

@@ -137,6 +137,21 @@ _planned_, with the plan and its hook added to the thread's details) and offers 
 plan the next session. Nothing changes until you apply, and a thread you edited since the proposal asks for a
 fresh one. Tests fake Claude on synthetic threads; no live draft has been checked for quality.
 
+**Automatic run** (top of the Recordings page) takes the new recordings of one session through all of the
+above and on to a draft of the next session, stopping wherever a decision is yours. **Plan a run** lists the
+folder's recordings (only those newer than the last one transcribed are ticked, or the newest one the first
+time), the session they belong to and how many sorting requests are already known; **Start the automatic run**
+then transcribes on this computer, sorts play from banter and waits for you to review the passages. When you
+apply that review, the thread ledger is drafted; when you apply the ledger, Claude proposes arc options for the
+loose threads; when you apply those, a Session Forge draft of the next session is made in the next prep. Each
+review is the one described above, and nothing changes your campaign before you apply it. The run asks Claude
+for one request at a time, shows the requests, tokens and cost Claude Code reports, and stops if a step fails or
+a usage limit is reached: press **Try again** later and it resumes where it stopped without redoing finished
+work. To run it between sessions, schedule `python DM/tools/auto_run_client.py --folder "<your recordings
+folder>"` (Studio must be running); it prints what is working, what waits for you and why a run stopped, and
+exits with 2 when it stopped. Tests fake Whisper and Claude on a synthetic session; a real recording and a
+real Claude run have not been checked, so how many requests a long session needs is unmeasured.
+
 From a session prep, **Plan whole session** turns one pitch into a reviewable proposal for a recap, goals,
 three to six scenes, cast, thread changes, handouts, loot and a checklist. Choose the session length, combat
 and social focus, and threads to push. Applying the reviewed draft links the records and queues up to two
