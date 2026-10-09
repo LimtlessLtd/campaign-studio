@@ -36,18 +36,21 @@ def strict_layout_schema():
     return schema
 
 
+# Draft kind (as the server names it when it queues the job) -> builder of its strict schema.
+BUILDERS = {
+    'request': lambda: request_workflow.SCHEMA,
+    'content': lambda: workflow.CONTENT_SCHEMA,
+    'classify': lambda: transcript_classifier.SCHEMA,
+    'thread-ledger': lambda: thread_ledger.SCHEMA,
+    'arc-options': lambda: arc_options.SCHEMA,
+    'layout': strict_layout_schema,
+    'revision': strict_layout_schema,
+}
+
+
 def for_kind(kind):
-    """The strict schema for a draft kind, as the server names it when it queues the job."""
-    if kind == 'request':
-        return request_workflow.SCHEMA
-    if kind == 'content':
-        return workflow.CONTENT_SCHEMA
-    if kind == 'classify':
-        return transcript_classifier.SCHEMA
-    if kind == 'thread-ledger':
-        return thread_ledger.SCHEMA
-    if kind == 'arc-options':
-        return arc_options.SCHEMA
-    if kind in ('layout', 'revision'):
-        return strict_layout_schema()
-    raise ValueError('Unknown structured draft kind.')
+    """The strict schema for a draft kind. A new kind adds one row to `BUILDERS`."""
+    build = BUILDERS.get(kind)
+    if build is None:
+        raise ValueError('Unknown structured draft kind.')
+    return build()
