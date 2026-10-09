@@ -524,6 +524,10 @@ class Handler(SimpleHTTPRequestHandler):
             )
         if action == 'choices':
             return self.send_json(records.choices(data, kind))
+        sort = query.get('sort', [''])[0]
+        hero_names = None
+        if kind == 'threads' and sort == 'hero':
+            hero_names = records.hero_names(data, public_content().get('heroes', []))
         return self.send_json(
             records.page(
                 data,
@@ -536,7 +540,8 @@ class Handler(SimpleHTTPRequestHandler):
                 source=query.get('source', [''])[0],
                 status=query.get('status', [''])[0],
                 pc=query.get('pc', [''])[0],
-                sort=query.get('sort', [''])[0],
+                sort=sort,
+                hero_names=hero_names,
             )
         )
 

@@ -19,7 +19,7 @@ import storage
 import records
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 14
+CURRENT = 15
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -81,7 +81,7 @@ def check(data, maps):
 # ---------- migrations ----------
 # Fields of every stored record at CURRENT (shapes.fields_digest()). When a shape changes, add a version
 # whose migration is fill_campaign, so stored records gain the new fields, then update this digest.
-SHAPES_DIGEST = '28b86b060ec89c18baedbfd5fff3228db8eb3f1ff349d41cdb42861d3799b76b'
+SHAPES_DIGEST = '7dcaa28edcdd1b6cc1d5ee6e029ace177ca744d2187381c79fa199c77fadf11d'
 
 
 def shaped_documents(data, maps):
@@ -146,7 +146,8 @@ def hash_foundry_imports(data, maps):
 # version 10 added session recording transcripts (a campaign without any has nothing to fill); version 11
 # adds the passages and sorting progress of each transcript, and the table-lore list; version 12
 # adds a separate evidence-backed thread ledger document for each reviewed transcript; version 13 adds
-# arc proposals (a campaign without any has nothing to fill); version 14 adds automatic runs (likewise).
+# arc proposals (a campaign without any has nothing to fill); version 14 adds automatic runs (likewise);
+# version 15 adds thread map, location and clue links.
 MIGRATIONS = {
     0: fill_campaign,
     1: fill_campaign,
@@ -161,6 +162,7 @@ MIGRATIONS = {
     11: fill_campaign,
     12: fill_campaign,
     13: fill_campaign,
+    14: fill_campaign,
 }
 
 

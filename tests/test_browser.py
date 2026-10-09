@@ -818,6 +818,57 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_role('link', name='Thread: Zed forgotten promise')).to_be_visible()
         self.assert_accessible('thread links')
 
+    def test_thread_map_pin_and_clue_editing_with_hero_order(self):
+        slug, _ = self.studio.import_map()
+        self.studio.seed(
+            'codex',
+            {
+                'entries': [
+                    fixtures.shapes.CODEX_ENTRY.new(id='z', type='pc', name='Zara'),
+                    fixtures.shapes.CODEX_ENTRY.new(id='m', type='pc', name='Mira'),
+                ]
+            },
+        )
+        self.studio.seed(
+            'threads',
+            {
+                'threads': [
+                    fixtures.shapes.THREAD.new(id='z-thread', title='A later hero', pcs=['z']),
+                    fixtures.shapes.THREAD.new(id='m-thread', title='The clue', pcs=['m']),
+                ]
+            },
+        )
+        self.open('#/threads')
+        self.page.get_by_label('Thread order').select_option('hero')
+        card = self.page.locator('.card').first
+        expect(card.get_by_label('Thread title')).to_have_value('The clue')
+        card.locator('details.thread-links summary').click()
+        card.get_by_placeholder('Link a map…').fill('Fixture map')
+        card.get_by_role('button', name='Fixture map').click()
+        card = self.page.locator('.card').first
+        card.get_by_label('Choose a map for the pin').select_option(slug)
+        expect(card.get_by_label('Choose a map pin')).to_be_enabled()
+        card.get_by_label('Choose a map pin').select_option('1')
+        card.get_by_role('button', name='+ Link pin').click()
+        card = self.page.locator('.card').first
+        card.get_by_role('button', name='+ Clue').click()
+        card = self.page.locator('.card').first
+        card.get_by_label('Clue 1 text').fill('The bell rings at dusk')
+        card.get_by_label('Clue 1 location').fill('Landing')
+        card.get_by_label('Clue 1 status').select_option('planted')
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        thread = fixtures.records.read(self.studio.dm / 'data', 'threads', 'm-thread')
+        self.assertEqual(thread['maps'], [slug])
+        self.assertEqual([(link['map'], link['area']) for link in thread['locations']], [(slug, 1)])
+        self.assertEqual(
+            [(clue['text'], clue['where'], clue['status']) for clue in thread['clues']],
+            [('The bell rings at dusk', 'Landing', 'planted')],
+        )
+        self.page.set_viewport_size(NARROW)
+        self.assert_accessible('thread map pins and clues on phone')
+        card.get_by_role('link', name='Fixture map · Landing').click()
+        expect(self.page.get_by_label('Select map location')).to_have_value('1')
+
     def test_pin_editor_persists_across_navigation(self):
         slug, _brief = self.studio.import_map()
         self.open('#/maps/' + slug)

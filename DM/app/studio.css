@@ -1050,6 +1050,42 @@ hr {
 .rowedit input {
   min-width: 80px;
 }
+.thread-links {
+  margin: 10px 0;
+}
+.thread-links > summary {
+  cursor: pointer;
+}
+.thread-links > div {
+  margin-top: 8px;
+}
+.thread-clue-row,
+.thread-pin-add {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: start;
+  margin: 8px 0;
+}
+.thread-pin-add {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+.thread-clue-row input,
+.thread-clue-row select,
+.thread-pin-add select {
+  min-width: 0;
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .thread-clue-row,
+  .thread-pin-add {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .thread-clue-row button,
+  .thread-pin-add button {
+    justify-self: start;
+  }
+}
 .compact-actions button {
   font-size: 9px;
   padding: 7px 10px;
