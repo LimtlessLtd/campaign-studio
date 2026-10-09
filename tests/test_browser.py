@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -715,6 +716,28 @@ class BrowserSmoke(unittest.TestCase):
         quay = prep['scenes'][1]
         self.assertEqual((quay['title'], quay['map'], quay['npcs']), ('At the quay', '', []))
         self.assertEqual(len(prep['handouts']), 1)
+
+    def test_a_job_log_that_scrolls_can_be_reached_with_the_keyboard(self):
+        job = dict(
+            id='29991230-000000-aaaa',
+            lane='transcribe',
+            kind='transcribe',
+            status='failed',
+            created=time.time(),
+            label='Transcribe session-one',
+        )
+        campaign_core.JOBS_SERVICE.save_job(job)
+        long_line = (
+            'The transcription program reported a problem with the recording and kept going. '
+        )
+        with open(campaign_core.JOBS_SERVICE.job_file(job['id'], 'log'), 'w') as log:
+            log.write(chr(10).join(f'{n}: {long_line}' for n in range(8)))
+        self.page.set_viewport_size(NARROW)
+        self.open('#/recordings')
+        log = self.page.locator('pre.log')
+        expect(log).to_be_visible()
+        self.assertTrue(log.evaluate('el => el.scrollHeight > el.clientHeight'))
+        self.assert_accessible('long job log at phone width')
 
     def test_codex_pages_and_thread_edits_save_individual_records(self):
         self.studio.seed(

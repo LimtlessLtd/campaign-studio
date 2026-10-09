@@ -542,7 +542,7 @@ function jobBox(job, signal) {
         : null,
       h(
         'pre',
-        { class: 'log' },
+        { class: 'log', tabindex: 0 }, // a log taller than its box scrolls, so the keyboard must reach it
         (j.log || '').trim().split('\n').slice(-8).join('\n') || 'waiting…',
       ),
       j.status === 'done' && j.slug
