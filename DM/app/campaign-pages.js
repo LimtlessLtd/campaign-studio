@@ -1501,12 +1501,7 @@ async function threadsPage(_arg, context) {
                   h(
                     'details',
                     { class: 'thread-links', 'data-id': x.id, open: openLinks.has(x.id) },
-                    h(
-                      'summary',
-                      {},
-                      h('b', {}, 'Maps, pins & clues'),
-                      ` · ${x.maps.length} map${x.maps.length === 1 ? '' : 's'} · ${x.locations.length} pin${x.locations.length === 1 ? '' : 's'} · ${x.clues.length} clue${x.clues.length === 1 ? '' : 's'}`,
-                    ),
+                    h('summary', {}, h('b', {}, 'Maps, pins & clues')),
                     h('label', {}, 'Maps'),
                     picker(recordName('threads', x.id), x.maps, mapChoices, {
                       placeholder: 'Link a map…',
