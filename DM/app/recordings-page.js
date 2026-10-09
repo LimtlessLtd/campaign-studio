@@ -18,6 +18,7 @@ async function recordingsPage(_arg, context) {
   const transcripts = (await context.api('/api/transcripts')).items;
   const lore = await context.api('/api/table-lore');
   const loose = (await context.api('/api/threads/loose')).items;
+  const automatic = await autoRunBox(context, listing.path);
   let reading = null;
   let offset = 0;
   const status = h('p', { role: 'status', 'aria-live': 'polite' });
@@ -300,6 +301,7 @@ async function recordingsPage(_arg, context) {
       'Turn a session recording into a transcript on this computer. No account, key or upload is involved.',
     ),
     status,
+    automatic,
     filesBox,
     live.length || failed.length
       ? h(

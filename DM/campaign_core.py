@@ -2,6 +2,7 @@
 
 import datetime
 import functools
+import itertools
 import json
 import os
 import re
@@ -12,6 +13,7 @@ import time
 import campaign
 import ai_provider
 import arc_options
+import auto_run
 import commits
 import config
 import foundry_library
@@ -60,7 +62,7 @@ SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 DELETABLE = ('codex/', 'threads/', 'transcripts/', 'arcs/')
 # Documents the application owns: only their own routes and services change them.
 APP_OWNED_DOC = re.compile(
-    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts|ledger|arcs)/.+)$'
+    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts|ledger|arcs|auto-runs)/.+)$'
 )
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
@@ -344,21 +346,9 @@ def settle_failed_job(job, message):
         if item and item.get('status') == 'generating':
             item.update(status='failed', error=message)
             write_doc('art', art)
-    if job.get('request'):
-        fail_request(job, message)
-    if job.get('transcript'):
-        transcription.discard(campaign.active().jobs, job['transcript'])
-    if job.get('classify'):
-        fail_classification(job, message)
-
-    if job.get('ledger'):
-        name = 'ledger/' + job['ledger']
-        value = read_json(doc_path(name))
-        if value and value.get('status') == 'running' and value.get('job') == job['id']:
-            value.update(status='failed', job='', error=message[:1000])
-            write_doc(name, value)
-    if job.get('arc'):
-        fail_arc(job, message)
+    for owner, settle in SETTLERS:
+        if job.get(owner):
+            settle(job, message)
 
 
 def fail_job(job, error):
@@ -387,17 +377,9 @@ def finish_job(job, code, tail):
                 usage.record(job, file.read())
         except OSError:
             pass  # no log, no usage: the job itself still settles
-    if job['kind'] == 'request-draft':
-        finish_request(job, code, tail)
-    if job['kind'] == 'transcribe':
-        finish_transcription(job, code, tail)
-    if job['kind'] == 'classify':
-        finish_classification(job, code, tail)
-
-    if job['kind'] == 'thread-ledger':
-        finish_ledger(job, code, tail)
-    if job['kind'] == 'arc-options':
-        finish_arc(job, code, tail)
+    if job['kind'] in FINISHERS:
+        FINISHERS[job['kind']](job, code, tail)
+        continue_auto_run()
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -490,6 +472,11 @@ def fail_request(job, message):
         write_doc('inbox', box)
 
 
+def discard_transcription(job, message):
+    """A transcription that did not finish leaves no staged result or scratch audio."""
+    transcription.discard(campaign.active().jobs, job['transcript'])
+
+
 def finish_transcription(job, code, tail):
     """Store a finished transcription's transcript, or fail the job with the reason."""
     result, _ = transcription.staging(campaign.active().jobs, job['transcript'])
@@ -544,6 +531,15 @@ def finish_classification(job, code, tail):
     except (ValueError, KeyError, TypeError, OSError) as error:
         job.update(status='failed', note=str(error))
         fail_classification(job, str(error))
+
+
+def fail_ledger(job, message):
+    """Stop a thread ledger at the window that failed, unless it was removed or replaced."""
+    name = 'ledger/' + job['ledger']
+    value = read_json(doc_path(name))
+    if value and value.get('status') == 'running' and value.get('job') == job['id']:
+        value.update(status='failed', job='', error=message[:1000])
+        write_doc(name, value)
 
 
 def finish_ledger(job, code, tail):
@@ -645,6 +641,24 @@ def finish_request(job, code, tail):
         write_doc('inbox', box)
         job.update(status='failed', note=str(error))
 
+
+# What a job leaves to settle. A new draft kind adds a row here instead of a branch in finish_job or
+# settle_failed_job: FINISHERS stores a finished job's result by kind; SETTLERS marks what a failed job
+# was producing, by the field that names the record it belongs to.
+FINISHERS = {
+    'request-draft': finish_request,
+    'transcribe': finish_transcription,
+    'classify': finish_classification,
+    'thread-ledger': finish_ledger,
+    'arc-options': finish_arc,
+}
+SETTLERS = (
+    ('request', fail_request),
+    ('transcript', discard_transcription),
+    ('classify', fail_classification),
+    ('ledger', fail_ledger),
+    ('arc', fail_arc),
+)
 
 JOBS_SERVICE = JobService(campaign.active, LOCK, finish_job, fail_job, recover_interrupted_job)
 LANES = JOBS_SERVICE.lanes
@@ -878,6 +892,7 @@ def review_passages(ident, decisions):
         if json.dumps(lore, sort_keys=True) != before:
             changes.append(('table-lore', lore))
         commit_docs('Review transcript ' + ident, changes + [(name, document)])
+        continue_auto_run()
         return transcript_classifier.counts(document)
 
 
@@ -1039,6 +1054,7 @@ def apply_ledger(ident, selected):
         )
         ledger.pop('base_revs', None)
         commit_docs('Apply thread ledger ' + ledger['id'], changes + [(name, ledger)])
+        continue_auto_run()
         return ledger
 
 
@@ -1161,6 +1177,7 @@ def apply_arc(ident, choices):
             base_revs={},
         )
         commit_docs('Apply arc options ' + ident, changed + [(name, arc)])
+        continue_auto_run()
         return arc
 
 
@@ -1202,6 +1219,352 @@ def arc_cards():
 def arc_seeds():
     """Pitch lines from applied arcs whose threads are still unresolved, newest first."""
     return arc_options.seeds(read_arcs(), records.all_records(campaign.active().data, 'threads'))
+
+
+AUTO_RUN_ID = re.compile(r'run-[0-9a-f]{8}\Z')
+AUTO_RUN_JOBS = 300  # newest jobs read to find a recording's transcription job
+
+
+def auto_run_name(ident):
+    if not AUTO_RUN_ID.fullmatch(str(ident)):
+        raise ValueError('Invalid run ID.')
+    return 'auto-runs/' + ident
+
+
+def read_auto_runs():
+    """Stored automatic runs, newest first."""
+    runs = (read_json(doc_path('auto-runs/' + ident)) for ident in list_docs('auto-runs'))
+    return sorted((run for run in runs if run), key=lambda run: -run['created'])
+
+
+def active_auto_run():
+    return next((run for run in read_auto_runs() if not run['finished']), None)
+
+
+def preps_overview():
+    """Each session prep's number, whether it is archived and whether its log has text."""
+    rows = []
+    for name in list_docs('prep'):
+        number = re.fullmatch(r's(\d{1,6})', name)
+        if number:
+            prep = read_json(doc_path('prep/' + name), {})
+            log = prep.get('log') or {}
+            played = bool(log.get('summary') or log.get('notes') or log.get('outcomes'))
+            rows.append(
+                dict(id=name, n=int(number[1]), archived=bool(prep.get('archived')), played=played)
+            )
+    return rows
+
+
+def transcription_states(ids):
+    """{recording ID: (a job is queued or running, why the newest one failed)} for those with a job."""
+    newest = {}
+    for job in itertools.islice(JOBS_SERVICE.iter_jobs(), AUTO_RUN_JOBS):
+        ident = job.get('transcript')
+        if job['kind'] == 'transcribe' and ident in ids:
+            if ident not in newest or job['created'] > newest[ident]['created']:
+                newest[ident] = job  # file names order jobs only to the second
+    return {
+        ident: (
+            job['status'] in ('queued', 'running'),
+            (job.get('note') or 'The transcription failed.') if job['status'] == 'failed' else '',
+        )
+        for ident, job in newest.items()
+    }
+
+
+def auto_run_snapshot(run):
+    """What is stored about a run's recordings, arc proposal and session request, for auto_run.decide."""
+    documents = {
+        rec['id']: read_json(doc_path('transcripts/' + rec['id'])) for rec in run['recordings']
+    }
+    waiting = {ident for ident, document in documents.items() if document is None}
+    states = (
+        transcription_states(waiting) if waiting else {}
+    )  # only a missing transcript has a job to read
+    recordings = []
+    for rec in run['recordings']:
+        document = documents[rec['id']]
+        ledger = read_json(doc_path('ledger/' + rec['id']))
+        live, error = states.get(rec['id'], (False, ''))
+        recordings.append(
+            {
+                'id': rec['id'],
+                'name': rec['name'],
+                'transcribing': live,
+                'transcribe_error': error,
+                'transcript': document
+                and {
+                    'session': document['session'],
+                    'sorting': document['classification']['status'],
+                    'sorting_error': document['classification']['error'],
+                    'pending': transcript_classifier.counts(document)['pending'],
+                    'play': any(
+                        p['kind'] == 'play' and p['confirmed'] for p in document['passages']
+                    ),
+                },
+                'ledger': ledger
+                and {
+                    'status': ledger['status'],
+                    'error': ledger['error'],
+                    'events': len(ledger['events']),
+                },
+            }
+        )
+    arc = request = None
+    if run['arc']:
+        stored = read_json(doc_path('arcs/' + run['arc']))
+        arc = {'status': stored['status'], 'error': stored['error']} if stored else 'removed'
+    if run['request']:
+        item = request_item(read_json(doc_path('inbox'), {'items': []}), run['request'])
+        request = {'status': item['status'], 'error': item.get('error', '')} if item else 'removed'
+    return {
+        'session': run['session'],
+        'recordings': recordings,
+        'arc': arc,
+        'request': request,
+        'candidates': lambda: auto_run.arc_candidates(loose_threads(), run['session']),
+    }
+
+
+def auto_run_usage(run):
+    """The AI requests made since the run began, with the tokens, cost and time they reported."""
+    mine = []
+    for job in JOBS_SERVICE.iter_jobs():  # newest first
+        if job.get('created', 0) < run['created']:
+            break
+        if job['kind'] in usage.DRAFT_KINDS:
+            mine.append(job)
+    return usage.combined(mine) | {'requests': len(mine)}
+
+
+def auto_run_report(run):
+    """A run for the page: where it stands, every step, what waits for the GM and the usage so far."""
+    decision = auto_run.decide(auto_run_snapshot(run))
+    state = decision['state']
+    if run['finished'] and state != 'done':
+        state = 'ended'
+    return {
+        'id': run['id'],
+        'session': run['session'],
+        'next_session': run['next_session'],
+        'folder': run['folder'],
+        'created': run['created'],
+        'finished': run['finished'],
+        'note': run['note'],
+        'state': state,
+        'steps': decision['steps'],
+        'waiting': auto_run.waiting(decision['steps']),
+        'usage': auto_run_usage(run),
+    }
+
+
+def draft_next_session(run):
+    """Queue the next session's Session Forge draft: its prep, a pitch from the chosen arcs, one request."""
+    box = read_json(doc_path('inbox'), {'items': []})
+    item = request_item(box, run['request']) if run['request'] else None
+    if item is None:
+        preps = {row['id']: row for row in preps_overview()}
+        number = auto_run.next_session_number(
+            [row['n'] for row in preps.values() if not row['archived']],
+            [row['n'] for row in preps.values()],
+            preps.get(run['session'], {'n': 0})['n'],
+        )
+        prep = f's{number}'
+        changes = []
+        if prep not in preps:
+            changes.append(('prep/' + prep, shapes.PREP.new(n=number, title=f'Session {number}')))
+        titles = {
+            row['id']: row.get('title') or row['id']
+            for row in records.all_records(campaign.active().data, 'threads')
+        }
+        seeds = arc_seeds()
+        chosen = auto_run.request_threads(
+            seeds, auto_run.arc_candidates(loose_threads(), run['session']), set(titles)
+        )
+        item = {
+            'id': 'req-' + os.urandom(4).hex(),
+            'to': 'claude',
+            'kind': 'session',
+            'status': 'new',
+            'context_pins': [],
+            'text': auto_run.next_pitch(run['session'], seeds, [titles[x] for x in chosen]),
+            'result': '',
+            'created': int(time.time() * 1000),
+            'session': prep,
+            'settings': {'hours': 4, 'combat': 2, 'social': 2, 'threads': chosen},
+            'auto_run': run['id'],
+        }
+        box['items'].insert(0, item)
+        run.update(next_session=prep, request=item['id'])
+        commit_docs(
+            'Start the automatic draft for ' + prep,
+            changes + [('inbox', box), (auto_run_name(run['id']), run)],
+        )
+    start_request(item['id'])
+
+
+def perform_auto_action(run, action):
+    """Carry out one step the policy chose, through the same functions the GM's buttons use."""
+    do, ident = action['do'], action.get('recording')
+    if do == 'transcribe':
+        stored = next(rec for rec in run['recordings'] if rec['id'] == ident)
+        rec = transcription.recording(stored['path'])
+        if rec['id'] != stored['id']:
+            raise ValueError(f'{stored["name"]} changed since the run began. Start a new run.')
+        start_transcription(rec, run['session'])
+    elif do == 'sort':
+        start_classification(ident)
+    elif do == 'link':
+        link_transcript_session(ident, run['session'])
+    elif do == 'ledger':
+        start_ledger(ident)
+    elif do == 'arcs':
+        if run['arc']:
+            try:
+                remove_arc(run['arc'])  # the failed proposal this one replaces
+            except LookupError:
+                pass
+        run['arc'] = start_arcs(action['threads'])['arc']
+        write_doc(auto_run_name(run['id']), run)
+    elif do == 'draft':
+        draft_next_session(run)
+
+
+def advance_auto_run(run, explicit=False):
+    """Start what the run needs next and return its report. `explicit` also retries failed steps."""
+    with LOCK:
+        for action in auto_run.decide(auto_run_snapshot(run), explicit)['actions']:
+            perform_auto_action(run, action)
+        report = auto_run_report(run)
+        changed = {'note': ''} if explicit else {}
+        if report['state'] == 'done':
+            changed['finished'] = int(time.time())
+        if any(run[key] != value for key, value in changed.items()):
+            run.update(changed)
+            write_doc(auto_run_name(run['id']), run)
+            report = auto_run_report(run)
+        return report
+
+
+def continue_auto_run():
+    """After a job or a review: queue the next step of the active run. It never fails its caller."""
+    try:
+        with LOCK:
+            run = active_auto_run()
+            if run:
+                try:
+                    advance_auto_run(run)
+                except (ValueError, LookupError, OSError) as error:  # the step could not start
+                    run['note'] = str(error)[:500]
+                    write_doc(auto_run_name(run['id']), run)
+    except Exception as error:  # a hook must not fail the job or review that triggered it
+        sys.stderr.write(f'The automatic run could not continue: {error}\n')
+
+
+def auto_run_current():
+    """The report of the run in progress, else of the newest one that ended, else None."""
+    runs = read_auto_runs()
+    run = next((run for run in runs if not run['finished']), runs[0] if runs else None)
+    return auto_run_report(run) if run else None
+
+
+def auto_run_choice(folder, session='', ids=None):
+    """The folder's recordings, those a run would take, and the session they most likely belong to."""
+    folder = (folder or '').strip() or default_recordings()
+    if not folder:
+        raise ValueError('Choose the folder of recordings first.')
+    listing = transcription.recordings(folder)
+    known = set(list_docs('transcripts'))
+    modified = [
+        read_json(doc_path('transcripts/' + name), {}).get('source', {}).get('modified', 0)
+        for name in known
+    ]
+    if ids is None:
+        chosen = auto_run.new_recordings(listing, known, max(modified, default=0) or None)
+    else:
+        chosen = sorted(
+            (rec for rec in listing if rec['id'] in set(ids)),
+            key=lambda rec: (
+                rec['modified'],
+                rec['name'],
+            ),  # a session is followed in the order it was played
+        )
+        if len(chosen) != len(set(ids)) or not 0 < len(chosen) <= auto_run.MAX_RECORDINGS:
+            raise ValueError(
+                f'Choose between 1 and {auto_run.MAX_RECORDINGS} recordings from this folder.'
+            )
+    preps = preps_overview()
+    return {
+        'folder': folder,
+        'files': [
+            dict(rec, transcribed=rec['id'] in known, chosen=rec in chosen) for rec in listing
+        ],
+        'chosen': chosen,
+        'session': session or auto_run.default_session(preps),
+        'sessions': [row['id'] for row in sorted(preps, key=lambda row: -row['n'])],
+    }
+
+
+def auto_run_plan(folder, session='', ids=None):
+    """What a run would do, shown before the GM agrees: files, session and the AI requests already known."""
+    choice = auto_run_choice(folder, session, ids)
+    budget = config.settings()['context_budget_chars']
+    requests = 0
+    for rec in choice['chosen']:
+        document = read_json(doc_path('transcripts/' + rec['id']))
+        if document:
+            requests += transcript_classifier.plan(document, budget)['requests']
+    return dict(choice, chosen=[rec['id'] for rec in choice['chosen']], sorting_requests=requests)
+
+
+def start_auto_run(folder, session='', ids=None):
+    """Begin a run for the new recordings of one session, or carry on the one in progress."""
+    with LOCK:
+        run, finished = active_auto_run(), None
+        if run:
+            finished = advance_auto_run(run, explicit=True)
+            if not finished['finished']:
+                return finished
+        choice = auto_run_choice(folder, session, ids)
+        if not choice['chosen']:
+            if finished:
+                return finished
+            raise auto_run.NothingNew('There are no new recordings in this folder.')
+        if choice['session'] not in list_docs('prep'):
+            raise ValueError('Choose the session prep these recordings belong to.')
+        engine = transcription.status()
+        if not engine['available'] and not all(
+            file['transcribed'] for file in choice['files'] if file['chosen']
+        ):
+            raise ValueError(engine['problem'])
+        run = shapes.AUTO_RUN.new(
+            id='run-' + os.urandom(4).hex(),
+            session=choice['session'],
+            folder=choice['folder'],
+            recordings=[
+                shapes.AUTO_RUN_RECORDING.new(
+                    **{key: rec[key] for key in ('id', 'name', 'path', 'size', 'modified')}
+                )
+                for rec in choice['chosen']
+            ],
+            created=int(time.time()),
+        )
+        write_doc(auto_run_name(run['id']), run)
+        return advance_auto_run(run, explicit=True)
+
+
+def end_auto_run(ident):
+    """Stop following a run. What it started keeps going and nothing it made is removed."""
+    with LOCK:
+        name = auto_run_name(ident)
+        run = read_json(doc_path(name))
+        if run is None:
+            raise LookupError('No such run.')
+        if not run['finished']:
+            run.update(finished=int(time.time()), note='Ended before it finished.')
+            write_doc(name, run)
+        return auto_run_report(run)
 
 
 def start_workflow(value):

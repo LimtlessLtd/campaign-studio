@@ -1913,3 +1913,38 @@ hr {
   font-size: 13px;
   color: var(--ink);
 }
+
+.auto-run > .card {
+  margin: 14px 0;
+}
+.run-group {
+  margin-top: 20px;
+}
+.run-group > h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.run-group > .plain-list {
+  margin-top: 6px;
+}
+.run-file {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.run-file input {
+  flex: none;
+  padding: 0;
+  margin-top: 3px;
+}
+.run-file > span {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--ink);
+}
+.auto-run-plan > .row {
+  margin: 12px 0;
+}

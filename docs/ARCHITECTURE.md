@@ -64,11 +64,16 @@ flowchart LR
 | `DM/tools/transcribe_worker.py`       | One local transcription in a child process; leaves segments for the server to store   |
 | `DM/transcript_classifier.py`         | Transcript windows, the sorting prompt and schema, passage validation, GM review      |
 | `DM/thread_ledger.py`                 | Confirmed-play windows, quoted evidence validation, reviewed changes and loose report |
+| `DM/arc_options.py`                   | Arc option schema, prompt, validation, the changes a chosen option makes and seeds    |
+| `DM/auto_run.py`                      | Automatic run policy: new recordings, next step, what waits for the GM, next pitch    |
+| `DM/tools/auto_run_client.py`         | Presses Run on the local server for a scheduled task and prints where the run stands  |
 | `DM/app/merge.js`                     | Copy/compare helpers, new records from shapes and the three-way autosave merge        |
 | `DM/app/state.js`                     | API access, document cache, revision-aware autosave and polling                       |
 | `DM/app/controls.js`                  | Shared DOM, form, picker, dialog and feedback controls                                |
 | `DM/app/campaign-pages.js`            | Codex, threads, session prep, inbox and handout pages                                 |
 | `DM/app/thread-ledger.js`             | Transcript ledger review and unresolved-thread report                                 |
+| `DM/app/arcs-page.js`                 | Story arcs: choose loose threads, review and choose options, seeds for the next pitch |
+| `DM/app/auto-run.js`                  | Automatic run card: plan, start, steps, what waits for the GM, usage, end             |
 | `DM/app/map-pages.js`                 | Map creation, editing and proposal review pages                                       |
 | `DM/app/world-pages.js`               | World map page: upload an image, pin battle maps onto it                              |
 | `DM/app/foundry-pages.js`             | Foundry setup, backup and upgrade views                                               |
@@ -221,6 +226,9 @@ owning workflow, image brief or request is settled through the normal failure ca
 A job reports progress by printing `PROGRESS <done>/<total> [label]` or `PROGRESS <n>% [label]`; the job
 API returns the last such line as `progress`. Cancelling stops the job's whole process tree, so a worker's
 own children (ffmpeg, a whisper.cpp program) end with it.
+A finished job's result is stored by `campaign_core.FINISHERS` (by job kind) and a failed, cancelled or
+interrupted job marks what it was producing through `SETTLERS` (by the field that names its record: `request`,
+`transcript`, `classify`, `ledger`, `arc`). A new draft kind adds a row to each instead of a branch.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 
@@ -255,8 +263,8 @@ it has not been exercised with a paid API call.
 
 The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
 recordings are transcribed locally (W68), sorted into play and banter (W69), then proposed as a reviewed
-thread ledger (W70) and arc options for loose threads (W71). An automatic run and a Codex provider remain W72–W73 in `docs/ROADMAP.md`. The OpenAI provider
-is optional.
+thread ledger (W70) and arc options for loose threads (W71). An automatic run (W72) chains these steps and stops at each review; a Codex provider remains W73 in
+`docs/ROADMAP.md`. The OpenAI provider is optional.
 
 ## Session recordings
 
@@ -360,6 +368,49 @@ heroes are added to its links. A retry returns the applied proposal and differen
 removing a proposal keeps the changes it made. `GET /api/arcs/seeds` returns the pitch lines of chosen
 options whose threads are not resolved, and the Session Forge pitch box offers them. Nothing here edits a codex
 entry, and the only model call is the draft.
+
+### Automatic run
+
+One run takes the new recordings of one session through every step that needs no decision from the GM and
+stops at each one that does: `auto_run.py` is the policy, `campaign_core` gathers what is stored and starts
+the steps, and nothing here writes a campaign record except through the functions the GM's buttons use.
+`POST /api/auto-run {path?, session?, files?}` starts a run, or carries on the one in progress (a second press
+never adds a run or queues a step twice); `GET /api/auto-run/plan?path=&session=&files=` shows what a run would
+take and starts nothing; `GET /api/auto-run` reads the run in progress, else the newest that ended; `POST
+/api/auto-run/<id>/end` stops following a run (what it started carries on and nothing it made is removed).
+`DM/tools/auto_run_client.py` presses Run from a scheduled task and prints the report.
+
+A run is one small document, `auto-runs/<id>` (`shapes.AUTO_RUN`, schema 14): the session, the folder, the
+recordings it follows (ID, name, path, size, modification time) and the IDs of what it made (arc proposal,
+next prep, session request). It holds no progress. `auto_run.decide` reads a snapshot of the transcripts,
+ledgers, arc proposal and request, and returns each step's state (done, working, queued, needs the GM,
+stopped, not started), the actions to start now and the overall state (working, waiting, stopped, ready,
+done). Because progress is read from those records, it cannot disagree with them, and any step the GM
+already did by hand is taken over where it stands.
+
+New recordings are the files in the folder with no transcript that are newer than the newest recording
+already transcribed. With no baseline (the first run) only the newest file is taken, so a folder holding a
+whole campaign is never transcribed by accident; the plan lets the GM choose files, and a run follows at most
+eight, oldest first. The session is the one named, else the newest active prep whose log is empty. Per
+recording the steps are: transcribe (local), sort play from banter, review passages (GM), thread ledger
+(linking the transcript to the session first), ledger review (GM, skipped when nothing was proposed). When
+every recording is done: arc options for up to five loose threads that are open or foreshadowed (those the
+session touched first, then the stalest; none planned yet), arc review (GM), then the next session's Session
+Forge request in the next active prep after this one, or a new prep one past every number in use. Its pitch
+is the chosen arcs' pitch lines (else the loose threads) and its threads are those arcs' threads, then any
+loose ones; the request is drafted and waits for the GM to review and apply it.
+
+A run carries on without a press in two ways. After any transcription, sorting, ledger, arc or request job
+finishes (`finish_job`), and after the GM applies a passage review, a ledger or arc options, `continue_auto_run`
+starts the next step. It only moves forward: starting a transcription and retrying a failed step need an
+explicit press (the button, or the scheduled client), so a failure or a usage limit never loops. A run asks
+for one AI request at a time, so a limit stops it at the first request; a failure that reads like a limit says
+so and that nothing is lost. Hook errors never fail the job or review that triggered them: a step that cannot
+start is recorded as the run's `note` and cleared by the next press. The report carries the AI requests,
+tokens and the cost Claude Code reported since the run began (`usage.combined`), and the plan counts the
+sorting requests of transcripts already made; other steps are counted when reached, so a run is never priced
+from a guess. A run is finished (and a new one can start) when its draft is applied or removed, or when the GM
+ends it.
 
 ## Foundry boundary
 

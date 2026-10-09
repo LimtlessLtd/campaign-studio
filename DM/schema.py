@@ -19,7 +19,7 @@ import storage
 import records
 
 FORMAT = 'campaign-studio-data'
-CURRENT = 13
+CURRENT = 14
 MARKER = '.schema.json'
 PENDING = '.migration-pending.json'  # in the backups folder while a migration is writing documents
 SKIPPED_DATA = {'.history', '.commits', 'jobs'}  # never rewritten by a migration
@@ -81,7 +81,7 @@ def check(data, maps):
 # ---------- migrations ----------
 # Fields of every stored record at CURRENT (shapes.fields_digest()). When a shape changes, add a version
 # whose migration is fill_campaign, so stored records gain the new fields, then update this digest.
-SHAPES_DIGEST = '62586d7faa703d3b39c0dff023094e47ff205117e61335e1c23c0c39abff5cab'
+SHAPES_DIGEST = '28b86b060ec89c18baedbfd5fff3228db8eb3f1ff349d41cdb42861d3799b76b'
 
 
 def shaped_documents(data, maps):
@@ -100,6 +100,8 @@ def shaped_documents(data, maps):
         yield path, shapes.LEDGER
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'arcs', '*.json'))):
         yield path, shapes.ARC
+    for path in sorted(glob.glob(os.path.join(glob.escape(data), 'auto-runs', '*.json'))):
+        yield path, shapes.AUTO_RUN
     for path in sorted(glob.glob(os.path.join(glob.escape(data), 'prep', '*.json'))):
         yield path, shapes.PREP
     for path in sorted(glob.glob(os.path.join(glob.escape(maps), '*', 'key.json'))):
@@ -144,7 +146,7 @@ def hash_foundry_imports(data, maps):
 # version 10 added session recording transcripts (a campaign without any has nothing to fill); version 11
 # adds the passages and sorting progress of each transcript, and the table-lore list; version 12
 # adds a separate evidence-backed thread ledger document for each reviewed transcript; version 13 adds
-# arc proposals (a campaign without any has nothing to fill).
+# arc proposals (a campaign without any has nothing to fill); version 14 adds automatic runs (likewise).
 MIGRATIONS = {
     0: fill_campaign,
     1: fill_campaign,
@@ -158,6 +160,7 @@ MIGRATIONS = {
     10: fill_campaign,
     11: fill_campaign,
     12: fill_campaign,
+    13: fill_campaign,
 }
 
 

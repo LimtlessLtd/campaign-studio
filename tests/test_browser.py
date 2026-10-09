@@ -388,6 +388,67 @@ class BrowserSmoke(unittest.TestCase):
         pitch = self.page.locator('textarea[placeholder^="e.g. The party follows"]')
         expect(pitch).to_have_value('The cult trades the church for a harbour favour.')
 
+    def test_the_automatic_run_is_planned_started_and_waits_for_the_gm_on_phone_and_desktop(self):
+        import shapes
+        import test_auto_run as runs
+
+        recordings = self.studio.root / 'Session recordings'
+        recordings.mkdir()
+        (recordings / 'session &lt;i&gt;one.mp4').write_bytes(b'not really a video')
+        campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='First session'))
+        campaign_core.write_doc(
+            'threads/church', shapes.THREAD.new(id='church', title='Church of Auril')
+        )
+        self.addCleanup(patch.stopall)
+        patch.object(transcription.FasterWhisper, 'problem', return_value='').start()
+        patch('ai_provider.command', return_value=['claude', '-p']).start()
+        patch.object(campaign_core.JOBS_SERVICE, 'runner', runs.Everything()).start()
+
+        self.page.set_viewport_size(NARROW)
+        self.open('#/recordings')
+        expect(self.page.get_by_role('heading', name='Automatic run')).to_be_visible()
+        self.page.get_by_role('button', name='Plan a run').click()
+        # The name would be markup if it were shown as HTML.
+        file = self.page.get_by_role('checkbox', name='session &lt;i&gt;one.mp4')
+        expect(file).to_be_checked()
+        self.assertEqual(self.page.locator('#main i').count(), 0)
+        expect(self.page.get_by_label('Session for this run')).to_have_value('s1')
+        self.assert_accessible('automatic run plan phone')
+        self.page.set_viewport_size(DESKTOP)
+        self.assert_accessible('automatic run plan desktop')
+
+        file.uncheck()
+        expect(self.page.get_by_role('button', name='Start the automatic run')).to_be_disabled()
+        file.check()
+        with self.page.expect_response(lambda response: response.url.endswith('/api/auto-run')):
+            self.page.get_by_role('button', name='Start the automatic run').click()
+        expect(self.page.get_by_text('Run for session s1')).to_be_visible()
+        self.assertEqual(campaign_core.LANES['transcribe'].qsize(), 1)
+        self.assertEqual(self.stored('prep/s1')['log']['outcomes'], [])  # nothing changes yet
+
+        while not (
+            campaign_core.LANES['transcribe'].empty() and campaign_core.LANES['claude'].empty()
+        ):
+            for lane in ('transcribe', 'claude'):
+                if not campaign_core.LANES[lane].empty():
+                    job, cmd, stdin = campaign_core.LANES[lane].get_nowait()
+                    campaign_core.execute_job(job, cmd, stdin)
+        self.page.reload()
+        expect(self.page.locator('#main h1').first).to_be_visible()
+        expect(self.page.get_by_text('Waiting for you', exact=True).first).to_be_visible()
+        expect(self.page.get_by_text('4 passages to decide').first).to_be_visible()
+        expect(self.page.get_by_text('1 AI request', exact=False)).to_be_visible()
+        self.assertEqual(self.page.locator('#main i').count(), 0)  # file names stay text
+        self.assert_accessible('automatic run waiting desktop')
+        self.page.set_viewport_size(NARROW)
+        self.assert_accessible('automatic run waiting phone')
+        self.assertEqual(self.stored('threads/church')['status'], 'open')
+
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        self.page.get_by_role('button', name='End the run for session s1').click()
+        expect(self.page.get_by_text('Ended', exact=True).first).to_be_visible()
+        self.assertTrue(campaign_core.LANES['claude'].empty())
+
     def test_openai_settings_enable_structured_draft_controls(self):
         self.page.set_viewport_size(NARROW)
         with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'synthetic-key'}):

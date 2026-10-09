@@ -13,6 +13,7 @@ from pathlib import Path
 import campaign
 import ai_provider
 import arc_options
+import auto_run
 import config
 import context as prompt_context
 import foundry_backup
@@ -46,11 +47,14 @@ from campaign_core import (
     apply_layout,
     arc_cards,
     arc_seeds,
+    auto_run_current,
+    auto_run_plan,
     campaign_path,
     cancel_job,
     commit_docs,
     default_recordings,
     delete_record,
+    end_auto_run,
     doc_path,
     editable_doc_path,
     generate_cmd,
@@ -80,6 +84,7 @@ from campaign_core import (
     rev_of,
     review_passages,
     start_arcs,
+    start_auto_run,
     start_classification,
     start_request,
     start_ledger,
@@ -128,6 +133,8 @@ ROUTES = {
             '_get_transcript_passages',
         ),
         (lambda path: path == '/api/threads/loose', '_get_loose_threads'),
+        (lambda path: path == '/api/auto-run', '_get_auto_run'),
+        (lambda path: path == '/api/auto-run/plan', '_get_auto_run_plan'),
         (lambda path: path == '/api/arcs', '_get_arcs'),
         (lambda path: path == '/api/arcs/seeds', '_get_arc_seeds'),
         (lambda path: path.startswith('/api/arcs/'), '_get_arc'),
@@ -205,6 +212,11 @@ ROUTES = {
         (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger/apply'),
             '_post_ledger_apply',
+        ),
+        (lambda path: path == '/api/auto-run', '_post_auto_run'),
+        (
+            lambda path: path.startswith('/api/auto-run/') and path.endswith('/end'),
+            '_post_auto_run_end',
         ),
         (lambda path: path == '/api/arcs/start', '_post_arc_start'),
         (
@@ -792,6 +804,54 @@ class Handler(SimpleHTTPRequestHandler):
         if len(hero) > 128:
             raise Invalid('Invalid hero filter.')
         return self.send_json({'items': loose_threads(hero)})
+
+    def _get_auto_run(self, path, query, p):
+        """The run in progress, or the newest one that ended, with the transcription engine's status."""
+        return self.send_json({'run': auto_run_current(), 'engine': transcription.status()})
+
+    @staticmethod
+    def _run_choice(source):
+        """The folder, session and optional recordings a run request names, checked for type and size."""
+        folder, session, ids = (
+            source.get('path') or '',
+            source.get('session') or '',
+            source.get('files'),
+        )
+        if not isinstance(folder, str) or not isinstance(session, str) or len(session) > 64:
+            raise Invalid('Choose a folder and a session prep.')
+        if ids is not None and (
+            not isinstance(ids, list)
+            or len(ids) > auto_run.MAX_RECORDINGS
+            or not all(isinstance(ident, str) for ident in ids)
+        ):
+            raise Invalid('Choose recordings from the list.')
+        return folder, session, ids
+
+    def _get_auto_run_plan(self, path, query, p):
+        """What a run would take and ask for, before the GM agrees to it. Nothing starts."""
+        files = query.get('files', [''])[0]
+        folder, session, ids = self._run_choice(
+            {
+                'path': query.get('path', [''])[0],
+                'session': query.get('session', [''])[0],
+                'files': files.split(',') if files else None,
+            }
+        )
+        return self.send_json(auto_run_plan(folder, session, ids))
+
+    def _post_auto_run(self, path, query, p):
+        """Start a run for the new recordings in a folder, or carry on the one in progress."""
+        try:
+            return self.send_json(start_auto_run(*self._run_choice(p)))
+        except auto_run.NothingNew as error:
+            return self.send_json({'state': 'idle', 'message': str(error)})
+
+    def _post_auto_run_end(self, path, query, p):
+        ident = path[len('/api/auto-run/') : -len('/end')]
+        try:
+            return self.send_json(end_auto_run(ident))
+        except LookupError as error:
+            raise NotFound(str(error)) from error
 
     def _get_arcs(self, path, query, p):
         return self.send_json({'items': arc_cards(), 'max_threads': arc_options.MAX_THREADS})
