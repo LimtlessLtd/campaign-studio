@@ -264,12 +264,14 @@ def review(document, lore, decisions, now=0):
 
     A decision is {id, kind?, confirmed?, remember?}. Only play or banter can be confirmed. Confirming banter
     with a `remember` note saves it as table lore; undoing that, or calling the passage play, removes the
-    item this passage saved. Changes both documents in place; call it on freshly read copies.
+    item this passage saved, and clears it from the passages of this transcript that matched it. Changes
+    both documents in place; call it on freshly read copies.
     """
     if not isinstance(decisions, list) or not 0 < len(decisions) <= MAX_DECISIONS:
         raise ValueError(f'Send between 1 and {MAX_DECISIONS} decisions.')
     by_id = {p['id']: p for p in document['passages']}
     items = {item['id']: item for item in lore['items']}
+    saved = set(items)
     for decision in decisions:
         passage = by_id.get(decision.get('id')) if isinstance(decision, dict) else None
         if passage is None:
@@ -306,6 +308,9 @@ def review(document, lore, decisions, now=0):
         elif passage['lore'] == own:
             items.pop(own, None)  # undone or emptied: the note this passage saved goes
             passage['lore'] = ''
+    unlink_lore(
+        document, saved - set(items)
+    )  # later passages of this transcript that matched a note now gone
     lore['items'] = list(items.values())
     return document, lore
 
