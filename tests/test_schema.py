@@ -406,6 +406,28 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(filled['items'][0]['text'], 'A gag')
         self.assertEqual((filled['items'][0]['transcript'], filled['items'][0]['added']), ('', 0))
 
+    def test_version_eleven_confirmed_play_stays_intact_when_ledger_schema_is_added(self):
+        self.migrate()
+        schema.write_marker(self.data, 11, 'Synthetic version 11 campaign')
+        path = self.dm / 'data/transcripts/rec-0123456789abcdef.json'
+        path.parent.mkdir(exist_ok=True)
+        older = shapes.TRANSCRIPT.new(
+            id='rec-0123456789abcdef',
+            session='s1',
+            segments=[shapes.TRANSCRIPT_SEGMENT.new(start=4, end=8, text='The gate fell.')],
+            passages=[
+                shapes.TRANSCRIPT_PASSAGE.new(id='p0', first=0, last=0, kind='play', confirmed=True)
+            ],
+            classification={'status': 'done', 'cursor': 1, 'job': '', 'error': ''},
+        )
+        path.write_text(json.dumps(older))
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (11, 12))
+        self.assertEqual(self.read('data/transcripts/rec-0123456789abcdef.json'), older)
+        self.assertEqual(self.read('data/prep/s1.json')['title'], 'Session 1')
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

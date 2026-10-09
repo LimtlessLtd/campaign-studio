@@ -15,7 +15,11 @@ const S = {
 /* ---------- server ---------- */
 async function api(path, opts) {
   const r = await fetch(path, Object.assign({ cache: 'no-store' }, opts));
-  const body = await r.json().catch(() => ({}));
+  // A page left mid-read aborts the body too: that must reject, not read as an empty answer.
+  const body = await r.json().catch((error) => {
+    if (error?.name === 'AbortError') throw error;
+    return {};
+  });
   if (!r.ok) throw new Error(body.error || r.statusText);
   return body;
 }
@@ -52,6 +56,7 @@ const docUrl = (name) =>
     : '/api/doc/' + name;
 async function recordChoices(kind, signal) {
   const rows = await api('/api/records/' + kind + '/choices', { signal });
+  if (!Array.isArray(rows)) throw new Error(`Could not read the ${kind} list.`);
   S.recordIndex[kind] = rows;
   return rows;
 }

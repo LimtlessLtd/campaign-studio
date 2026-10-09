@@ -25,6 +25,7 @@ import shapes
 import storage
 import transcript_classifier
 import transcription
+import thread_ledger
 import usage
 from job_service import JobService
 
@@ -56,7 +57,7 @@ DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 # Documents the application owns: only their own routes and services change them.
 APP_OWNED_DOC = re.compile(
-    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts)/.+)$'
+    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts|ledger)/.+)$'
 )
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
@@ -347,6 +348,13 @@ def settle_failed_job(job, message):
     if job.get('classify'):
         fail_classification(job, message)
 
+    if job.get('ledger'):
+        name = 'ledger/' + job['ledger']
+        value = read_json(doc_path(name))
+        if value and value.get('status') == 'running' and value.get('job') == job['id']:
+            value.update(status='failed', job='', error=message[:1000])
+            write_doc(name, value)
+
 
 def fail_job(job, error):
     try:
@@ -380,6 +388,9 @@ def finish_job(job, code, tail):
         finish_transcription(job, code, tail)
     if job['kind'] == 'classify':
         finish_classification(job, code, tail)
+
+    if job['kind'] == 'thread-ledger':
+        finish_ledger(job, code, tail)
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -526,6 +537,49 @@ def finish_classification(job, code, tail):
     except (ValueError, KeyError, TypeError, OSError) as error:
         job.update(status='failed', note=str(error))
         fail_classification(job, str(error))
+
+
+def finish_ledger(job, code, tail):
+    """Stage one bounded AI window; continue until all confirmed play awaits GM review."""
+    name = 'ledger/' + job['ledger']
+    with LOCK:
+        ledger = read_json(doc_path(name))
+        if not ledger or ledger.get('status') != 'running' or ledger.get('job') != job['id']:
+            job.update(status='failed', note='The ledger was changed while drafting.')
+            return
+        try:
+            transcript = read_json(doc_path('transcripts/' + job['ledger']))
+            if not transcript or thread_ledger.source_hash(transcript) != ledger['source']:
+                raise ValueError('Confirmed play changed. Start a new ledger draft.')
+            if code:
+                raise ValueError(tail[-1000:] or 'The AI command failed.')
+            with open(job_file(job['id'], 'log'), encoding='utf-8') as file:
+                draft = workflow.parse_output(file.read())
+            entries = records.all_records(campaign.active().data, 'codex')
+            threads = records.all_records(campaign.active().data, 'threads')
+            batch = thread_ledger.validate_batch(
+                transcript,
+                draft,
+                job['first'],
+                job['stop'],
+                {row['id'] for row in threads},
+                {row['id'] for row in entries},
+                {row['id'] for row in entries if row.get('type') == 'pc'},
+            )
+            if len(ledger['events']) + len(batch) > thread_ledger.MAX_EVENTS:
+                raise ValueError('This ledger has too many events. Use a shorter transcript.')
+            ledger['events'].extend(batch)
+            ledger.update(cursor=job['stop'], status='ready', job='', error='')
+            write_doc(name, ledger)
+            if ledger['cursor'] < len(thread_ledger.lines(transcript)):
+                queue_ledger(transcript, ledger)
+            else:
+                ledger['status'] = 'review'
+                write_doc(name, ledger)
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            ledger.update(status='failed', job='', error=str(error)[:1000])
+            write_doc(name, ledger)
+            job.update(status='failed', note=str(error))
 
 
 def finish_request(job, code, tail):
@@ -686,9 +740,9 @@ def default_recordings():
 
 
 def transcript_busy(transcript):
-    """True while a job is transcribing this recording or sorting its transcript."""
+    """True while a job is transcribing, sorting or drafting from this transcript."""
     return any(
-        transcript in (j.get('transcript'), j.get('classify'))
+        transcript in (j.get('transcript'), j.get('classify'), j.get('ledger'))
         and j.get('status') in ('queued', 'running')
         for j in JOBS_SERVICE.iter_jobs()
     )
@@ -792,6 +846,183 @@ def remove_lore(ident):
             raise LookupError('No such table lore.')
         lore['items'] = [item for item in lore['items'] if item['id'] != ident]
         commit_docs('Remove table lore ' + ident, unlink_lore({ident}) + [('table-lore', lore)])
+
+
+def ledger_name(ident):
+    if not transcription.ID.fullmatch(ident):
+        raise ValueError('Invalid transcript ID.')
+    return 'ledger/' + ident
+
+
+def link_transcript_session(ident, session):
+    """Attach an already-transcribed recording to a prep without running speech recognition again."""
+    if not isinstance(session, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', session):
+        raise ValueError('Choose a session prep.')
+    with LOCK:
+        transcript = read_json(doc_path('transcripts/' + ident))
+        if transcript is None:
+            raise FileNotFoundError('No such transcript.')
+        if read_json(doc_path('prep/' + session)) is None:
+            raise ValueError('No such session prep.')
+        if transcript_busy(ident):
+            raise ValueError('Wait for the current transcript job to finish.')
+        ledger = read_json(doc_path(ledger_name(ident)))
+        if ledger and ledger.get('status') in ('running', 'review', 'applied'):
+            raise ValueError('This transcript already has a ledger draft or applied ledger.')
+        transcript['session'] = session
+        write_doc('transcripts/' + ident, transcript)
+        return transcription.summary(transcript)
+
+
+def queue_ledger(transcript, ledger):
+    """Run the next confirmed-play window on the configured structured draft provider."""
+    entries = records.all_records(campaign.active().data, 'codex')
+    threads = records.all_records(campaign.active().data, 'threads')
+    prep = read_json(doc_path('prep/' + ledger['session']))
+    if prep is None:
+        raise ValueError('The linked session prep no longer exists.')
+    prompt, _, first, stop = thread_ledger.prompt(
+        transcript,
+        ledger,
+        threads,
+        entries,
+        prep,
+        campaign_info(),
+        config.settings()['context_budget_chars'],
+    )
+    command = ai_provider.command('thread-ledger', thread_ledger.SCHEMA)
+    job = new_job(
+        'claude',
+        'thread-ledger',
+        f'Thread ledger: {transcript["title"][:60]}',
+        command,
+        prompt,
+        ledger=ledger['id'],
+        first=first,
+        stop=stop,
+    )
+    ledger.update(status='running', job=job['id'], error='')
+    write_doc(ledger_name(ledger['id']), ledger)
+    return job
+
+
+def start_ledger(ident, restart=False):
+    """Start, resume or explicitly replace a draft after the GM confirms play."""
+    with LOCK:
+        transcript = read_json(doc_path('transcripts/' + ident))
+        if transcript is None:
+            raise FileNotFoundError('No such transcript.')
+        if transcript_busy(ident):
+            raise ValueError('Wait for the current transcript job to finish.')
+        if transcript.get('classification', {}).get('status') != 'done':
+            raise ValueError('Finish sorting this transcript before drafting a thread ledger.')
+        if transcript_classifier.counts(transcript)['pending']:
+            raise ValueError('Review the unresolved transcript passages first.')
+        if not thread_ledger.lines(transcript):
+            raise ValueError('Confirm at least one in-game passage first.')
+        session = transcript.get('session', '')
+        if not session or read_json(doc_path('prep/' + session)) is None:
+            raise ValueError(
+                'Link this transcript to an existing session prep before drafting a ledger.'
+            )
+        name = ledger_name(ident)
+        ledger = read_json(doc_path(name))
+        source = thread_ledger.source_hash(transcript)
+        if ledger:
+            if ledger.get('status') in ('running', 'applied'):
+                raise ValueError('This ledger is already running or was applied.')
+            if ledger.get('status') == 'review' and not restart:
+                raise ValueError('Review or explicitly redraft this ledger before starting again.')
+            if restart or ledger['source'] != source:
+                ledger = None  # never carry old evidence into a changed source or fresh draft
+        if ledger is None:
+            ledger = shapes.LEDGER.new(id=ident, session=session, source=source, status='ready')
+            ledger['base_revs'] = {
+                records.document_name(kind, row['id']): rev_of(
+                    doc_path(records.document_name(kind, row['id']))
+                )
+                for kind in ('threads', 'codex')
+                for row in records.all_records(campaign.active().data, kind)
+            }
+            ledger['base_revs']['prep/' + session] = rev_of(doc_path('prep/' + session))
+            write_doc(name, ledger)
+        return queue_ledger(transcript, ledger)
+
+
+def apply_ledger(ident, selected):
+    """Apply exactly the GM-selected events with stale-target checks and a recoverable commit."""
+    with LOCK:
+        name = ledger_name(ident)
+        ledger = read_json(doc_path(name))
+        if ledger is None:
+            raise FileNotFoundError('No such thread ledger.')
+        if ledger['status'] == 'applied':
+            if selected != ledger['selected']:
+                raise ValueError('This ledger was already applied with different choices.')
+            return ledger  # an HTTP retry cannot append the same story twice
+        if ledger['status'] != 'review':
+            raise ValueError('Wait for a complete ledger draft before applying it.')
+        transcript = read_json(doc_path('transcripts/' + ident))
+        if not transcript or thread_ledger.source_hash(transcript) != ledger['source']:
+            raise ValueError('Confirmed play changed. Draft the ledger again.')
+        chosen = thread_ledger.accepted_events(ledger, selected)
+        targets = (
+            {'prep/' + ledger['session']} if any(e['kind'] == 'outcome' for e in chosen) else set()
+        )
+        for event in chosen:
+            if event['kind'] == 'outcome':
+                continue
+            kind = 'threads' if event['kind'] == 'thread' else 'codex'
+            record_id = (
+                thread_ledger.thread_id(ledger['id'], event['target'])
+                if kind == 'threads'
+                else event['target']
+            )
+            targets.add(records.document_name(kind, record_id))
+        for target in targets:
+            if rev_of(doc_path(target)) != ledger['base_revs'].get(target, '0'):
+                raise ValueError('A target changed since drafting. Review and redraft the ledger.')
+        prep = read_json(doc_path('prep/' + ledger['session']))
+        if prep is None:
+            raise ValueError('The linked session prep no longer exists.')
+        changes = thread_ledger.changes(
+            ledger,
+            selected,
+            lambda kind, key: records.read(campaign.active().data, kind, key),
+            prep,
+        )
+        ledger.update(
+            status='applied', selected=selected, applied=datetime.datetime.now().timestamp()
+        )
+        ledger.pop('base_revs', None)
+        commit_docs('Apply thread ledger ' + ledger['id'], changes + [(name, ledger)])
+        return ledger
+
+
+def loose_threads(hero=''):
+    threads = records.all_records(campaign.active().data, 'threads')
+    sessions = [int(name[1:]) for name in list_docs('prep') if re.fullmatch(r's\d{1,6}', name)]
+    report = thread_ledger.loose(threads, max(sessions, default=0), hero)
+    by_id = {row['id']: row for row in report}
+    for ident in list_docs('ledger'):
+        ledger = read_json(doc_path('ledger/' + ident))
+        if ledger.get('status') != 'applied':
+            continue
+        selected = set(ledger.get('selected', []))
+        for event in ledger['events']:
+            if event['id'] not in selected or event['kind'] != 'thread':
+                continue
+            target = thread_ledger.thread_id(ledger['id'], event['target'])
+            if target in by_id:
+                by_id[target].setdefault('evidence', []).append(
+                    {
+                        'transcript': ledger['id'],
+                        'session': ledger['session'],
+                        'at': event['at'],
+                        'quote': event['quote'],
+                    }
+                )
+    return report
 
 
 def start_workflow(value):

@@ -248,6 +248,72 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_text('No table lore yet.')).to_be_visible()
         self.assertEqual(self.stored('table-lore')['items'], [])
 
+    def test_thread_ledger_reviews_evidence_and_applies_only_selected_changes_on_phone(self):
+        import shapes
+        import test_thread_ledger as ledger_fixture
+        import test_transcript_classifier as sorting
+
+        ident = ledger_fixture.IDENT
+        document = ledger_fixture.recording()
+        document['passages'][3].update(kind='banter', confirmed=True)
+        campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='First session'))
+        campaign_core.write_doc(
+            'threads/church', shapes.THREAD.new(id='church', title='Church of Auril')
+        )
+        campaign_core.write_doc(
+            'codex/auril-church',
+            shapes.CODEX_ENTRY.new(id='auril-church', type='place', name='Church of Auril'),
+        )
+        campaign_core.write_doc(
+            'codex/mira', shapes.CODEX_ENTRY.new(id='mira', type='pc', name='Mira')
+        )
+        campaign_core.write_doc('transcripts/' + ident, document)
+        self.addCleanup(patch.stopall)
+        patch('ai_provider.command', return_value=['claude', '-p']).start()
+        runner = sorting.FakeClaude()
+        patch.object(campaign_core.JOBS_SERVICE, 'runner', runner).start()
+
+        self.page.set_viewport_size(NARROW)
+        self.open('#/recordings')
+        self.page.get_by_role('button', name='Open the thread ledger of Session one').click()
+        expect(self.page.get_by_role('button', name='Draft thread ledger')).to_be_visible()
+        self.assert_accessible('ledger start phone')
+        with self.page.expect_response(lambda response: '/ledger/start' in response.url):
+            self.page.get_by_role('button', name='Draft thread ledger').click()
+        job, cmd, stdin = campaign_core.LANES['claude'].get_nowait()
+        draft = ledger_fixture.proposal()
+        draft['events'][1]['text'] = 'The smuggler <b>escaped</b> towards the harbour.'
+        runner.reply = draft
+        campaign_core.execute_job(job, cmd, stdin)
+        self.assertEqual(self.stored('threads/church')['status'], 'open')
+
+        self.page.reload()
+        expect(self.page.locator('#main h1').first).to_be_visible()
+        self.page.get_by_role('button', name='Open the thread ledger of Session one').click()
+        expect(self.page.get_by_text('4 proposed changes.', exact=False)).to_be_visible()
+        self.assertEqual(self.page.locator('.ledger-event b').count(), 0)
+        self.assert_accessible('ledger review phone')
+        self.page.set_viewport_size(DESKTOP)
+        self.assert_accessible('ledger review desktop')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        with self.page.expect_response(lambda response: '/ledger/start' in response.url):
+            self.page.get_by_role('button', name='Redraft ledger').click()
+        job, cmd, stdin = campaign_core.LANES['claude'].get_nowait()
+        campaign_core.execute_job(job, cmd, stdin)
+        self.page.reload()
+        expect(self.page.locator('#main h1').first).to_be_visible()
+        self.page.get_by_role('button', name='Open the thread ledger of Session one').click()
+        expect(self.page.get_by_text('4 proposed changes.', exact=False)).to_be_visible()
+        self.page.locator('.ledger-event').filter(has_text='Codex note').get_by_role(
+            'checkbox'
+        ).uncheck()
+        with self.page.expect_response(lambda response: '/ledger/apply' in response.url):
+            self.page.get_by_role('button', name='Apply selected changes').click()
+        self.assertEqual(self.stored('threads/church')['status'], 'resolved')
+        self.assertEqual(self.stored('codex/auril-church')['notes'], '')
+        self.assertEqual(len(self.stored('prep/s1')['log']['outcomes']), 1)
+        self.assertEqual(len(self.stored('ledger/' + ident)['selected']), 3)
+
     def test_openai_settings_enable_structured_draft_controls(self):
         self.page.set_viewport_size(NARROW)
         with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'synthetic-key'}):
