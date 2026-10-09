@@ -11,6 +11,7 @@ import re
 import context as prompt_context
 import records
 import shapes
+import transcript_classifier
 import workflow
 
 MAX_WINDOW = 16_000
@@ -43,8 +44,6 @@ SCHEMA = workflow.obj(
 
 def play(document):
     """Return only the classifier's confirmed play, never model-labelled but unconfirmed text."""
-    import transcript_classifier
-
     return transcript_classifier.confirmed_play(document)
 
 

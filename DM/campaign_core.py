@@ -916,8 +916,6 @@ def start_ledger(ident, restart=False):
             raise ValueError('Wait for the current transcript job to finish.')
         if transcript.get('classification', {}).get('status') != 'done':
             raise ValueError('Finish sorting this transcript before drafting a thread ledger.')
-        import transcript_classifier
-
         if transcript_classifier.counts(transcript)['pending']:
             raise ValueError('Review the unresolved transcript passages first.')
         if not thread_ledger.lines(transcript):
@@ -975,12 +973,12 @@ def apply_ledger(ident, selected):
             if event['kind'] == 'outcome':
                 continue
             kind = 'threads' if event['kind'] == 'thread' else 'codex'
-            ident = (
+            record_id = (
                 thread_ledger.thread_id(ledger['id'], event['target'])
                 if kind == 'threads'
                 else event['target']
             )
-            targets.add(records.document_name(kind, ident))
+            targets.add(records.document_name(kind, record_id))
         for target in targets:
             if rev_of(doc_path(target)) != ledger['base_revs'].get(target, '0'):
                 raise ValueError('A target changed since drafting. Review and redraft the ledger.')
