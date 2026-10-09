@@ -230,6 +230,38 @@ class JobsStorageTests(unittest.TestCase):
             self.assertTrue(hung.terminated)
             self.assertEqual(failures, [(job['id'], 'Cancelled.')])
 
+    def test_settling_callbacks_run_holding_the_service_lock(self):
+        # Result callbacks read and rewrite documents without locking again, so the service must hold
+        # the shared lock around them or a GM edit made meanwhile could be overwritten.
+        def free_to_other_threads(service):
+            seen = []
+
+            def probe():
+                seen.append(service.lock.acquire(timeout=0.2))
+                if seen[0]:
+                    service.lock.release()
+
+            thread = threading.Thread(target=probe)
+            thread.start()
+            thread.join()
+            return seen[0]
+
+        with tempfile.TemporaryDirectory() as temporary:
+            free = []
+            runner = FakeRunner([FakeProcess(0, ''), FakeProcess(3, '')])
+            service = self.make_service(temporary, [], runner)
+            service.on_finish = lambda *_: free.append(('finish', free_to_other_threads(service)))
+            service.on_failure = lambda *_: free.append(('failure', free_to_other_threads(service)))
+
+            service.new_job('forge', 'fixture', 'Works', ['a'])
+            service.execute_job(*service.lanes['forge'].get_nowait())
+            service.new_job('forge', 'fixture', 'Fails', ['b'])
+            service.execute_job(*service.lanes['forge'].get_nowait())
+            queued = service.new_job('forge', 'fixture', 'Cancelled', ['c'])
+            service.cancel(queued['id'])
+
+            self.assertEqual(free, [('finish', False), ('finish', False), ('failure', False)])
+
     def test_cancel_queued_job_settles_it_and_worker_skips_it(self):
         with tempfile.TemporaryDirectory() as temporary:
             failures = []
