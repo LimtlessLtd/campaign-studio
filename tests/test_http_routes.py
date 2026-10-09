@@ -168,6 +168,9 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(state['ai']['label'], 'OpenAI API')
         self.assertTrue(state['ai']['available'])
         self.assertIn('claude', state)
+        status, saved, _ = self.request('/api/settings', 'POST', {'ai': {'provider': 'codex'}})
+        self.assertEqual((status, saved['settings']['ai']['provider']), (200, 'codex'))
+        self.assertEqual(self.request('/api/state')[1]['ai']['label'], 'Codex')
         for ai in ({'provider': 'other'}, {'provider': 'openai', 'model': ''}):
             self.assertEqual(self.request('/api/settings', 'POST', {'ai': ai})[0], 400)
 

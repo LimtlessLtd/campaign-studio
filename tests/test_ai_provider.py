@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / 'DM'))
 sys.path.insert(0, str(ROOT / 'DM' / 'tools'))
 
 import ai_provider
+import draft_schemas
 import openai_worker
 import request_workflow
 import workflow
@@ -54,10 +55,10 @@ class AIProviderTests(unittest.TestCase):
             'revision',
         ):
             with self.subTest(kind=kind):
-                check_strict(openai_worker.draft_schema(kind))
+                check_strict(draft_schemas.for_kind(kind))
 
-        layout = openai_worker.draft_schema('layout')
-        self.assertEqual(layout, openai_worker.draft_schema('revision'))
+        layout = draft_schemas.for_kind('layout')
+        self.assertEqual(layout, draft_schemas.for_kind('revision'))
         operation = layout['properties']['operations']['items']
         original = workflow.LAYOUT_SCHEMA['properties']['operations']['items']
         examples = (
@@ -114,6 +115,31 @@ class AIProviderTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ai_provider.clean_settings(invalid)
 
+    def test_codex_is_a_subscription_provider_started_through_its_worker(self):
+        clean = ai_provider.clean_settings({'provider': 'codex'})  # no model, no key name needed
+        self.assertEqual(clean['provider'], 'codex')
+        with patch.object(ai_provider.shutil, 'which', return_value='/usr/bin/codex'):
+            codex = ai_provider.PROVIDERS['codex']
+            self.assertTrue(codex.available(clean))
+            command = codex.command(clean, 'arc-options', {})
+            self.assertEqual(
+                ai_provider.status(clean) | {'key_available': False},
+                {
+                    'provider': 'codex',
+                    'label': 'Codex',
+                    'available': True,
+                    'key_available': False,
+                },
+            )
+            with_model = codex.command(dict(clean, model='gpt-5'), 'request', {})
+        self.assertIn('codex_worker.py', command[2])
+        self.assertEqual(command[3:], ['arc-options', '/usr/bin/codex'])
+        self.assertEqual(with_model[3:], ['request', '/usr/bin/codex', 'gpt-5'])
+        with patch.object(ai_provider.shutil, 'which', return_value=None):
+            self.assertFalse(ai_provider.PROVIDERS['codex'].available(clean))
+            with self.assertRaisesRegex(ValueError, 'not installed'):
+                ai_provider.PROVIDERS['codex'].command(clean, 'request', {})
+
     def test_every_draft_kind_the_server_queues_has_an_openai_schema(self):
         # A kind the worker does not know fails its job under the OpenAI provider (it did for the
         # thread ledger), so adding a kind to the server needs its schema here too.
@@ -122,7 +148,7 @@ class AIProviderTests(unittest.TestCase):
         self.assertTrue({'request', 'classify', 'thread-ledger', 'arc-options'} <= kinds)
         for kind in kinds:
             with self.subTest(kind=kind):
-                self.assertIn('properties', openai_worker.draft_schema(kind))
+                self.assertIn('properties', draft_schemas.for_kind(kind))
 
     def test_openai_worker_sends_a_tool_free_schema_request_and_parses_its_draft(self):
         draft = {'summary': 'Synthetic draft'}

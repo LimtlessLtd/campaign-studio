@@ -10,7 +10,7 @@ flowchart LR
   Core --> Docs[JSON documents and history]
   Core --> WF[workflow.py: validate, stage, apply]
   Core --> Queue[job_service.py: job lanes]
-  Queue --> AI[ai_provider: Claude CLI or OpenAI Responses]
+  Queue --> AI[ai_provider: Claude CLI, Codex CLI or OpenAI Responses]
   AI --> WF
   Queue --> Forge[forge: render plan and scene]
   Queue --> Art[image_worker: configured provider]
@@ -253,18 +253,39 @@ Read-only `Website/content` references are disabled by default; enable `legacy_r
 for an existing compatible site. Local reference notes can be added as `DM/data/notes.txt`.
 
 The image adapter posts `{model, prompt, size, n: 1}` and requires `data[0].b64_json`. It uses an environment
-variable for the key and permits HTTP only on loopback. `ai_provider.py` selects Claude Code or OpenAI API
-for structured drafts. Claude runs without file/shell tools; `openai_worker.py` sends the existing schema
+variable for the key and permits HTTP only on loopback. `ai_provider.py` selects Claude Code, Codex or OpenAI
+API for structured drafts. Claude runs without file/shell tools; `openai_worker.py` sends the existing schema
 through the Responses API with an empty tool list and `store: false`. The fixed HTTPS endpoint receives the
-prompt and an environment-provided API key; settings keep only the variable name. Both providers use the
+prompt and an environment-provided API key; settings keep only the variable name. All providers use the
 same validation, GM review, cancellation and retry flow. Exported prompt packs permit other assistants.
 Old `/api/claude` calls use the selected structured request runner. The OpenAI path has synthetic tests;
 it has not been exercised with a paid API call.
 
-The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
+`draft_schemas.for_kind` is the one table from a draft kind to the strict JSON schema that OpenAI and Codex
+enforce (every property required, no extras); a new kind adds its schema there, and a test keeps every kind
+the server queues in step with it. Claude Code is given the schema the caller built.
+
+**Codex (W73).** `tools/codex_worker.py` runs `codex exec` for one draft and prints the same envelope as the
+OpenAI worker (`structured_output`, `usage`; a subscription states no price). The Codex CLI is a coding agent
+and offers no switch that removes every tool, so the worker applies three layers. (1) Codex starts with
+`--ignore-user-config` (no user MCP servers, hooks or plugins), `--ignore-rules`, `--ephemeral`, `--sandbox
+read-only`, an empty working folder, `--output-schema`, the tool-bearing features off (`shell_tool`,
+`unified_exec`, `multi_agent`, `apps`, `view_image` and others, filtered to the names that Codex lists in
+`codex features list`, because it refuses an unknown one; all of them when that list cannot be read) and
+web search off. (2) It uses the ChatGPT login
+only: `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from its environment and `codex login status` must
+not report an API key. (3) The worker reads the `--json` event stream and fails the draft, after stopping
+Codex's process tree, at the first item that is not `agent_message`, `reasoning`, `todo_list` or `error`,
+so a tool request never runs to completion and an unknown future item type fails closed. The final
+`agent_message` must be one JSON object. Cancellation, the lane, GM review and usage recording are those of
+the other providers. A Codex stopped by Cancel cannot remove its scratch folder, so the next worker removes
+`campaign-studio-codex-*` folders in the temp folder that are a day old. Nothing here has run against a real
+Codex: the CLI's event shapes and flags come from its help and public documentation, so W76 records what
+a live draft shows.
+
+The owner's own use needs no API key: drafting goes through the signed-in Claude Code or Codex CLI, and session
 recordings are transcribed locally (W68), sorted into play and banter (W69), then proposed as a reviewed
-thread ledger (W70) and arc options for loose threads (W71). An automatic run (W72) chains these steps and stops at each review; a Codex provider remains W73 in
-`docs/ROADMAP.md`. The OpenAI provider is optional.
+thread ledger (W70) and arc options for loose threads (W71). An automatic run (W72) chains these steps and stops at each review. The OpenAI provider is optional.
 
 ## Session recordings
 

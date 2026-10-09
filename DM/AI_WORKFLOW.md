@@ -21,7 +21,8 @@ The map studio owns campaign writes. Models propose JSON, then the GM reviews an
    macro in Foundry as GM to create/update actual world documents.
 
 Never edit a Foundry database directly. Do not publish campaign data. Do not include credentials in prompts.
-The structured AI runners (Claude Code or OpenAI Responses) have no filesystem/shell tools. Set the OpenAI
+The structured AI runners (Claude Code, Codex or OpenAI Responses) have no filesystem/shell tools. Claude Code
+and Codex use the account you are signed in to. Set the OpenAI
 API key in the server environment and select a model in Settings to use that provider; the key is not saved
 in settings. Portable users can export/import proposals with
 any assistant able to follow the supplied schema. General Requests use their own structured entity/prep

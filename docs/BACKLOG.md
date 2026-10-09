@@ -10,12 +10,12 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W76
+Next ID: W77
 
 | ID  | Priority | Work                                                                                                                           | Acceptance criteria                                                                                 |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| W73 | 2        | Codex CLI as a second subscription-based draft provider, after checking what its structured output allows                      | A fake-CLI fixture drafts a proposal; no API key is read; unsupported options are documented        |
 | W74 | 2        | Owner-assisted live check of recordings to draft: a real recording, Whisper model and Claude run through the automatic run     | Requests, cost, window count, limit message and passage quality recorded; failures become rows      |
+| W76 | 2        | Owner-assisted live check of the Codex provider: one small draft through `codex exec`, its events, usage and limit message     | Event shapes, flags, tool lock-down and limit wording recorded; the stream guard's lists corrected  |
 | W33 | 2        | Proposal review, remainder: before/after diffs, redraft one item, item review for map and session workflows                    | Map and session drafts support item choices; changed records show diffs                             |
 | W34 | 2        | Threads, remainder: links to maps and locations, clues, sort by hero (entry and session links, staleness sort, backlinks done) | A thread lists its clues and map pins; threads sort by hero                                         |
 | W35 | 2        | Wrap-up after play: notes in; session log, thread, codex and next-hook changes out                                             | Applying updates threads and NPCs; the next recap draft uses the log                                |

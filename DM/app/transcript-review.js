@@ -19,8 +19,8 @@ async function startSorting(item, restart) {
       ? ` This discards your ${plural(item.review.confirmed, 'decision')}.`
       : '';
   const ask =
-    `Claude (your signed-in Claude Code) will read this transcript in ${plural(plan.requests, 'request')}, ` +
-    `about ${plural(plan.characters, 'character')} in all, on your subscription. ` +
+    `Your signed-in AI (Claude Code or Codex, as chosen in Settings) will read this transcript in ${plural(plan.requests, 'request')}, ` +
+    `about ${plural(plan.characters, 'character')} in all. ` +
     `Nothing counts as in-game until you confirm it.${lost} Continue?`;
   if (!confirm(ask)) return;
   await post(`/api/transcripts/${encodeURIComponent(item.id)}/classify`, { restart });
