@@ -333,6 +333,11 @@ label {
 input[type='checkbox'] {
   transform: none;
 }
+input[type='radio'] {
+  width: auto;
+  flex: none;
+  accent-color: var(--ember);
+}
 input[type='range'] {
   height: 40px;
 }
@@ -1878,4 +1883,33 @@ hr {
   .world-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.arc-thread {
+  margin: 0 0 12px;
+}
+.arc-thread > legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.arc-option {
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+  display: grid;
+  gap: 6px;
+}
+.arc-option input[type='text'],
+.arc-option input:not([type]),
+.arc-option textarea {
+  width: 100%;
+}
+.arc-threads {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.arc-thread label.row,
+.arc-option label.row {
+  font-size: 13px;
+  color: var(--ink);
 }

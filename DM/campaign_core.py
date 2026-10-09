@@ -11,6 +11,7 @@ import threading
 import time
 import campaign
 import ai_provider
+import arc_options
 import commits
 import config
 import foundry_library
@@ -55,9 +56,11 @@ FILE_ROOTS = (
 )
 DOC_NAME = re.compile(r'^[a-z0-9][a-z0-9_-]*(?:/[a-z0-9][a-z0-9_-]*)?$')
 SLUG = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
+# Documents a change may delete: the World Library snapshot and these folders.
+DELETABLE = ('codex/', 'threads/', 'transcripts/', 'arcs/')
 # Documents the application owns: only their own routes and services change them.
 APP_OWNED_DOC = re.compile(
-    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts|ledger)/.+)$'
+    r'^(?:settings|foundry-library|table-lore|codex|threads|(?:codex|threads|workflows|jobs|transcripts|ledger|arcs)/.+)$'
 )
 IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 IMAGE_SIGNATURES = {
@@ -159,9 +162,9 @@ def delete_record(kind, ident):
 
 
 def delete_record_document(name):
-    if name != 'foundry-library' and not name.startswith(('codex/', 'threads/', 'transcripts/')):
+    if name != 'foundry-library' and not name.startswith(DELETABLE):
         raise ValueError(
-            'Only records, transcripts and the World Library snapshot can be deleted through a change.'
+            'Only records, transcripts, arc proposals and the World Library snapshot can be deleted through a change.'
         )
     path = doc_path(name)
     if os.path.islink(os.path.dirname(path)) or os.path.islink(path):
@@ -354,6 +357,8 @@ def settle_failed_job(job, message):
         if value and value.get('status') == 'running' and value.get('job') == job['id']:
             value.update(status='failed', job='', error=message[:1000])
             write_doc(name, value)
+    if job.get('arc'):
+        fail_arc(job, message)
 
 
 def fail_job(job, error):
@@ -391,6 +396,8 @@ def finish_job(job, code, tail):
 
     if job['kind'] == 'thread-ledger':
         finish_ledger(job, code, tail)
+    if job['kind'] == 'arc-options':
+        finish_arc(job, code, tail)
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -580,6 +587,42 @@ def finish_ledger(job, code, tail):
             ledger.update(status='failed', job='', error=str(error)[:1000])
             write_doc(name, ledger)
             job.update(status='failed', note=str(error))
+
+
+def fail_arc(job, message):
+    """Mark a proposal that was drafting as failed, unless it was removed or replaced."""
+    name = 'arcs/' + job['arc']
+    arc = read_json(doc_path(name))
+    if arc and arc['status'] == 'running' and arc['job'] == job['id']:
+        arc.update(status='failed', job='', error=message[:1000])
+        write_doc(name, arc)
+
+
+def finish_arc(job, code, tail):
+    """Store the options a finished draft proposed for review, or fail the proposal with the reason."""
+    name = 'arcs/' + job['arc']
+    with LOCK:
+        arc = read_json(doc_path(name))
+        if not arc or arc['status'] != 'running' or arc['job'] != job['id']:
+            job.update(status='failed', note='The proposal was removed or changed while drafting.')
+            return
+        try:
+            if code:
+                raise ValueError(tail[-1000:] or 'The AI command failed.')
+            with open(job_file(job['id'], 'log'), encoding='utf-8') as file:
+                draft = workflow.parse_output(file.read())
+            entries = records.all_records(campaign.active().data, 'codex')
+            arc['options'] = arc_options.validate(
+                draft,
+                arc['threads'],
+                {row['id'] for row in entries},
+                {row['id'] for row in entries if row.get('type') == 'pc'},
+            )
+            arc.update(status='review', job='', error='')
+        except (ValueError, KeyError, TypeError, OSError) as error:
+            arc.update(status='failed', job='', error=str(error)[:1000])
+            job.update(status='failed', note=str(error))
+        write_doc(name, arc)
 
 
 def finish_request(job, code, tail):
@@ -1023,6 +1066,142 @@ def loose_threads(hero=''):
                     }
                 )
     return report
+
+
+def arc_name(ident):
+    if not re.fullmatch(r'arc-[0-9a-f]{8}', str(ident)):
+        raise ValueError('Invalid arc proposal ID.')
+    return 'arcs/' + ident
+
+
+def read_arcs():
+    return [read_json(doc_path('arcs/' + ident)) for ident in list_docs('arcs')]
+
+
+def start_arcs(thread_ids):
+    """Queue one draft of arc options for the chosen loose threads."""
+    if (
+        not isinstance(thread_ids, list)
+        or not 0 < len(thread_ids) <= arc_options.MAX_THREADS
+        or any(not isinstance(ident, str) for ident in thread_ids)
+        or len(set(thread_ids)) != len(thread_ids)
+    ):
+        raise ValueError(f'Choose between 1 and {arc_options.MAX_THREADS} different threads.')
+    with LOCK:
+        data = campaign.active().data
+        threads = records.all_records(data, 'threads')
+        by_id = {row['id']: row for row in threads}
+        if any(by_id.get(ident, {}).get('status') not in arc_options.LOOSE for ident in thread_ids):
+            raise ValueError('Choose open, planned or foreshadowed threads that still exist.')
+        if len(list_docs('arcs')) >= arc_options.MAX_ARCS:
+            raise ValueError('Remove some old arc proposals before drafting another.')
+        prompt, _ = arc_options.prompt(
+            thread_ids,
+            loose_threads(),
+            threads,
+            records.all_records(data, 'codex'),
+            campaign_info(),
+            config.settings()['context_budget_chars'],
+        )
+        ident = 'arc-' + os.urandom(4).hex()
+        titles = ', '.join(by_id[x].get('title') or x for x in thread_ids)
+        job = new_job(
+            'claude',
+            'arc-options',
+            'Arc options: ' + titles[:80],
+            ai_provider.command('arc-options', arc_options.SCHEMA),
+            prompt,
+            arc=ident,
+        )
+        base_revs = {
+            name: rev_of(doc_path(name))
+            for name in (records.document_name('threads', x) for x in thread_ids)
+        }
+        write_doc(
+            'arcs/' + ident,
+            shapes.ARC.new(
+                id=ident,
+                status='running',
+                threads=list(thread_ids),
+                job=job['id'],
+                base_revs=base_revs,
+                created=int(time.time()),
+            ),
+        )
+        return job
+
+
+def apply_arc(ident, choices):
+    """Apply exactly the options the GM chose, one per thread, unless a thread changed since."""
+    with LOCK:
+        name = arc_name(ident)
+        arc = read_json(doc_path(name))
+        if arc is None:
+            raise LookupError('No such arc proposal.')
+        picked = arc_options.chosen_options(arc, choices)
+        if arc['status'] == 'applied':
+            if {option['id'] for option in picked} != set(arc['choices']):
+                raise ValueError('This proposal was already applied with different choices.')
+            return arc  # an HTTP retry cannot plan the same arc twice
+        if arc['status'] != 'review':
+            raise ValueError('Wait for the proposal to finish drafting.')
+        for option in picked:
+            target = records.document_name('threads', option['thread'])
+            if rev_of(doc_path(target)) != arc['base_revs'].get(target, '0'):
+                raise ValueError('A thread changed since this was proposed. Propose again.')
+        changed = arc_options.changes(
+            picked, lambda key: records.read(campaign.active().data, 'threads', key)
+        )
+        final = {option['id']: option for option in picked}
+        arc['options'] = [final.get(option['id'], option) for option in arc['options']]
+        arc.update(
+            status='applied',
+            choices=[option['id'] for option in picked],
+            applied=int(time.time()),
+            base_revs={},
+        )
+        commit_docs('Apply arc options ' + ident, changed + [(name, arc)])
+        return arc
+
+
+def remove_arc(ident):
+    """Remove a stored proposal. Threads it already changed keep those changes."""
+    with LOCK:
+        name = arc_name(ident)
+        arc = read_json(doc_path(name))
+        if arc is None:
+            raise LookupError('No such arc proposal.')
+        if arc['status'] == 'running':
+            raise ValueError('Cancel the drafting job before removing this proposal.')
+        commit_docs('Remove arc proposal ' + ident, [(name, None)])
+
+
+def arc_cards():
+    """Stored proposals, newest first, without their options."""
+    titles = {
+        row['id']: row.get('title', '')
+        for row in records.all_records(campaign.active().data, 'threads')
+    }
+    cards = [
+        {
+            'id': arc['id'],
+            'status': arc['status'],
+            'created': arc['created'],
+            'applied': arc['applied'],
+            'error': arc['error'],
+            'job': arc['job'],
+            'threads': [{'id': x, 'title': titles.get(x, x)} for x in arc['threads']],
+            'options': len(arc['options']),
+            'choices': len(arc['choices']),
+        }
+        for arc in read_arcs()
+    ]
+    return sorted(cards, key=lambda card: -card['created'])
+
+
+def arc_seeds():
+    """Pitch lines from applied arcs whose threads are still unresolved, newest first."""
+    return arc_options.seeds(read_arcs(), records.all_records(campaign.active().data, 'threads'))
 
 
 def start_workflow(value):

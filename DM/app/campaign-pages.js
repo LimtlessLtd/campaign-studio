@@ -1067,6 +1067,8 @@ async function makePanel(session, context) {
       threads: [...(prep?.threads || [])].slice(0, 12),
     };
     const threadBox = h('div');
+    const seedBox = h('div');
+    if (kind === 'session') attempt(async () => render(seedBox, await arcSeedsBox(ta)));
     const drawThreads = () =>
       render(
         threadBox,
@@ -1131,6 +1133,7 @@ async function makePanel(session, context) {
         { class: 'card', style: 'margin:10px 0;background:var(--bg2)' },
         h('b', {}, 'New ' + (KINDS[kind] || kind).toLowerCase()),
         ta,
+        kind === 'session' ? seedBox : null,
         kind === 'session'
           ? h(
               'div',

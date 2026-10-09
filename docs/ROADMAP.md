@@ -20,7 +20,7 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Session recordings to next session** (W71–W73; W68 transcription, W69 sorting and W70 ledger are done). The owner's main use.
+1. **Session recordings to next session** (W72–W73; W68 transcription, W69 sorting, W70 ledger and W71 arc options are done). The owner's main use.
    Recordings are transcribed locally, split into real play and table banter, folded into a thread ledger, and
    turned into reviewed arc proposals and a next-session draft. Take these rows before the rest.
 2. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
@@ -98,7 +98,7 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W71–W73 Session recordings to next session
+### W72–W73 Session recordings to next session
 
 - Owner feedback (8 Oct): point AI at local session videos, transcribe the audio, work out which threads are
   still loose, then help create arcs and resolutions and the next session. The table's jokes and invented gags
@@ -114,10 +114,6 @@ their row and finding say enough.
   each passage with its segment numbers, times and text; never read unconfirmed, banter or unclear passages.
   Table lore (`table-lore`) holds the gags to skip, and `docs/ARCHITECTURE.md` → Play, banter and table lore
   describes the windows, the job chain and the review.
-- **W71 arcs and resolutions.** For each loose thread (or a chosen few), a proposal of two or three
-  options: a resolution, an escalation and a twist, each naming the codex entries, NPCs, locations and party
-  members it uses. Accepted options become thread changes, hooks and a seed for the next pitch. Reviewed with
-  W33; nothing applies unreviewed.
 - **W72 automatic run.** One action, and a scheduled Claude task, takes a folder of new recordings through
   transcription (W68), W69–W71 and then Session Forge (W32), leaving only reviews: banter confirmations, the ledger and the next
   draft. It runs on the owner's computer with their signed-in CLI, skips recordings already processed (a
@@ -207,7 +203,7 @@ their row and finding say enough.
 - W44: record tokens, cost and time per AI job from the provider's output (the Claude CLI's JSON result
   reports usage and cost). Show totals per session and month, and ask before running a prompt above a
   configurable size. Subscription users have limits, not a bill: report usage against them and ask before a
-  transcript-sized run (W71–W72); W69 already shows its request count and size first.
+  transcript-sized run (W72); W69 already shows its request count and size first.
 - W51: an opt-in script runs drafts against synthetic campaigns and checks that links resolve, canon is
   kept, counts are met and layouts lint clean, so prompt changes can be compared. It makes paid calls, so
   the owner runs it outside CI.

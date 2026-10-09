@@ -233,6 +233,30 @@ LEDGER = Shape(
     {'events': LEDGER_EVENT},
 )
 
+# Options proposed for loose threads (W71). The GM picks at most one per thread; nothing changes a thread
+# until the GM applies. `base_revs` holds each proposed thread's revision, so an edit made meanwhile is noticed.
+ARC_OPTION = Shape(
+    'arc_option',
+    ['id'],
+    dict(thread='', kind='', title='', summary='', hook='', pitch='', entries=[], pcs=[]),
+)
+ARC = Shape(
+    'arc',
+    ['id'],
+    dict(
+        status='',
+        threads=[],
+        options=[],
+        choices=[],
+        base_revs={},
+        job='',
+        error='',
+        created=0,
+        applied=0,
+    ),
+    {'options': ARC_OPTION},
+)
+
 WORLD_PIN = Shape('world_pin', ['id'], dict(label='', map='', x=0.5, y=0.5, note=''))
 WORLD_MAP = Shape('world_map', ['id', 'name'], dict(image='', pins=[]), {'pins': WORLD_PIN})
 WORLD_MAPS = Shape('world_maps', [], dict(maps=[]), {'maps': WORLD_MAP})
@@ -266,6 +290,8 @@ SHAPES = {
         TABLE_LORE,
         LEDGER_EVENT,
         LEDGER,
+        ARC_OPTION,
+        ARC,
     )
 }
 

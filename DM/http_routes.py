@@ -12,6 +12,7 @@ from pathlib import Path
 
 import campaign
 import ai_provider
+import arc_options
 import config
 import context as prompt_context
 import foundry_backup
@@ -40,8 +41,11 @@ from campaign_core import (
     LOCK,
     SLUG,
     apply_content,
+    apply_arc,
     apply_ledger,
     apply_layout,
+    arc_cards,
+    arc_seeds,
     campaign_path,
     cancel_job,
     commit_docs,
@@ -70,10 +74,12 @@ from campaign_core import (
     request_item,
     request_pack,
     request_read,
+    remove_arc,
     remove_lore,
     restore_revision,
     rev_of,
     review_passages,
+    start_arcs,
     start_classification,
     start_request,
     start_ledger,
@@ -122,6 +128,9 @@ ROUTES = {
             '_get_transcript_passages',
         ),
         (lambda path: path == '/api/threads/loose', '_get_loose_threads'),
+        (lambda path: path == '/api/arcs', '_get_arcs'),
+        (lambda path: path == '/api/arcs/seeds', '_get_arc_seeds'),
+        (lambda path: path.startswith('/api/arcs/'), '_get_arc'),
         (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger'),
             '_get_ledger',
@@ -197,6 +206,15 @@ ROUTES = {
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/ledger/apply'),
             '_post_ledger_apply',
         ),
+        (lambda path: path == '/api/arcs/start', '_post_arc_start'),
+        (
+            lambda path: path.startswith('/api/arcs/') and path.endswith('/apply'),
+            '_post_arc_apply',
+        ),
+        (
+            lambda path: path.startswith('/api/arcs/') and path.endswith('/remove'),
+            '_post_arc_remove',
+        ),
         (
             lambda path: path.startswith('/api/transcripts/') and path.endswith('/remove'),
             '_post_transcript_remove',
@@ -227,6 +245,7 @@ GATE = remote_access.AccessGate(os.environ.get('DM_ACCESS_CODE', ''))
 
 
 FORGE_SCRIPT = re.compile(r'^[a-z0-9][a-z0-9-]*\.js$')
+ARC_ID = re.compile(r'arc-[0-9a-f]{8}')
 
 
 class RouteError(Exception):
@@ -773,6 +792,44 @@ class Handler(SimpleHTTPRequestHandler):
         if len(hero) > 128:
             raise Invalid('Invalid hero filter.')
         return self.send_json({'items': loose_threads(hero)})
+
+    def _get_arcs(self, path, query, p):
+        return self.send_json({'items': arc_cards(), 'max_threads': arc_options.MAX_THREADS})
+
+    def _get_arc_seeds(self, path, query, p):
+        return self.send_json({'items': arc_seeds()})
+
+    @staticmethod
+    def _arc_id(path, suffix=''):
+        ident = path[len('/api/arcs/') : len(path) - len(suffix)]
+        if not ARC_ID.fullmatch(ident):
+            raise Invalid('bad arc proposal id')
+        return ident
+
+    def _get_arc(self, path, query, p):
+        """One stored proposal with its options, without the revisions it checks when applied."""
+        value = read_json(doc_path('arcs/' + self._arc_id(path)))
+        if value is None:
+            raise NotFound('No such arc proposal.')
+        return self.send_json({k: v for k, v in value.items() if k != 'base_revs'})
+
+    def _post_arc_start(self, path, query, p):
+        """Ask the signed-in AI for options for the chosen loose threads. Nothing changes until the GM applies."""
+        return self.send_json(start_arcs(p.get('threads')))
+
+    def _post_arc_apply(self, path, query, p):
+        try:
+            arc = apply_arc(self._arc_id(path, '/apply'), p.get('choices'))
+        except LookupError as error:
+            raise NotFound(str(error)) from error
+        return self.send_json({k: v for k, v in arc.items() if k != 'base_revs'})
+
+    def _post_arc_remove(self, path, query, p):
+        try:
+            remove_arc(self._arc_id(path, '/remove'))
+        except LookupError as error:
+            raise NotFound(str(error)) from error
+        return self.send_json({'ok': True})
 
     def _get_ledger(self, path, query, p):
         ident = self._transcript_id(path, '/ledger')

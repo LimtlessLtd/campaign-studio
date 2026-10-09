@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -43,7 +44,15 @@ class AIProviderTests(unittest.TestCase):
             if schema.get('type') == 'array':
                 check_strict(schema['items'])
 
-        for kind in ('request', 'content', 'layout', 'revision'):
+        for kind in (
+            'request',
+            'content',
+            'classify',
+            'thread-ledger',
+            'arc-options',
+            'layout',
+            'revision',
+        ):
             with self.subTest(kind=kind):
                 check_strict(openai_worker.draft_schema(kind))
 
@@ -104,6 +113,16 @@ class AIProviderTests(unittest.TestCase):
         for invalid in ({'provider': 'unknown'}, {'provider': 'openai'}, {'key_env': 'bad-name'}):
             with self.assertRaises(ValueError):
                 ai_provider.clean_settings(invalid)
+
+    def test_every_draft_kind_the_server_queues_has_an_openai_schema(self):
+        # A kind the worker does not know fails its job under the OpenAI provider (it did for the
+        # thread ledger), so adding a kind to the server needs its schema here too.
+        source = (ROOT / 'DM' / 'campaign_core.py').read_text(encoding='utf-8')
+        kinds = set(re.findall(r"ai_provider\.command\(\s*'([a-z-]+)'", source))
+        self.assertTrue({'request', 'classify', 'thread-ledger', 'arc-options'} <= kinds)
+        for kind in kinds:
+            with self.subTest(kind=kind):
+                self.assertIn('properties', openai_worker.draft_schema(kind))
 
     def test_openai_worker_sends_a_tool_free_schema_request_and_parses_its_draft(self):
         draft = {'summary': 'Synthetic draft'}

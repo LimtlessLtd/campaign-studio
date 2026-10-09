@@ -29,6 +29,7 @@ function initStudio() {
         ['recordings', 'mic', 'Recordings'],
         ['codex', 'people', 'Campaign codex'],
         ['threads', 'threads', 'Story threads'],
+        ['arcs', 'spark', 'Story arcs'],
         ['art', 'image', 'Image studio'],
         ['inbox', 'spark', 'AI requests'],
         ['handouts', 'folder', 'Handouts'],
