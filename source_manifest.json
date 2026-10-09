@@ -134,5 +134,6 @@
   "tools/check_merge.cjs",
   "tools/check_relay.py",
   "tools/check_routes.cjs",
+  "tools/check_state.cjs",
   "tools/check_source.py"
 ]
