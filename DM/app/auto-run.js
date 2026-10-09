@@ -26,7 +26,7 @@ function runUsageLine(usage) {
   const tokens = usage.input_tokens + usage.output_tokens;
   const parts = [`${usage.requests} AI request${usage.requests === 1 ? '' : 's'}`];
   if (tokens) parts.push(`${tokens.toLocaleString()} tokens`);
-  if (usage.cost_usd) parts.push(`$${usage.cost_usd.toFixed(2)} reported by Claude Code`);
+  if (usage.cost_usd) parts.push(`$${usage.cost_usd.toFixed(2)} reported by the AI`);
   return parts.join(' · ') + '. A subscription has limits rather than a bill.';
 }
 
@@ -215,7 +215,7 @@ function planView(plan, engine, folder, drawPlan) {
       plan.sorting_requests
         ? `Sorting the transcripts already made needs about ${plan.sorting_requests} AI request${plan.sorting_requests === 1 ? '' : 's'}. `
         : '',
-      'Every other step is counted when the run reaches it. Requests go to your signed-in Claude Code one at a time, and the run stops if a limit is reached.',
+      'Every other step is counted when the run reaches it. Requests go to your signed-in AI (Claude Code or Codex, as chosen in Settings) one at a time, and the run stops if a limit is reached.',
     ),
     h(
       'div',

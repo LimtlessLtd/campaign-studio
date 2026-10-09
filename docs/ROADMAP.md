@@ -20,7 +20,7 @@ update a note when its design changes.
 
 Ranked by how much each holds back the goal.
 
-1. **Session recordings to next session** (W73; W68 transcription, W69 sorting, W70 ledger, W71 arc options and W72 the automatic run are done). The owner's main use.
+1. **Session recordings to next session** (W74 and W76 are live checks; W68 transcription, W69 sorting, W70 ledger, W71 arc options, W72 the automatic run and W73 the Codex provider are done). The owner's main use.
    Recordings are transcribed locally, split into real play and table banter, folded into a thread ledger, and
    turned into reviewed arc proposals and a next-session draft. Take these rows before the rest.
 2. **Campaign memory and AI context** (W24, W35). W23 now bounds drafts and prompt packs, and the world import
@@ -98,27 +98,6 @@ their row and finding say enough.
 - Images of imported entries already sit in Foundry's Data folder: pass their Foundry-relative paths
   through instead of resolving them against the campaign folder, where they are dropped today.
 
-### W73 Session recordings: a Codex provider
-
-- Owner feedback (8 Oct): point AI at local session videos, transcribe the audio, work out which threads are
-  still loose, then help create arcs and resolutions and the next session. The table's jokes and invented gags
-  (a player's made-up animal form) must not become canon, while real play (destroying a named temple) must.
-  The owner wants this to run automatically between sessions, not as a chore.
-- **Subscription only.** Claude and Codex subscriptions cannot listen to audio, so transcription is a local
-  step. Drafting uses the signed-in Claude Code CLI (`ai_provider.ClaudeCLI`, `claude -p`); no API key is read
-  or required for any step here. A hosted transcription or API provider is out of scope. Long runs are costly
-  against subscription limits: process one session at a time, chunk under `context_budget_chars`, estimate
-  before a run and ask first (W44), and never resend settled sessions (the ledger and logs carry them).
-- **Input from W68 and W69.** A transcript is stored (`transcripts/<id>`) with passages the GM confirmed as
-  in-game or table banter. Read confirmed play through `transcript_classifier.confirmed_play`, which returns
-  each passage with its segment numbers, times and text; never read unconfirmed, banter or unclear passages.
-  Table lore (`table-lore`) holds the gags to skip, and `docs/ARCHITECTURE.md` → Play, banter and table lore
-  describes the windows, the job chain and the review.
-- **W73 Codex.** Check what `codex exec` can return as structured output without tools or an API key. If it
-  meets the contract in `AGENTS.md` (no filesystem or shell tools, JSON schema, cancellable), add it as a
-  second provider; otherwise record what it lacks and keep Claude as the only automatic drafter. Prompt packs
-  already export for any assistant meanwhile.
-
 ### W74 Live check of recordings to draft
 
 - Everything from W68 to W72 is tested with fake engines and a fake Claude, so nothing here is known about a
@@ -137,6 +116,22 @@ their row and finding say enough.
   recording, ledger, arc and automatic-run workflows, and map apply. Split it along those lines, keeping
   `FINISHERS` and `SETTLERS` as the one place a job kind is registered and `commit_docs` the one multi-document
   write. Move functions without changing them; run the full suite before and after.
+
+### W76 Live check of the Codex provider
+
+- W73 added Codex as a draft provider (`tools/codex_worker.py`) but tested it only against a fake `codex`
+  command, because a live `codex exec` spends the owner's subscription. Its flags, the `--json` event shapes
+  and the tool lock-down come from `codex exec --help`, `codex features list` and public documentation.
+- With the owner, run one small draft (a thread-ledger or arc-options window on a synthetic campaign) with
+  Codex chosen in Settings, and record the `codex --version`. Confirm that `--output-schema` and `--json`
+  work together, that the final `agent_message` is the schema's JSON object, that `turn.completed` reports
+  the tokens the worker reads (`input_tokens`, `cached_input_tokens`, `output_tokens`), and that the draft
+  made no tool request. If the stream guard stops a harmless item, add its type to `ALLOWED_ITEMS`; if
+  Codex offers a tool that no listed feature disables, add the feature to `OFF_FEATURES`.
+- Check what Codex prints when the subscription limit is reached and that `auto_run.LIMIT` matches it. Check
+  that a cancelled draft leaves no Codex process and that the temp scratch folder is swept.
+- Turn each failure into a row. If a tool cannot be kept out, say so in the README and keep Claude Code the
+  only automatic drafter.
 
 ### W33 Item-level proposal review
 

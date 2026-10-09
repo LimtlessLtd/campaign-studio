@@ -39,6 +39,31 @@ class ClaudeCLI:
         return command
 
 
+class CodexCLI:
+    """The signed-in Codex CLI (a ChatGPT subscription, never an API key), run by `codex_worker.py`.
+
+    The worker holds Codex to the draft contract: no tools, one JSON object, and the subscription login.
+    """
+
+    label = 'Codex'
+
+    def available(self, ai):
+        return bool(shutil.which('codex'))
+
+    def command(self, ai, kind, schema):
+        exe = shutil.which('codex')
+        if not exe:
+            raise ValueError('Codex (the codex command) is not installed or not on PATH')
+        command = [
+            sys.executable,
+            '-u',
+            os.path.join(campaign.INSTALL, 'tools', 'codex_worker.py'),
+            kind,
+            exe,
+        ]
+        return command + [ai['model']] if ai.get('model') else command
+
+
 class OpenAIResponses:
     label = 'OpenAI API'
 
@@ -62,7 +87,7 @@ class OpenAIResponses:
         ]
 
 
-PROVIDERS = {'claude': ClaudeCLI(), 'openai': OpenAIResponses()}
+PROVIDERS = {'claude': ClaudeCLI(), 'codex': CodexCLI(), 'openai': OpenAIResponses()}
 
 
 def clean_settings(raw):

@@ -743,11 +743,12 @@ async function studioSettings(_arg, context) {
         formInput(f.ai, 'provider', 'Draft provider', {
           options: [
             ['claude', 'Claude Code'],
+            ['codex', 'Codex'],
             ['openai', 'OpenAI API'],
           ],
         }),
         formInput(f.ai, 'model', 'AI model', {
-          placeholder: 'Optional for Claude Code; required for OpenAI API',
+          placeholder: 'Optional; required for OpenAI API',
         }),
         formInput(f.ai, 'key_env', 'OpenAI API key environment variable', {
           help: result.ai.key_available
@@ -765,7 +766,7 @@ async function studioSettings(_arg, context) {
         h(
           'p',
           { class: 'muted' },
-          'The selected provider drafts a structured proposal from your campaign context. You review it before applying. OpenAI API drafts may incur charges; prompt packs work with other assistants too.',
+          'The selected provider drafts a structured proposal from your campaign context. You review it before applying. Claude Code and Codex use the account you are signed in to, never an API key; OpenAI API drafts may incur charges. Prompt packs work with other assistants too.',
         ),
         h(
           'p',

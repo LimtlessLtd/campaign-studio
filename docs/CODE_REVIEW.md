@@ -199,6 +199,11 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   usage limit" is a guess (W74). It starts a step after a job or a review, not on a timer: a press (the
   button, or the scheduled client) resumes a run that stopped after a failure, a limit or a server restart. One
   session is followed at a time, and a new recording is not added to a run already in progress.
+- The Codex provider (W73) is tested with a fake `codex` command only. Codex is a coding agent with no switch
+  that removes every tool, so the worker turns the tool features off, runs it read-only in an empty folder and
+  stops the draft at the first stream item that is not thinking or answering: a tool that no listed feature
+  disables is stopped at its first event, not prevented. Its flags and event shapes come from the CLI's help
+  and public documentation, and `auto_run.LIMIT` is tuned to Claude's limit wording (W74, W76).
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.

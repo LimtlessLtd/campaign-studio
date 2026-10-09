@@ -79,14 +79,20 @@ Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder t
 
 ## AI and images
 
-For structured map and request drafts, choose Claude Code or OpenAI API in Settings. Claude Code must be
+For structured map and request drafts, choose Claude Code, Codex or OpenAI API in Settings. Claude Code must be
 installed and authenticated separately, with CLI support for `--json-schema`, `--restricted`, `--tools` and
-`--strict-mcp-config`; its model is optional. For OpenAI API, enter a model that supports
+`--strict-mcp-config`; its model is optional. Codex must be installed and signed in with your ChatGPT account
+(`codex login`); it drafts on that subscription, its model is optional, and Studio never gives it an API key:
+`OPENAI_API_KEY` and `CODEX_API_KEY` are removed from its environment and a Codex signed in with an API key is
+refused. For OpenAI API, enter a model that supports
 [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses)
 and set `OPENAI_API_KEY` in the server environment before starting Studio (or configure another environment
 variable name in Settings). The key itself is never saved. OpenAI drafts use the Responses API and can incur
-API charges when you start a draft. No tools are supplied to either provider; each JSON proposal is validated
-and shown for GM review. **Export prompt pack** and **Import proposal** also work without a connected provider.
+API charges when you start a draft. No tools are supplied to any provider; each JSON proposal is validated
+and shown for GM review. Codex has no switch that removes every tool, so Studio starts it with its tool
+features off, a read-only sandbox, no user configuration and an empty working folder, and stops the draft at
+the first event that is not the model thinking or answering. That has only been tested against a fake `codex`
+program (W76 is the live check). **Export prompt pack** and **Import proposal** also work without a connected provider.
 See `DM/AI_WORKFLOW.md`.
 General Requests use the same draft, review and apply pattern for codex entries, threads and session prep.
 Link a session before requesting encounters or handouts. Applied requests keep their stable IDs; use a new

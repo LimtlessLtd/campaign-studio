@@ -5,14 +5,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from copy import deepcopy
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import arc_options
-import request_workflow
-import thread_ledger
-import transcript_classifier
-import workflow
+import draft_schemas
 
 RESPONSES_URL = 'https://api.openai.com/v1/responses'
 MAX_RESPONSE = 8 * 1024 * 1024
@@ -21,44 +16,6 @@ MAX_RESPONSE = 8 * 1024 * 1024
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, msg, headers, newurl):
         return None  # keep the Authorization header on the fixed API origin
-
-
-def draft_schema(kind):
-    if kind == 'request':
-        return request_workflow.SCHEMA
-    if kind == 'content':
-        return workflow.CONTENT_SCHEMA
-    if kind == 'classify':
-        return transcript_classifier.SCHEMA
-    if kind == 'thread-ledger':
-        return thread_ledger.SCHEMA
-    if kind == 'arc-options':
-        return arc_options.SCHEMA
-    if kind in ('layout', 'revision'):
-        return strict_layout_schema()
-    raise ValueError('Unknown structured draft kind.')
-
-
-def strict_layout_schema():
-    """Constrain each operation to its own complete strict-output object."""
-    schema = deepcopy(workflow.LAYOUT_SCHEMA)
-    fields = schema['properties']['operations']['items']['properties']
-    variants = {
-        'rect': ('row', 'col', 'width', 'height', 'fill', 'border'),
-        'path': ('points', 'width', 'char'),
-        'stamp': ('row', 'col', 'rows'),
-        'scatter': ('row', 'col', 'width', 'height', 'count', 'char', 'replace'),
-    }
-    schema['properties']['operations']['items'] = {
-        'anyOf': [
-            workflow.obj(
-                {'type': {'type': 'string', 'enum': [kind]}}
-                | {field: fields[field] for field in names}
-            )
-            for kind, names in variants.items()
-        ]
-    }
-    return schema
 
 
 def parse_response(payload):
@@ -115,7 +72,7 @@ def generate(kind, model, key_env, prompt, opener=None):
                     'type': 'json_schema',
                     'name': 'campaign_proposal',
                     'strict': True,
-                    'schema': draft_schema(kind),
+                    'schema': draft_schemas.for_kind(kind),
                 }
             },
         }

@@ -1328,12 +1328,23 @@ def auto_run_snapshot(run):
 
 
 def auto_run_usage(run):
-    """The AI requests made since the run began, with the tokens, cost and time they reported."""
+    """The AI requests the run made, with the tokens, cost and time they reported.
+
+    A job belongs to the run by the record it works on, so the GM's other drafts, and anything run after
+    this one ended, are not counted. (A failed arc proposal that a retry replaced is not counted either.)
+    """
+    recordings = {rec['id'] for rec in run['recordings']}
+    owned = {
+        'classify': recordings,
+        'ledger': recordings,
+        'arc': {run['arc']},
+        'request': {run['request']},
+    }
     mine = []
     for job in JOBS_SERVICE.iter_jobs():  # newest first
         if job.get('created', 0) < run['created']:
             break
-        if job['kind'] in usage.DRAFT_KINDS:
+        if any(job.get(field) in (ids - {''}) for field, ids in owned.items()):
             mine.append(job)
     return usage.combined(mine) | {'requests': len(mine)}
 
@@ -1425,6 +1436,10 @@ def perform_auto_action(run, action):
                 remove_arc(run['arc'])  # the failed proposal this one replaces
             except LookupError:
                 pass
+            run['arc'] = (
+                ''  # if the new one is refused, the old one must not read as removed by the GM
+            )
+            write_doc(auto_run_name(run['id']), run)
         run['arc'] = start_arcs(action['threads'])['arc']
         write_doc(auto_run_name(run['id']), run)
     elif do == 'draft':

@@ -112,7 +112,7 @@ async function arcsPage(id, context) {
     pageHead(
       'STORY ARCS',
       'Story arcs',
-      'Pick the threads still open and let your signed-in Claude Code propose where each could go next. You choose what happens; nothing changes until you apply it.',
+      'Pick the threads still open and let your signed-in AI (Claude Code or Codex, as chosen in Settings) propose where each could go next. You choose what happens; nothing changes until you apply it.',
     ),
     h(
       'section',

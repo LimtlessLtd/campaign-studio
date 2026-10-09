@@ -13,6 +13,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.parse
@@ -614,6 +615,37 @@ class WholeSessionTests(RunCase):
         self.assertEqual(report['usage']['input_tokens'], 40)
         self.assertEqual(report['usage']['cost_usd'], 1.0)
 
+    def test_a_runs_usage_counts_only_its_own_requests_and_stops_growing_when_it_ends(self):
+        self.press()
+        self.work()
+        self.play()
+        self.work()
+        events = self.stored('ledger/' + self.ident)['events']
+        core.apply_ledger(self.ident, [events[0]['id']])
+        self.work()
+        [arc_id] = core.list_docs('arcs')
+        core.apply_arc(arc_id, [{'option': 'o1'}])
+        self.work()
+        self.apply_request()
+        core.continue_auto_run()
+        before = self.report()['usage']
+        self.assertEqual(before['requests'], 4)
+
+        # Later work by the GM (a map workflow, another request) is not this run's.
+        for n, extra in enumerate(({}, {'request': 'req-someone-else'})):
+            core.JOBS_SERVICE.save_job(
+                dict(
+                    id=f'2999123{n}-000000-aaaa',
+                    lane='claude',
+                    kind='ai-workflow' if not extra else 'request-draft',
+                    status='done',
+                    created=time.time() + 60 + n,
+                    usage={'input_tokens': 1000, 'output_tokens': 1, 'cost_usd': 9.0},
+                    **extra,
+                )
+            )
+        self.assertEqual(self.report()['usage'], before)
+
     def test_the_banter_a_gm_confirmed_is_never_shown_to_the_ledger(self):
         self.press()
         self.work()
@@ -694,6 +726,31 @@ class StopTests(RunCase):
         self.assertTrue(core.LANES['transcribe'].empty())
         self.press()
         self.assertEqual(self.work(), ['transcribe', 'classify'])
+
+    def test_a_refused_arc_retry_is_not_mistaken_for_a_proposal_the_gm_removed(self):
+        self.press()
+        self.work()
+        self.play()
+        self.work()
+        events = self.stored('ledger/' + self.ident)['events']
+        core.apply_ledger(self.ident, [events[0]['id']])
+        self.fake.fail = 'Claude AI usage limit reached|1760000000'
+        self.assertEqual(self.work(), ['arc-options'])
+        self.assertEqual(self.report()['state'], 'stopped')
+        failed = self.stored('auto-runs/' + core.read_auto_runs()[0]['id'])['arc']
+
+        with patch.object(core, 'start_arcs', side_effect=ValueError('No engine today.')):
+            with self.assertRaisesRegex(ValueError, 'No engine today'):
+                self.press()
+        self.assertNotIn(failed, core.list_docs('arcs'))  # the failed proposal was replaced
+        arcs = next(row for row in self.report()['steps'] if row['step'] == 'arcs')
+        self.assertNotEqual((arcs['state'], arcs['note']), ('done', 'The proposal was removed'))
+        self.assertEqual(core.LANES['claude'].qsize(), 0)  # and no draft jumped ahead of the arcs
+
+        self.fake.fail = None
+        self.press()
+        self.assertEqual(self.work(), ['arc-options'])
+        self.assertEqual(self.report()['state'], 'waiting')
 
     def test_only_one_ai_request_runs_at_a_time_across_recordings(self):
         second = self.folder / 'session-one-part-two.mp4'
