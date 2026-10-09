@@ -36,6 +36,7 @@ const context = {
   recordingsPage: emptyPage,
   prepPage: emptyPage,
   threadsPage: emptyPage,
+  arcsPage: emptyPage,
   codexPage: emptyPage,
   studioMaps: emptyPage,
   worldPage: emptyPage,

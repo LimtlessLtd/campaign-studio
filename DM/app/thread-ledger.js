@@ -194,6 +194,7 @@ function looseThreadsBox(items) {
       { class: 'muted' },
       'Open and foreshadowed threads, stalest first. Resolved threads are left out.',
     ),
+    h('a', { class: 'btn', href: '#/arcs' }, 'Propose arcs for these threads'),
     items.length
       ? h(
           'ol',

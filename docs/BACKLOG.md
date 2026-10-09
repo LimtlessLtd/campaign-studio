@@ -14,7 +14,6 @@ Next ID: W74
 
 | ID  | Priority | Work                                                                                                                           | Acceptance criteria                                                                          |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| W71 | 1        | Arc and resolution proposals for loose threads: several options each, using the codex, party and recent logs                   | Each loose thread gets reviewed options; accepted ones become thread, hook and prep changes  |
 | W72 | 1        | One action (and a scheduled Claude task) from new recordings to a reviewed next-session draft                                  | New files in a chosen folder run W68-W71 and Session Forge; the GM only reviews              |
 | W73 | 2        | Codex CLI as a second subscription-based draft provider, after checking what its structured output allows                      | A fake-CLI fixture drafts a proposal; no API key is read; unsupported options are documented |
 | W33 | 2        | Proposal review, remainder: before/after diffs, redraft one item, item review for map and session workflows                    | Map and session drafts support item choices; changed records show diffs                      |

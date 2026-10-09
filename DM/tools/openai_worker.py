@@ -8,7 +8,9 @@ import urllib.request
 from copy import deepcopy
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import arc_options
 import request_workflow
+import thread_ledger
 import transcript_classifier
 import workflow
 
@@ -28,6 +30,10 @@ def draft_schema(kind):
         return workflow.CONTENT_SCHEMA
     if kind == 'classify':
         return transcript_classifier.SCHEMA
+    if kind == 'thread-ledger':
+        return thread_ledger.SCHEMA
+    if kind == 'arc-options':
+        return arc_options.SCHEMA
     if kind in ('layout', 'revision'):
         return strict_layout_schema()
     raise ValueError('Unknown structured draft kind.')

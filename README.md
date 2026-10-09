@@ -130,6 +130,13 @@ unresolved threads, stalest first, with their heroes and latest quoted evidence.
 in bounded windows; a failed window can resume. Tests use a fake Claude answer and synthetic play; no live
 Claude or long recording has been checked for this step.
 
+**Story arcs** (in the sidebar) lists your loose threads and asks Claude for two or three options for each
+thread you choose, up to five at a time: a resolution, an escalation and a twist, naming the codex entries and
+heroes they use. Reword any option, then choose at most one per thread. Applying plans those threads (status
+_planned_, with the plan and its hook added to the thread's details) and offers the options' pitch lines when you
+plan the next session. Nothing changes until you apply, and a thread you edited since the proposal asks for a
+fresh one. Tests fake Claude on synthetic threads; no live draft has been checked for quality.
+
 From a session prep, **Plan whole session** turns one pitch into a reviewable proposal for a recap, goals,
 three to six scenes, cast, thread changes, handouts, loot and a checklist. Choose the session length, combat
 and social focus, and threads to push. Applying the reviewed draft links the records and queues up to two

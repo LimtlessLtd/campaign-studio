@@ -424,9 +424,45 @@ class SchemaTests(unittest.TestCase):
 
         result = self.migrate()
 
-        self.assertEqual((result['from'], result['version']), (11, 12))
+        self.assertEqual((result['from'], result['version']), (11, schema.CURRENT))
         self.assertEqual(self.read('data/transcripts/rec-0123456789abcdef.json'), older)
         self.assertEqual(self.read('data/prep/s1.json')['title'], 'Session 1')
+
+    def test_version_twelve_ledgers_stay_intact_and_stored_arcs_are_completed(self):
+        self.migrate()
+        schema.write_marker(self.data, 12, 'Synthetic version 12 campaign')
+        ledger = shapes.LEDGER.new(
+            id='rec-0123456789abcdef', session='s1', status='applied', selected=['e0-church']
+        )
+        path = self.dm / 'data/ledger/rec-0123456789abcdef.json'
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(ledger))
+        arcs = self.dm / 'data/arcs'
+        arcs.mkdir()
+        (arcs / 'arc-0123abcd.json').write_text(  # an arc stored before options gained a hook
+            json.dumps(
+                {
+                    'id': 'arc-0123abcd',
+                    'status': 'review',
+                    'threads': ['church'],
+                    'options': [
+                        {'id': 'o1', 'thread': 'church', 'kind': 'twist', 'title': 'A turn'}
+                    ],
+                }
+            )
+        )
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (12, schema.CURRENT))
+        self.assertEqual(self.read('data/ledger/rec-0123456789abcdef.json'), ledger)
+        arc = self.read('data/arcs/arc-0123abcd.json')
+        self.assertEqual((arc['status'], arc['choices'], arc['base_revs']), ('review', [], {}))
+        self.assertEqual(
+            (arc['options'][0]['title'], arc['options'][0]['hook'], arc['options'][0]['pcs']),
+            ('A turn', '', []),
+        )
+        self.assertEqual(self.migrate()['status'], 'current')  # a second run changes nothing
 
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()

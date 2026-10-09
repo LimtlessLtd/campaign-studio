@@ -314,6 +314,80 @@ class BrowserSmoke(unittest.TestCase):
         self.assertEqual(len(self.stored('prep/s1')['log']['outcomes']), 1)
         self.assertEqual(len(self.stored('ledger/' + ident)['selected']), 3)
 
+    def test_story_arcs_propose_review_apply_one_option_and_seed_the_next_pitch(self):
+        import shapes
+        import test_arc_options as arcs
+        import test_transcript_classifier as sorting
+
+        campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='First session'))
+        campaign_core.write_doc(
+            'threads/church', shapes.THREAD.new(id='church', title='Church of Auril')
+        )
+        campaign_core.write_doc(
+            'threads/smuggler',
+            shapes.THREAD.new(id='smuggler', title='The escaped smuggler', status='foreshadowed'),
+        )
+        for ident, kind, name in (
+            ('mira', 'pc', 'Mira'),
+            ('auril-church', 'place', 'Church of Auril'),
+            ('harbour-master', 'npc', 'Harbour Master Brae'),
+        ):
+            campaign_core.write_doc(
+                'codex/' + ident, shapes.CODEX_ENTRY.new(id=ident, type=kind, name=name)
+            )
+        self.addCleanup(patch.stopall)
+        patch('ai_provider.command', return_value=['claude', '-p']).start()
+        runner = sorting.FakeClaude()
+        draft = arcs.proposal()
+        draft['options'][0]['summary'] = 'The <b>cult</b> rebuilds the church.'
+        runner.reply = draft
+        patch.object(campaign_core.JOBS_SERVICE, 'runner', runner).start()
+
+        self.page.set_viewport_size(NARROW)
+        self.open('#/arcs')
+        expect(self.page.get_by_role('button', name='Propose arcs')).to_be_disabled()
+        self.page.get_by_label('Church of Auril').check()
+        self.page.get_by_label('The escaped smuggler').check()
+        expect(self.page.get_by_text('2 of 5 threads chosen.')).to_be_visible()
+        self.assert_accessible('arcs start phone')
+        with self.page.expect_response(lambda response: '/api/arcs/start' in response.url):
+            self.page.get_by_role('button', name='Propose arcs').click()
+        job, cmd, stdin = campaign_core.LANES['claude'].get_nowait()
+        campaign_core.execute_job(job, cmd, stdin)
+        self.assertEqual(self.stored('threads/church')['status'], 'open')
+
+        self.page.reload()
+        expect(self.page.locator('#main h1').first).to_be_visible()
+        self.page.get_by_role('link', name='Review options').click()
+        expect(self.page.get_by_role('button', name='Apply chosen options')).to_be_visible()
+        self.assertEqual(self.page.locator('.arc-option b').count(), 0)  # model text stays text
+        expect(self.page.locator('#arc-o2-summary')).to_have_value(
+            'The <b>cult</b> rebuilds the church.'
+        )
+        self.assert_accessible('arcs review phone')
+        self.page.set_viewport_size(DESKTOP)
+        self.assert_accessible('arcs review desktop')
+
+        self.page.get_by_role('button', name='Apply chosen options').click()
+        expect(self.page.locator('#toast')).to_contain_text('at least one thread')
+        self.page.get_by_label('Choose twist: A twist').check()
+        self.page.locator('#arc-o2-pitch').fill('The cult trades the church for a harbour favour.')
+        with self.page.expect_response(lambda response: '/apply' in response.url):
+            self.page.get_by_role('button', name='Apply chosen options').click()
+        expect(self.page.get_by_text('Applied 1 of 2 threads', exact=False)).to_be_visible()
+        self.assertEqual(self.stored('threads/church')['status'], 'planned')
+        self.assertIn('Arc plan (twist)', self.stored('threads/church')['detail'])
+        self.assertEqual(self.stored('threads/smuggler')['status'], 'foreshadowed')
+
+        self.open('#/prep/s1')
+        self.page.get_by_role('button', name='Plan whole session').click()
+        expect(self.page.get_by_text('Seeds from your story arcs')).to_be_visible()
+        self.page.get_by_role(
+            'button', name='Add to the pitch: The cult trades the church for a harbour favour.'
+        ).click()
+        pitch = self.page.locator('textarea[placeholder^="e.g. The party follows"]')
+        expect(pitch).to_have_value('The cult trades the church for a harbour favour.')
+
     def test_openai_settings_enable_structured_draft_controls(self):
         self.page.set_viewport_size(NARROW)
         with patch.dict(os.environ, {'STUDIO_TEST_KEY': 'synthetic-key'}):

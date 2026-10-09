@@ -162,6 +162,7 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 | `data/world-maps.json`       | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
 | `data/transcripts/<id>.json` | `transcript`  | segments, and the passages sorted from them (`transcript_passage`)   |
 | `data/ledger/<id>.json`      | `ledger`      | reviewed evidence events for one transcript (`ledger_event`)         |
+| `data/arcs/<id>.json`        | `arc`         | options proposed for chosen loose threads (`arc_option`)             |
 | `data/table-lore.json`       | `table_lore`  | notes on gags the GM confirmed as banter (`table_lore_item`)         |
 | `data/prep/<session>.json`   | `prep`        | scenes with thread clues, handouts, checklist items, loot            |
 | `maps/<slug>/key.json`       | `map_key`     | areas (with journal entries, events, loot), events                   |
@@ -169,7 +170,7 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, and schema 12 adds separate thread ledgers. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, and schema 13 adds arc proposals. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -254,7 +255,7 @@ it has not been exercised with a paid API call.
 
 The owner's own use needs no API key: drafting goes through the signed-in Claude Code CLI, and session
 recordings are transcribed locally (W68), sorted into play and banter (W69), then proposed as a reviewed
-thread ledger (W70). Arc options and automatic runs remain W71–W73 in `docs/ROADMAP.md`. The OpenAI provider
+thread ledger (W70) and arc options for loose threads (W71). An automatic run and a Codex provider remain W72–W73 in `docs/ROADMAP.md`. The OpenAI provider
 is optional.
 
 ## Session recordings
@@ -335,6 +336,30 @@ A retried apply returns the applied marker without appending again. Existing cus
 and times stay in the ledger and in the edited record text. `GET /api/threads/loose?hero=` returns open,
 planned and foreshadowed threads sorted by last touched session, with hero links and the selected ledger
 evidence. No event changes the campaign until the GM applies it.
+
+### Story arcs
+
+`POST /api/arcs/start {threads}` takes one to five loose threads (open, planned or foreshadowed) and queues
+one `arc-options` job on the draft lane. `arc_options.prompt` builds the request through `context.build`: the
+chosen threads and the codex entries and heroes they link in full, the party and the latest session logs
+(`campaign_info`), an index of the rest of the codex, and the newest recorded quotes about each thread from
+applied ledgers (W70). All of it is reference data, never instructions. The answer is `arc_options.SCHEMA`:
+options with a thread ID, a kind (resolution, escalation or twist), a title, summary, hook, pitch line, and
+the codex entries and heroes used. `finish_arc` validates it in `arc_options.validate`: options for threads
+nobody chose and repeated kinds are dropped, text is flattened and bounded, links that name no codex entry or
+hero are dropped, and every chosen thread must keep an option or the proposal fails and can be drafted again.
+One document `arcs/<id>` (`shapes.ARC`, schema 13) holds the options, the chosen option IDs and each chosen
+thread's revision when it was proposed. Up to 50 are kept and the generic document save refuses them.
+
+`GET /api/arcs` lists proposals, `GET /api/arcs/<id>` reads one, `POST /api/arcs/<id>/apply {choices:
+[{option, title?, summary?, hook?, pitch?}]}` applies and `POST /api/arcs/<id>/remove` deletes a proposal that
+is not drafting. Apply takes at most one option per thread, bounds any reworded text again, refuses when a
+chosen thread changed since it was proposed, and then writes in one `commit_docs` change, the proposal last:
+each chosen thread becomes `planned`, its detail gains the plan and its hook, and the option's entries and
+heroes are added to its links. A retry returns the applied proposal and different choices are refused;
+removing a proposal keeps the changes it made. `GET /api/arcs/seeds` returns the pitch lines of chosen
+options whose threads are not resolved, and the Session Forge pitch box offers them. Nothing here edits a codex
+entry, and the only model call is the draft.
 
 ## Foundry boundary
 

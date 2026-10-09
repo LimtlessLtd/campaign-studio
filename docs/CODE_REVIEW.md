@@ -188,6 +188,10 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   idempotent retry and a phone/desktop browser flow. No real Claude draft has checked event quality, and no
   long recording has measured the number of windows or cost. Applied ledgers keep their evidence if a
   transcript is later re-transcribed or removed; a second ledger for that recording ID is not yet offered.
+- Arc proposals (W71) are tested with a fake model on synthetic threads, a stale-thread check, one-per-thread
+  choices, an idempotent retry and a phone/desktop browser flow. No real Claude draft has judged option
+  quality, and the review shows each option's text rather than a before/after diff of the thread (W33). An
+  option plans a thread but never marks it resolved: the GM does that after the table plays it.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
