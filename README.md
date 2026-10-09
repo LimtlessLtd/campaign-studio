@@ -163,8 +163,10 @@ three to six scenes, cast, thread changes, handouts, loot and a checklist. Choos
 and social focus, and threads to push. Applying the reviewed draft links the records and queues up to two
 new map briefs as layout workflows. Open each map brief in Maps & locations to draft and review its layout;
 the session action does not generate or export a map or publish anything to Foundry. Recent played-session
-logs enter the draft as reference material. Proposals are reviewed as a whole; item-by-item acceptance is
-planned in W33.
+logs enter the draft as reference material. Review each new map, cast entry, thread, thread change, scene
+and handout one at a time: untick what you do not want and only the ticked items are applied. A scene keeps
+its place without a map, NPC or clue you left out. Recap, goals, loot and checklist apply as a whole, and
+before/after diffs and "redraft this one" are planned in W33.
 
 Image briefs are queued with their content. Upload artwork, or configure a local HTTP / remote HTTPS
 image endpoint. The request contract is `{model, prompt, size, n: 1}`; the response must include

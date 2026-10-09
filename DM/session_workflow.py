@@ -6,6 +6,7 @@ import time
 from copy import deepcopy
 
 import context as prompt_context
+import item_review
 import records
 import shapes
 import workflow
@@ -13,6 +14,8 @@ import workflow
 STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
 THEMES = ['city', 'outdoor', 'dungeon', 'cellar', 'temple', 'tavern', 'ship', 'cave']
 ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
+# The kinds of proposed rows a GM accepts or rejects one at a time (see `item_review`).
+REVIEWABLE = ('maps', 'entries', 'threads', 'thread_changes', 'scenes', 'handouts')
 
 SCHEMA = workflow.obj(
     {
@@ -295,10 +298,39 @@ def base_hash(item, draft, read_doc):
     return hashlib.sha256(json.dumps(base, sort_keys=True).encode('utf-8')).hexdigest()
 
 
-def apply(item, read_doc, commit, inbox, party_level=5):
+def reviewable_keys(draft):
+    """The `kind:id` keys a GM can accept or reject one at a time."""
+    return item_review.keys(draft, REVIEWABLE)
+
+
+def without_rejected(draft, rejected):
+    """The draft minus rejected rows, with a scene's links to a rejected map, NPC or thread removed.
+
+    A scene is kept without the map, NPC or clue it pointed at: the scene is the GM's to judge on its own.
+    """
+    kept, gone = item_review.without(draft, rejected, REVIEWABLE)
+    kept['scenes'] = [
+        {
+            **scene,
+            **({'map': '', 'area': 0} if scene['map'] in gone['maps'] else {}),
+            'npcs': [npc for npc in scene['npcs'] if npc not in gone['entries']],
+            'clues': [clue for clue in scene['clues'] if clue['thread'] not in gone['threads']],
+        }
+        for scene in kept['scenes']
+    ]
+    return kept
+
+
+def apply(item, read_doc, commit, inbox, party_level=5, rejected=()):
+    """Apply the accepted rows of a reviewed session proposal in one commit.
+
+    `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out. The staleness check covers the
+    whole proposal, so a rejected row cannot hide a prep or thread edited after review.
+    """
     draft = validate(item, item['draft'], read_doc)
     if item.get('draft_base') != base_hash(item, draft, read_doc):
         raise ValueError('The session prep or a linked thread changed after review. Draft again.')
+    draft = without_rejected(draft, rejected)
     prefix = item['id'] + '-'
     old_codex = read_doc('codex') or {'entries': []}
     old_threads = read_doc('threads') or {'threads': []}

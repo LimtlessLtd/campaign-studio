@@ -8,6 +8,7 @@ from copy import deepcopy
 
 import shapes
 import context as prompt_context
+import item_review
 import session_workflow
 import workflow
 
@@ -323,31 +324,19 @@ REVIEWABLE = ('entries', 'threads', 'scenes', 'handouts')
 
 def reviewable_keys(draft):
     """The `kind:id` keys a GM can accept or reject one at a time."""
-    return {f'{kind}:{row["id"]}' for kind in REVIEWABLE for row in draft.get(kind, [])}
+    return item_review.keys(draft, REVIEWABLE)
 
 
 def without_rejected(draft, rejected):
     """The draft minus rejected items, with links to a rejected entry removed from what stays."""
-    rejected = set(rejected or ())
-    if not rejected:
-        return draft
-    if rejected - reviewable_keys(draft):
-        raise ValueError('A rejected item is not in this proposal.')
-    kept = {
-        **draft,
-        **{
-            kind: [row for row in draft[kind] if f'{kind}:{row["id"]}' not in rejected]
-            for kind in REVIEWABLE
-        },
-    }
-    gone = {key.split(':', 1)[1] for key in rejected if key.startswith('entries:')}
+    kept, gone = item_review.without(draft, rejected, REVIEWABLE)
     kept['scenes'] = [
-        {**scene, 'npcs': [npc for npc in scene['npcs'] if npc not in gone]}
+        {**scene, 'npcs': [npc for npc in scene['npcs'] if npc not in gone['entries']]}
         for scene in kept['scenes']
     ]
     kept['focus'] = {
         **kept['focus'],
-        'links': [link for link in kept['focus']['links'] if link not in gone],
+        'links': [link for link in kept['focus']['links'] if link not in gone['entries']],
     }
     return kept
 
@@ -382,9 +371,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
     if item.get('draft_source') != input_hash(item):
         raise ValueError('The request changed after drafting. Make a new proposal.')
     if item['kind'] == 'session':
-        if rejected:
-            raise ValueError('Item-level selection is not available for a session proposal yet.')
-        return session_workflow.apply(item, read_doc, commit, inbox, party_level)
+        return session_workflow.apply(item, read_doc, commit, inbox, party_level, rejected)
     draft = validate(item, item['draft'], read_doc)
     if rejected:
         draft = without_rejected(draft, rejected)

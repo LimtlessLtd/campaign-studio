@@ -220,9 +220,23 @@ async function importRequestProposal(item) {
 /* Items of a proposal the GM has unticked, by request ID, as the `kind:id` keys the server accepts. */
 const rejectedItems = new Map();
 const REVIEWED_KINDS = ['entries', 'threads', 'scenes', 'handouts'];
+const SESSION_REVIEWED_KINDS = [
+  'maps',
+  'entries',
+  'threads',
+  'thread_changes',
+  'scenes',
+  'handouts',
+];
+const reviewedKinds = (item) => (item.kind === 'session' ? SESSION_REVIEWED_KINDS : REVIEWED_KINDS);
+const threadTitle = (id) => S.recordIndex.threads.find((x) => x.id === id)?.title || id;
+/* A change to an existing thread has no name of its own: it is named by the thread it changes. */
+const choiceLabel = (kind, row) =>
+  kind === 'thread_changes'
+    ? 'Update thread: ' + threadTitle(row.id)
+    : row.name || row.title || row.id;
 function itemChoice(item, kind, row) {
   const key = kind + ':' + row.id;
-  const rejected = rejectedItems.get(item.id) || new Set();
   return h(
     'div',
     { class: 'card', style: 'margin:4px 0' },
@@ -231,14 +245,16 @@ function itemChoice(item, kind, row) {
       { class: 'row' },
       h('input', {
         type: 'checkbox',
-        checked: !rejected.has(key),
+        checked: !rejectedItems.get(item.id)?.has(key),
         onchange: (event) => {
+          // Read the shared set when the box changes: every box of a proposal is drawn before any is unticked.
+          const rejected = rejectedItems.get(item.id) || new Set();
           if (event.target.checked) rejected.delete(key);
           else rejected.add(key);
           rejectedItems.set(item.id, rejected);
         },
       }),
-      h('b', {}, row.name || row.title || row.id),
+      h('b', {}, choiceLabel(kind, row)),
       h('span', { class: 'muted' }, 'Include when applying'),
     ),
     h('pre', { class: 'file', tabindex: 0 }, JSON.stringify(row, null, 2)),
@@ -446,6 +462,11 @@ function requestCard(it, box, draw) {
           'details',
           { open: true },
           h('summary', {}, 'Review additions'),
+          h(
+            'p',
+            { class: 'muted' },
+            'Untick what you do not want. Applying adds only the ticked items, and anything you keep drops its links to the ones you leave out.',
+          ),
           ...[
             'recap',
             'goals',
@@ -465,7 +486,7 @@ function requestCard(it, box, draw) {
                 'div',
                 {},
                 h('b', {}, key),
-                it.kind !== 'session' && REVIEWED_KINDS.includes(key)
+                reviewedKinds(it).includes(key)
                   ? it.draft[key].map((row) => itemChoice(it, key, row))
                   : h(
                       'pre',

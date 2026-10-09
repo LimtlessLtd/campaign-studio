@@ -54,6 +54,7 @@ flowchart LR
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply             |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply            |
 | `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply      |
+| `DM/item_review.py`                   | Item-by-item review: the `kind:id` keys a GM rejects and the rows that remain         |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
 | `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration            |
@@ -203,7 +204,10 @@ produce a recap and three to six scenes with validated NPC, thread, map and area
 up to two map briefs, handouts, art and thread changes. Apply checks the prep and affected threads against
 the staged review snapshot, then commits the prep, records, art, map briefs and ready layout workflows with
 the request's done status last. Map briefs remain pending until their separate layout workflow is reviewed;
-the session apply makes no Foundry write or paid call.
+the session apply makes no Foundry write or paid call. The GM may reject any proposed map, entry, thread,
+thread change, scene or handout (`rejected`: `kind:id` keys, via `DM/item_review.py`, which general requests
+share). A kept scene loses its map, NPC or clue links to a rejected row, rejected rows contribute no art
+brief, and the staleness check still covers the whole proposal.
 
 Map and request drafts share `DM/context.py`. It reserves identity for linked and pinned codex records,
 summarises active threads, then fills the remaining budget with linked details, name matches and a compact
