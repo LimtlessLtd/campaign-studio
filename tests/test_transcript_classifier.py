@@ -263,6 +263,19 @@ class ReviewTests(unittest.TestCase):
         self.review({'id': 'p2', 'kind': 'play', 'confirmed': True})
         self.assertEqual((self.lore['items'], self.passage('p2')['remember']), ([], ''))
 
+    def test_undoing_a_note_unlinks_passages_of_the_same_transcript_that_matched_it(self):
+        self.review({'id': 'p2', 'confirmed': True, 'remember': HORSE})
+        self.passage('p4').update(
+            kind='banter', lore='rec-0123456789abcdef-p2'
+        )  # a later window's match
+        self.assertEqual(sorter.counts(self.document)['known'], 1)
+
+        self.review({'id': 'p2', 'confirmed': False})
+        self.assertEqual(self.lore['items'], [])
+        self.assertEqual(self.passage('p4')['lore'], '')
+        counts = sorter.counts(self.document)  # no longer hidden as known: it needs the GM again
+        self.assertEqual((counts['known'], counts['pending']), (0, 4))
+
     def test_a_note_can_be_edited_and_clearing_it_forgets_the_gag(self):
         self.review({'id': 'p2', 'confirmed': True, 'remember': HORSE})
         self.review({'id': 'p2', 'remember': 'Ulrick neighs'})
