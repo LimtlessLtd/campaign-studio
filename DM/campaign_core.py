@@ -344,21 +344,9 @@ def settle_failed_job(job, message):
         if item and item.get('status') == 'generating':
             item.update(status='failed', error=message)
             write_doc('art', art)
-    if job.get('request'):
-        fail_request(job, message)
-    if job.get('transcript'):
-        transcription.discard(campaign.active().jobs, job['transcript'])
-    if job.get('classify'):
-        fail_classification(job, message)
-
-    if job.get('ledger'):
-        name = 'ledger/' + job['ledger']
-        value = read_json(doc_path(name))
-        if value and value.get('status') == 'running' and value.get('job') == job['id']:
-            value.update(status='failed', job='', error=message[:1000])
-            write_doc(name, value)
-    if job.get('arc'):
-        fail_arc(job, message)
+    for owner, settle in SETTLERS:
+        if job.get(owner):
+            settle(job, message)
 
 
 def fail_job(job, error):
@@ -387,17 +375,8 @@ def finish_job(job, code, tail):
                 usage.record(job, file.read())
         except OSError:
             pass  # no log, no usage: the job itself still settles
-    if job['kind'] == 'request-draft':
-        finish_request(job, code, tail)
-    if job['kind'] == 'transcribe':
-        finish_transcription(job, code, tail)
-    if job['kind'] == 'classify':
-        finish_classification(job, code, tail)
-
-    if job['kind'] == 'thread-ledger':
-        finish_ledger(job, code, tail)
-    if job['kind'] == 'arc-options':
-        finish_arc(job, code, tail)
+    if job['kind'] in FINISHERS:
+        FINISHERS[job['kind']](job, code, tail)
     if job.get('art'):
         with LOCK:
             art = read_json(doc_path('art'), {'items': []})
@@ -490,6 +469,11 @@ def fail_request(job, message):
         write_doc('inbox', box)
 
 
+def discard_transcription(job, message):
+    """A transcription that did not finish leaves no staged result or scratch audio."""
+    transcription.discard(campaign.active().jobs, job['transcript'])
+
+
 def finish_transcription(job, code, tail):
     """Store a finished transcription's transcript, or fail the job with the reason."""
     result, _ = transcription.staging(campaign.active().jobs, job['transcript'])
@@ -544,6 +528,15 @@ def finish_classification(job, code, tail):
     except (ValueError, KeyError, TypeError, OSError) as error:
         job.update(status='failed', note=str(error))
         fail_classification(job, str(error))
+
+
+def fail_ledger(job, message):
+    """Stop a thread ledger at the window that failed, unless it was removed or replaced."""
+    name = 'ledger/' + job['ledger']
+    value = read_json(doc_path(name))
+    if value and value.get('status') == 'running' and value.get('job') == job['id']:
+        value.update(status='failed', job='', error=message[:1000])
+        write_doc(name, value)
 
 
 def finish_ledger(job, code, tail):
@@ -645,6 +638,24 @@ def finish_request(job, code, tail):
         write_doc('inbox', box)
         job.update(status='failed', note=str(error))
 
+
+# What a job leaves to settle. A new draft kind adds a row here instead of a branch in finish_job or
+# settle_failed_job: FINISHERS stores a finished job's result by kind; SETTLERS marks what a failed job
+# was producing, by the field that names the record it belongs to.
+FINISHERS = {
+    'request-draft': finish_request,
+    'transcribe': finish_transcription,
+    'classify': finish_classification,
+    'thread-ledger': finish_ledger,
+    'arc-options': finish_arc,
+}
+SETTLERS = (
+    ('request', fail_request),
+    ('transcript', discard_transcription),
+    ('classify', fail_classification),
+    ('ledger', fail_ledger),
+    ('arc', fail_arc),
+)
 
 JOBS_SERVICE = JobService(campaign.active, LOCK, finish_job, fail_job, recover_interrupted_job)
 LANES = JOBS_SERVICE.lanes

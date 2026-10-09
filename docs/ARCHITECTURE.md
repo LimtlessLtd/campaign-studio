@@ -221,6 +221,9 @@ owning workflow, image brief or request is settled through the normal failure ca
 A job reports progress by printing `PROGRESS <done>/<total> [label]` or `PROGRESS <n>% [label]`; the job
 API returns the last such line as `progress`. Cancelling stops the job's whole process tree, so a worker's
 own children (ffmpeg, a whisper.cpp program) end with it.
+A finished job's result is stored by `campaign_core.FINISHERS` (by job kind) and a failed, cancelled or
+interrupted job marks what it was producing through `SETTLERS` (by the field that names its record: `request`,
+`transcript`, `classify`, `ledger`, `arc`). A new draft kind adds a row to each instead of a branch.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 
