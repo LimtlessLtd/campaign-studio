@@ -9,6 +9,7 @@ from copy import deepcopy
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import request_workflow
+import transcript_classifier
 import workflow
 
 RESPONSES_URL = 'https://api.openai.com/v1/responses'
@@ -25,6 +26,8 @@ def draft_schema(kind):
         return request_workflow.SCHEMA
     if kind == 'content':
         return workflow.CONTENT_SCHEMA
+    if kind == 'classify':
+        return transcript_classifier.SCHEMA
     if kind in ('layout', 'revision'):
         return strict_layout_schema()
     raise ValueError('Unknown structured draft kind.')

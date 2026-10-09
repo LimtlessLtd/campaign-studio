@@ -110,9 +110,17 @@ decodes video itself) or a [whisper.cpp](https://github.com/ggml-org/whisper.cpp
 file and ffmpeg. A faster-whisper model that is not already on this computer is downloaded only if you allow
 it in Settings. A job is cancellable and can be started again; the transcript is stored as reference text
 (up to 20,000 segments) and **Remove transcript** deletes only Studio's copy. Transcription speed depends
-on your hardware and model. Reading a transcript is all this step does; telling play from table banter and
-finding loose threads are separate planned steps (W69 onward in the [roadmap](docs/ROADMAP.md)). Tests
-fake the engines; a real model run has not been checked yet.
+on your hardware and model. Tests fake the engines; a real model run has not been checked yet.
+
+**Sort play from banter** asks your signed-in Claude Code (no API key) to read a transcript and mark passages
+as in-game, table banter or unclear. Studio first tells you how many requests and characters it will send
+and asks; a long session is read in windows, and a window that fails can be continued. Claude only proposes:
+in the review list you confirm each passage (or the proposed ones on a page at once), and nothing counts as
+in-game until you do. Confirming banter with a short note, such as an invented running joke, saves it as
+**table lore**; later runs show those notes to Claude and set matching passages aside. Removing a note, or
+undoing the banter that saved it, unlinks the passages that matched it. Finding loose threads in confirmed
+play is the next step (W70 in the [roadmap](docs/ROADMAP.md)). Tests fake Claude on a synthetic session; how
+well real Claude separates banter from play has not been checked yet.
 
 From a session prep, **Plan whole session** turns one pitch into a reviewable proposal for a recap, goals,
 three to six scenes, cast, thread changes, handouts, loot and a checklist. Choose the session length, combat

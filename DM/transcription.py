@@ -352,7 +352,7 @@ def build(job, staged):
 
 
 def summary(document):
-    """A transcript without its segments, for lists."""
-    return {key: value for key, value in document.items() if key != 'segments'} | {
-        'segment_count': len(document.get('segments', []))
-    }
+    """A transcript without its segments and passages, for lists."""
+    return {
+        key: value for key, value in document.items() if key not in ('segments', 'passages')
+    } | {'segment_count': len(document.get('segments', []))}

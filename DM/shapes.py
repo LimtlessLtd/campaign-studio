@@ -176,6 +176,14 @@ MAP_KEY = Shape(
 )
 
 TRANSCRIPT_SEGMENT = Shape('transcript_segment', [], dict(start=0, end=0, text=''))
+# A run of segments (first..last, inclusive) read as one thing: kind 'play' is the story, 'banter' is table
+# talk, 'unclear' needs the GM. `confirmed` is the GM's decision; nothing leaves the step unconfirmed.
+# `remember` is the table-lore note a confirmed banter passage saves; `lore` names the saved item it matches.
+TRANSCRIPT_PASSAGE = Shape(
+    'transcript_passage',
+    ['id'],
+    dict(first=0, last=0, kind='unclear', gist='', remember='', lore='', confirmed=False),
+)
 TRANSCRIPT = Shape(
     'transcript',
     ['id'],
@@ -190,9 +198,16 @@ TRANSCRIPT = Shape(
         created=0,
         truncated=False,
         segments=[],
+        passages=[],
+        classification=dict(status='', cursor=0, job='', error=''),
     ),
-    {'segments': TRANSCRIPT_SEGMENT},
+    {'segments': TRANSCRIPT_SEGMENT, 'passages': TRANSCRIPT_PASSAGE},
 )
+# Gags and invented fiction the GM confirmed are not the campaign, so later runs skip them.
+TABLE_LORE_ITEM = Shape(
+    'table_lore_item', ['id'], dict(text='', transcript='', passage='', added=0)
+)
+TABLE_LORE = Shape('table_lore', [], dict(items=[]), {'items': TABLE_LORE_ITEM})
 
 WORLD_PIN = Shape('world_pin', ['id'], dict(label='', map='', x=0.5, y=0.5, note=''))
 WORLD_MAP = Shape('world_map', ['id', 'name'], dict(image='', pins=[]), {'pins': WORLD_PIN})
@@ -221,7 +236,10 @@ SHAPES = {
         WORLD_MAP,
         WORLD_MAPS,
         TRANSCRIPT_SEGMENT,
+        TRANSCRIPT_PASSAGE,
         TRANSCRIPT,
+        TABLE_LORE_ITEM,
+        TABLE_LORE,
     )
 }
 

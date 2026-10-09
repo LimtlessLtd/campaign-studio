@@ -16,11 +16,13 @@ async function recordingsPage(_arg, context) {
     context.api('/api/recordings' + (path ? '?' + new URLSearchParams({ path }) : ''));
   let listing = await list(S.recordingsPath).catch(() => list(''));
   const transcripts = (await context.api('/api/transcripts')).items;
+  const lore = await context.api('/api/table-lore');
   let reading = null;
   let offset = 0;
   const status = h('p', { role: 'status', 'aria-live': 'polite' });
   const filesBox = h('section', { class: 'card' });
   const readerBox = h('section', { class: 'card', hidden: true });
+  const reviewBox = h('section', { class: 'card', hidden: true });
   const pathInput = h('input', {
     id: 'recordings-path',
     type: 'text',
@@ -100,9 +102,19 @@ async function recordingsPage(_arg, context) {
                     'aria-label': `${file.transcript ? 'Transcribe again' : 'Transcribe'} ${file.name}`,
                     onclick: () =>
                       attempt(async () => {
+                        const made = transcripts.find((item) => item.id === file.transcript);
+                        const sorted = made && (made.review.passages || made.classification.status);
+                        if (
+                          sorted &&
+                          !confirm(
+                            'This transcript has been sorted. Transcribing again discards its passages and your decisions. Continue?',
+                          )
+                        )
+                          return;
                         await post('/api/transcripts/start', {
                           path: file.path,
                           session: sessionSelect.value,
+                          replace: Boolean(sorted),
                         });
                         toast(
                           `Transcribing ${file.name}. This can take a while; you can leave this page.`,
@@ -159,7 +171,7 @@ async function recordingsPage(_arg, context) {
           {
             disabled: offset === 0,
             onclick: () => {
-              offset -= TRANSCRIPT_WINDOW;
+              offset = Math.max(0, offset - TRANSCRIPT_WINDOW);
               attempt(drawReader);
             },
           },
@@ -190,6 +202,24 @@ async function recordingsPage(_arg, context) {
     );
   };
 
+  const openReader = (item, start) => {
+    reading = item;
+    offset = start;
+    return attempt(async () => {
+      await drawReader();
+      $('#transcript-title').focus();
+    });
+  };
+  const closeReview = () => {
+    S.review = null;
+    route(true);
+  };
+  const openReview = async (item, keep = false) => {
+    if (!keep || !S.review) S.review = { id: item.id, show: 'pending', offset: 0 };
+    await drawReview(reviewBox, item, { read: openReader, close: closeReview });
+    if (!keep) $('#review-title').focus();
+  };
+
   const transcriptCard = (item) =>
     h(
       'article',
@@ -212,6 +242,7 @@ async function recordingsPage(_arg, context) {
       item.truncated
         ? h('p', { class: 'muted' }, 'Very long: only the first part of this recording was kept.')
         : null,
+      sortingRow(item, { review: openReview }),
       h(
         'div',
         { class: 'row' },
@@ -219,14 +250,7 @@ async function recordingsPage(_arg, context) {
           'button',
           {
             'aria-label': `Read the transcript of ${item.title}`,
-            onclick: () => {
-              reading = item;
-              offset = 0;
-              attempt(async () => {
-                await drawReader();
-                $('#transcript-title').focus();
-              });
-            },
+            onclick: () => openReader(item, 0),
           },
           'Read transcript',
         ),
@@ -253,7 +277,7 @@ async function recordingsPage(_arg, context) {
       ),
     );
 
-  const transcribing = S.jobs.filter((job) => job.kind === 'transcribe');
+  const transcribing = S.jobs.filter((job) => ['transcribe', 'classify'].includes(job.kind));
   const live = transcribing.filter((job) => ['queued', 'running'].includes(job.status));
   const failed = transcribing.filter((job) => job.status === 'failed').slice(0, 3);
   render(
@@ -269,7 +293,7 @@ async function recordingsPage(_arg, context) {
       ? h(
           'section',
           {},
-          h('h2', {}, 'Transcriptions'),
+          h('h2', {}, 'Recording jobs'),
           ...[...live, ...failed].map((job) => jobBox(job, context.signal)),
         )
       : null,
@@ -281,7 +305,17 @@ async function recordingsPage(_arg, context) {
         ? transcripts.map(transcriptCard)
         : h('p', { class: 'muted' }, 'No transcripts yet.'),
     ),
+    tableLoreBox(lore),
     readerBox,
+    reviewBox,
   );
   drawFiles();
+  if (S.review && transcripts.some((item) => item.id === S.review.id)) {
+    attempt(() =>
+      openReview(
+        transcripts.find((item) => item.id === S.review.id),
+        true,
+      ),
+    );
+  }
 }

@@ -178,6 +178,12 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   or long recording has been run, so speed and accuracy are unknown. A cancel or restart stops the engine's
   programs, but a server killed without a restart can leave an engine running until it finishes; its staged
   result is discarded on the next start. The transcript list reads every stored transcript in full.
+- Sorting transcripts into play and banter (W69) is tested with a fake model on a synthetic session; no real
+  Claude run has checked how well it tells a table joke from play, so the GM's review is the safeguard: only
+  confirmed in-game passages leave the step. A window is a separate request, so a long session costs several
+  against the subscription; the estimate is shown first, but the usage ledger (W44) has no per-session total
+  or warning yet. A passage cannot span two windows, so a scene split by a window edge is two passages.
+  Re-transcribing replaces a transcript, so its passages are discarded after an explicit confirmation.
 - Downloadable source needs Python and dependency installation; it is not a bundled executable.
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.

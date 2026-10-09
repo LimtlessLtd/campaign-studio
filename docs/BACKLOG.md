@@ -14,7 +14,6 @@ Next ID: W74
 
 | ID  | Priority | Work                                                                                                                           | Acceptance criteria                                                                          |
 | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| W69 | 1        | Classify each transcript passage as in-game, table banter or unclear; the GM confirms; banter is remembered                    | Banter fixture is never proposed as canon; confirmed table-lore is skipped on later runs     |
 | W70 | 1        | Thread ledger from confirmed play: open, resolved and foreshadowed threads with quoted evidence and a loose-threads report     | A fixture session names its unresolved threads with timestamps; nothing applies unreviewed   |
 | W71 | 1        | Arc and resolution proposals for loose threads: several options each, using the codex, party and recent logs                   | Each loose thread gets reviewed options; accepted ones become thread, hook and prep changes  |
 | W72 | 1        | One action (and a scheduled Claude task) from new recordings to a reviewed next-session draft                                  | New files in a chosen folder run W68-W71 and Session Forge; the GM only reviews              |
