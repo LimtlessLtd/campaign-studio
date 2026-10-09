@@ -94,10 +94,23 @@ CODEX_ENTRY = Shape(
     ['id', 'type', 'name'],
     dict(group='', status='', public='', secrets='', notes='', image='', files=[], tags=[]),
 )
+THREAD_LOCATION = Shape('thread_location', ['id'], dict(map='', area=0))
+THREAD_CLUE = Shape('thread_clue', ['id'], dict(text='', where='', status='planned'))
 THREAD = Shape(
     'thread',
     ['id', 'title'],
-    dict(status='open', detail='', pcs=[], source='', entries=[], sessions=[]),
+    dict(
+        status='open',
+        detail='',
+        pcs=[],
+        source='',
+        entries=[],
+        sessions=[],
+        maps=[],
+        locations=[],
+        clues=[],
+    ),
+    {'locations': THREAD_LOCATION, 'clues': THREAD_CLUE},
 )
 ART_ITEM = Shape(
     'art_item', ['id', 'prompt'], dict(title='', codex='', image='', status='queued', created=0)
@@ -287,6 +300,8 @@ SHAPES = {
     for shape in (
         CODEX_ENTRY,
         THREAD,
+        THREAD_LOCATION,
+        THREAD_CLUE,
         ART_ITEM,
         SCENE_CLUE,
         SCENE,

@@ -135,23 +135,34 @@ def remove_many(docs, entry_ids):
 
 
 def _map_links(docs, slug, name):
-    """Records that point at a map: prep scenes (by name or slug) and request or art items (by slug)."""
+    """Records that point at a map, including thread map and pin links."""
     for doc_name, doc in docs.items():
         if doc_name.startswith('prep/'):
             for scene in _rows(doc, 'scenes'):
                 if scene.get('map') and scene['map'] in (slug, name):
-                    yield doc_name, scene
+                    yield doc_name, scene, 'map', scene['map']
         elif doc_name in ('inbox', 'art'):
             for item in _rows(doc, 'items'):
                 if item.get('map') == slug:
-                    yield doc_name, item
+                    yield doc_name, item, 'map', slug
+        elif doc_name == 'threads':
+            for thread in _rows(doc, 'threads'):
+                if slug in _ids(thread, 'maps'):
+                    yield doc_name, thread, 'maps', slug
+                for location in _rows(thread, 'locations'):
+                    if location.get('map') == slug:
+                        yield doc_name, thread, 'locations', location
 
 
 def map_uses(docs, slug, name):
     """Where a map is used: [{doc, where}]."""
     return [
-        {'doc': doc_name, 'where': f'{doc_name}: {owner.get("title") or owner.get("id")}'}
-        for doc_name, owner in _map_links(docs, slug, name)
+        {
+            'doc': doc_name,
+            'where': f'{doc_name}: {owner.get("title") or owner.get("id")}'
+            + (f', pin {value.get("area")}' if field == 'locations' else ''),
+        }
+        for doc_name, owner, field, value in _map_links(docs, slug, name)
     ]
 
 
@@ -162,9 +173,14 @@ def unlink_map(docs, slug, name):
     map can put the same values back.
     """
     links = []
-    for doc_name, owner in _map_links(docs, slug, name):
-        links.append({'doc': doc_name, 'id': owner.get('id'), 'value': owner['map']})
-        owner['map'] = ''
+    for doc_name, owner, field, value in _map_links(docs, slug, name):
+        links.append({'doc': doc_name, 'id': owner.get('id'), 'field': field, 'value': value})
+        if field == 'map':
+            owner['map'] = ''
+        elif field == 'maps':
+            owner['maps'] = [item for item in owner['maps'] if item != slug]
+        else:
+            owner['locations'] = [item for item in owner['locations'] if item is not value]
     return sorted({link['doc'] for link in links}), links
 
 
@@ -174,10 +190,33 @@ def relink_map(docs, links):
     for link in links:
         doc = docs.get(link['doc'])
         field_rows = (
-            _rows(doc, 'scenes' if link['doc'].startswith('prep/') else 'items') if doc else []
+            _rows(
+                doc,
+                'scenes'
+                if link['doc'].startswith('prep/')
+                else 'threads'
+                if link['doc'] == 'threads'
+                else 'items',
+            )
+            if doc
+            else []
         )
         for row in field_rows:
-            if row.get('id') == link['id'] and not row.get('map'):
+            if row.get('id') != link['id']:
+                continue
+            field = link.get('field', 'map')  # map trash records from older builds omitted this
+            if field == 'map' and not row.get('map'):
                 row['map'] = link['value']
-                changed.add(link['doc'])
+            elif field == 'maps' and link['value'] not in _ids(row, 'maps'):
+                row.setdefault('maps', []).append(link['value'])
+            elif field == 'locations' and isinstance(link['value'], dict):
+                locations = row.setdefault('locations', [])
+                if any(
+                    item.get('id') == link['value'].get('id') for item in _rows(row, 'locations')
+                ):
+                    continue
+                locations.append(link['value'])
+            else:
+                continue
+            changed.add(link['doc'])
     return sorted(changed)

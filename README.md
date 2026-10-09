@@ -229,7 +229,10 @@ When an update changes how documents are stored, Campaign Studio copies them to 
 copies and migrates on startup; it refuses a campaign saved by a newer version. `python DM/migrate.py`
 reports pending migrations and `--restore` returns to a backup. See [architecture](docs/ARCHITECTURE.md).
 Document saves retain previous versions in `DM/data/.history`; layout checkpoints live beside each map.
-Story thread statuses are open, planned, foreshadowed and resolved. Session prep and the codex remain editable.
+Story thread statuses are open, planned, foreshadowed and resolved. Threads link to codex entries, maps,
+numbered map pins, touched sessions and heroes; their clues track where they appear and whether they are
+planned, planted or found. The thread list can order by linked hero or last touched session. Session prep
+and the codex remain editable.
 Text handouts drafted for a session appear in that session's prep, with player text and GM secrets separated.
 Local reference notes can be added as `DM/data/notes.txt`. An existing neighbouring `Website/content`
 folder can supply read-only legacy session/hero references if `legacy_references: true` is added to local

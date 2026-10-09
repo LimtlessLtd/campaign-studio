@@ -524,6 +524,19 @@ class Handler(SimpleHTTPRequestHandler):
             )
         if action == 'choices':
             return self.send_json(records.choices(data, kind))
+        sort = query.get('sort', [''])[0]
+        hero_names = None
+        if kind == 'threads' and sort == 'hero':
+            hero_names = {
+                row['id']: row.get('name') or row['id']
+                for row in public_content().get('heroes', [])
+                if isinstance(row, dict) and isinstance(row.get('id'), str)
+            }
+            hero_names.update(
+                (row['id'], row.get('name') or row['id'])
+                for row in records.all_records(data, 'codex')
+                if row.get('type') == 'pc'
+            )
         return self.send_json(
             records.page(
                 data,
@@ -536,7 +549,8 @@ class Handler(SimpleHTTPRequestHandler):
                 source=query.get('source', [''])[0],
                 status=query.get('status', [''])[0],
                 pc=query.get('pc', [''])[0],
-                sort=query.get('sort', [''])[0],
+                sort=sort,
+                hero_names=hero_names,
             )
         )
 

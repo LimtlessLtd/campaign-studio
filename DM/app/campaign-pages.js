@@ -1233,6 +1233,15 @@ async function newPrep(context) {
 async function threadsPage(_arg, context) {
   const main = context.view;
   await recordChoices('threads', context.signal);
+  const maps = (await context.doc('maps/index', { items: [] })).items;
+  const mapNames = new Map(maps.map((map) => [map.slug, map.name]));
+  const mapAreas = new Map();
+  const loadAreas = async (slug) => {
+    if (!mapNames.has(slug) || mapAreas.has(slug)) return;
+    const key = await context.doc('mapkey/' + slug, { areas: [] });
+    mapAreas.set(slug, key?.areas || []);
+  };
+  const mapChoices = () => maps.map((map) => ({ id: map.slug, name: map.name }));
   let filter = S.threadFilter || 'all';
   let sort = S.threadSort || '';
   let offset = 0;
@@ -1240,8 +1249,179 @@ async function threadsPage(_arg, context) {
   let result = { items: [], total: 0 };
   const list = h('div');
   const pages = h('div', { class: 'row' });
+  const cluesEditor = (thread) => {
+    const name = recordName('threads', thread.id);
+    return h(
+      'div',
+      {},
+      h('label', {}, 'Clues'),
+      thread.clues.map((clue, i) =>
+        h(
+          'div',
+          { class: 'thread-clue-row' },
+          h('input', {
+            type: 'text',
+            value: clue.text,
+            placeholder: 'What can be learned?',
+            'aria-label': `Clue ${i + 1} text`,
+            oninput: (e) => {
+              clue.text = e.target.value;
+              save(name);
+            },
+          }),
+          h('input', {
+            type: 'text',
+            value: clue.where,
+            placeholder: 'Where is it found?',
+            'aria-label': `Clue ${i + 1} location`,
+            oninput: (e) => {
+              clue.where = e.target.value;
+              save(name);
+            },
+          }),
+          h(
+            'select',
+            {
+              'aria-label': `Clue ${i + 1} status`,
+              onchange: (e) => {
+                clue.status = e.target.value;
+                save(name);
+              },
+            },
+            ['planned', 'planted', 'found'].map((status) =>
+              h('option', { value: status, selected: clue.status === status }, status),
+            ),
+          ),
+          h(
+            'button',
+            {
+              class: 'danger',
+              'aria-label': `Remove clue ${i + 1}`,
+              onclick: () => {
+                thread.clues.splice(thread.clues.indexOf(clue), 1);
+                save(name);
+                draw();
+              },
+            },
+            '×',
+          ),
+        ),
+      ),
+      h(
+        'button',
+        {
+          class: 'small',
+          onclick: () => {
+            thread.clues.push(blank('thread_clue', { id: uid('clue') }));
+            save(name);
+            draw();
+          },
+        },
+        '+ Clue',
+      ),
+    );
+  };
+  const locationsEditor = (thread) => {
+    const name = recordName('threads', thread.id);
+    let chosenMap = '';
+    const areaSelect = h(
+      'select',
+      { 'aria-label': 'Choose a map pin', disabled: true },
+      h('option', { value: '' }, 'Choose a pin…'),
+    );
+    const mapSelect = h(
+      'select',
+      {
+        'aria-label': 'Choose a map for the pin',
+        onchange: (e) =>
+          attempt(async () => {
+            chosenMap = e.target.value;
+            if (chosenMap) await loadAreas(chosenMap);
+            const areas = mapAreas.get(chosenMap) || [];
+            render(
+              areaSelect,
+              h('option', { value: '' }, 'Choose a pin…'),
+              areas.map((area) => h('option', { value: area.n }, `${area.n}. ${area.name}`)),
+            );
+            areaSelect.disabled = !areas.length;
+          }),
+      },
+      h('option', { value: '' }, 'Choose a map…'),
+      maps.map((map) => h('option', { value: map.slug }, map.name)),
+    );
+    return h(
+      'div',
+      {},
+      h('label', {}, 'Map pins'),
+      h(
+        'div',
+        { class: 'row' },
+        thread.locations.map((location) => {
+          const area = (mapAreas.get(location.map) || []).find((item) => item.n === location.area);
+          const label = `${mapNames.get(location.map) || location.map} · ${area?.name || `pin ${location.area} (missing)`}`;
+          return h(
+            'span',
+            { class: 'chip' },
+            mapNames.has(location.map)
+              ? h(
+                  'a',
+                  {
+                    href: '#/maps/' + location.map,
+                    onclick: () => {
+                      S.mapArea = { ...(S.mapArea || {}), [location.map]: location.area };
+                    },
+                  },
+                  label,
+                )
+              : label,
+            h(
+              'button',
+              {
+                title: 'Remove pin link',
+                'aria-label': `Remove pin link ${label}`,
+                onclick: () => {
+                  thread.locations.splice(thread.locations.indexOf(location), 1);
+                  save(name);
+                  draw();
+                },
+              },
+              '×',
+            ),
+          );
+        }),
+      ),
+      h(
+        'div',
+        { class: 'thread-pin-add' },
+        mapSelect,
+        areaSelect,
+        h(
+          'button',
+          {
+            class: 'small',
+            onclick: () => {
+              const area = Number(areaSelect.value);
+              if (!chosenMap || !area || !mapAreas.get(chosenMap)?.some((pin) => pin.n === area))
+                return;
+              if (thread.locations.some((link) => link.map === chosenMap && link.area === area))
+                return;
+              thread.locations.push(
+                blank('thread_location', { id: uid('pin'), map: chosenMap, area }),
+              );
+              save(name);
+              draw();
+            },
+          },
+          '+ Link pin',
+        ),
+      ),
+    );
+  };
   const draw = () => {
     S.threadFilter = filter;
+    const openLinks = new Set(
+      [...list.querySelectorAll('details.thread-links[open]')].map((element) => element.dataset.id),
+    );
     const shown = result.items.map(({ record: x, rev }) => {
       const name = recordName('threads', x.id);
       if (!S.pending[name]) {
@@ -1251,17 +1431,20 @@ async function threadsPage(_arg, context) {
       }
       S.docs[name].entries ||= [];
       S.docs[name].sessions ||= [];
+      S.docs[name].maps ||= [];
+      S.docs[name].locations ||= [];
+      S.docs[name].clues ||= [];
       return S.docs[name];
     });
     render(
       list,
-      ...THREAD_STATES.map((st) => {
-        const group = shown.filter((x) => x.status === st);
+      ...(sort === 'hero' ? ['all'] : THREAD_STATES).map((st) => {
+        const group = st === 'all' ? shown : shown.filter((x) => x.status === st);
         return group.length
           ? h(
               'div',
               {},
-              h('h2', {}, st[0].toUpperCase() + st.slice(1)),
+              st === 'all' ? null : h('h2', {}, st[0].toUpperCase() + st.slice(1)),
               group.map((x) =>
                 h(
                   'div',
@@ -1314,6 +1497,35 @@ async function threadsPage(_arg, context) {
                     picker(recordName('threads', x.id), x.entries, codexChoices, {
                       placeholder: 'Link a codex entry…',
                     }),
+                  ),
+                  h(
+                    'details',
+                    { class: 'thread-links', 'data-id': x.id, open: openLinks.has(x.id) },
+                    h(
+                      'summary',
+                      {},
+                      h('b', {}, 'Maps, pins & clues'),
+                      ` · ${x.maps.length} map${x.maps.length === 1 ? '' : 's'} · ${x.locations.length} pin${x.locations.length === 1 ? '' : 's'} · ${x.clues.length} clue${x.clues.length === 1 ? '' : 's'}`,
+                    ),
+                    h('label', {}, 'Maps'),
+                    picker(recordName('threads', x.id), x.maps, mapChoices, {
+                      placeholder: 'Link a map…',
+                    }),
+                    h(
+                      'div',
+                      { class: 'row' },
+                      x.maps.map((slug) =>
+                        mapNames.has(slug)
+                          ? h(
+                              'a',
+                              { class: 'chip', href: '#/maps/' + slug },
+                              'Open ' + mapNames.get(slug),
+                            )
+                          : h('span', { class: 'muted' }, `${slug} (map missing)`),
+                      ),
+                    ),
+                    locationsEditor(x),
+                    cluesEditor(x),
                   ),
                   h(
                     'div',
@@ -1374,6 +1586,15 @@ async function threadsPage(_arg, context) {
     if (THREAD_STATES.includes(filter)) params.set('status', filter);
     else if (filter !== 'all') params.set('pc', filter);
     result = await context.api('/api/records/threads?' + params);
+    await Promise.all(
+      [
+        ...new Set(
+          result.items.flatMap(({ record }) => (record.locations || []).map((link) => link.map)),
+        ),
+      ]
+        .filter((slug) => mapNames.has(slug))
+        .map(loadAreas),
+    );
     draw();
   };
   const filters = h(
@@ -1440,6 +1661,7 @@ async function threadsPage(_arg, context) {
         },
         h('option', { value: '', selected: !sort }, 'By title'),
         h('option', { value: 'stale', selected: sort === 'stale' }, 'Stalest first'),
+        h('option', { value: 'hero', selected: sort === 'hero' }, 'By hero'),
       ),
     ),
     list,
