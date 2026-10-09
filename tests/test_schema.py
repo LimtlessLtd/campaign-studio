@@ -504,6 +504,26 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(shapes.AUTO_RUN.problems(run), [])
         self.assertEqual(self.migrate()['status'], 'current')  # a second run changes nothing
 
+    def test_version_fourteen_thread_gains_map_pins_and_clues_without_losing_links(self):
+        self.migrate()
+        schema.write_marker(self.data, 14, 'Synthetic version 14 campaign')
+        thread_path = self.dm / 'data/threads/ui.json'
+        thread = self.read('data/threads/ui.json')
+        thread['entries'] = ['old-place']
+        thread['sessions'] = ['s2']
+        for field in ('maps', 'locations', 'clues'):
+            thread.pop(field)
+        thread_path.write_text(json.dumps(thread), encoding='utf-8')
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (14, schema.CURRENT))
+        restored = self.read('data/threads/ui.json')
+        self.assertEqual((restored['entries'], restored['sessions']), (['old-place'], ['s2']))
+        self.assertEqual((restored['maps'], restored['locations'], restored['clues']), ([], [], []))
+        self.assertEqual(shapes.THREAD.problems(restored), [])
+        self.assertEqual(self.migrate()['status'], 'current')
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

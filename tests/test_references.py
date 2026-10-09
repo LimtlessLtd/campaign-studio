@@ -39,6 +39,28 @@ def sample():
 
 
 class StalenessTests(unittest.TestCase):
+    def test_threads_sort_by_display_name_of_first_linked_hero(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for key, pcs in (
+                ('unclaimed', []),
+                ('zara', ['z']),
+                ('mira', ['m']),
+                ('team', ['z', 'm']),
+            ):
+                path = Path(records.record_path(folder, 'threads', key))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    json.dumps(shapes.THREAD.new(id=key, title=key, pcs=pcs)),
+                    encoding='utf-8',
+                )
+            page = records.page(
+                folder, 'threads', sort='hero', hero_names={'m': 'Mira', 'z': 'Zara'}
+            )
+            self.assertEqual(
+                [item['record']['id'] for item in page['items']],
+                ['mira', 'team', 'zara', 'unclaimed'],
+            )
+
     def test_threads_sort_by_the_session_they_last_touched(self):
         with tempfile.TemporaryDirectory() as folder:
             for key, title, sessions in (
@@ -64,6 +86,27 @@ class StalenessTests(unittest.TestCase):
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_map_links_unlink_and_restore_thread_maps_and_pins(self):
+        docs = sample()
+        thread = docs['threads']['threads'][0]
+        thread['maps'] = ['docks', 'other']
+        thread['locations'] = [
+            shapes.THREAD_LOCATION.new(id='pin-1', map='docks', area=1),
+            shapes.THREAD_LOCATION.new(id='pin-2', map='other', area=2),
+        ]
+        uses = references.map_uses(docs, 'docks', 'Docks')
+        self.assertEqual(len([use for use in uses if use['doc'] == 'threads']), 2)
+
+        changed, links = references.unlink_map(docs, 'docks', 'Docks')
+
+        self.assertIn('threads', changed)
+        self.assertEqual(thread['maps'], ['other'])
+        self.assertEqual([location['id'] for location in thread['locations']], ['pin-2'])
+        self.assertEqual(references.relink_map(docs, links).count('threads'), 1)
+        self.assertEqual(thread['maps'], ['other', 'docks'])
+        self.assertEqual({location['id'] for location in thread['locations']}, {'pin-1', 'pin-2'})
+        self.assertEqual(references.relink_map(docs, links), [])
+
     def test_scan_lists_each_use_but_not_the_entry_itself(self):
         uses = references.scan(sample(), 'mira')
         self.assertEqual(
@@ -197,6 +240,15 @@ class MapTrashTests(DeleteRouteTests):
                 },
             )
             campaign_core.write_doc('inbox', {'items': [{'id': 'r', 'map': 'docks'}]})
+            campaign_core.write_doc(
+                'threads/heist',
+                shapes.THREAD.new(
+                    id='heist',
+                    title='The dock heist',
+                    maps=['docks'],
+                    locations=[shapes.THREAD_LOCATION.new(id='quay', map='docks', area=1)],
+                ),
+            )
         return folder
 
     def test_delete_leaves_no_dangling_name_and_restore_brings_it_back(self):
@@ -211,6 +263,8 @@ class MapTrashTests(DeleteRouteTests):
         self.assertEqual(
             campaign_core.read_json(campaign_core.doc_path('inbox'))['items'][0]['map'], ''
         )
+        thread = records.read(campaign.active().data, 'threads', 'heist')
+        self.assertEqual((thread['maps'], thread['locations']), ([], []))
         self.assertEqual(self.call('/api/maps/docks/delete', 'POST')[0], 404)
         status, listing = self.call('/api/maps/trash')
         self.assertEqual([i['slug'] for i in listing['items']], ['docks'])
@@ -221,6 +275,9 @@ class MapTrashTests(DeleteRouteTests):
         self.assertEqual([m['slug'] for m in index['items']], ['docks'])
         prep = campaign_core.read_json(campaign_core.doc_path('prep/s1'))
         self.assertEqual([s['map'] for s in prep['scenes']], ['Nogratis Docks', 'other'])
+        thread = records.read(campaign.active().data, 'threads', 'heist')
+        self.assertEqual(thread['maps'], ['docks'])
+        self.assertEqual(thread['locations'], [{'id': 'quay', 'map': 'docks', 'area': 1}])
         self.assertEqual(self.call('/api/maps/trash')[1]['items'], [])
         self.assertEqual(self.call(f'/api/maps/trash/{body["trash"]}/restore', 'POST')[0], 404)
 

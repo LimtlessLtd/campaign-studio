@@ -27,7 +27,7 @@ Ranked by how much each holds back the goal.
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
-3. **Session workflow** (W33–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
+3. **Session workflow** (W33, W35–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
    Item-level review, readiness and folding played outcomes back into threads remain.
 4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
@@ -50,7 +50,7 @@ into the threads.
 
 | Step                  | Today                                             | Rows          |
 | --------------------- | ------------------------------------------------- | ------------- |
-| 1. Start next session | Recap drafts read the latest earlier session logs | W34           |
+| 1. Start next session | Recap drafts read the latest earlier session logs | W35           |
 | 2. Pitch              | Session Forge drafts a linked prep                | W33           |
 | 3. Outline            | Whole-session review; no item-level choices yet   | W33           |
 | 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
@@ -64,7 +64,7 @@ into the threads.
 A synthetic campaign goes through the whole journey in Studio. A pitch becomes an outline the GM edits; two
 maps (one generated, one imported) are stocked; six NPCs get portraits, tokens and compendium bases; one
 bundle imports into the macro fixture; a wrap-up moves the threads; the next session's recap uses it. Rows
-W24–W26, W33–W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
+W24–W26, W33, W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
 
 ## Design notes
 
@@ -144,14 +144,11 @@ their row and finding say enough.
   session and map proposals, adds "redraft this one" and shows before/after changes to existing records.
   Applying writes only accepted items; an edited item is validated again.
 
-### W34, W35 Threads and wrap-up
+### W35 Threads and wrap-up
 
-- First W34 slice done: a thread links codex entries (`entries`) and sessions it touched (`sessions`, prep
-  names); the threads page can sort stalest first, and a codex entry lists the threads that use it through
-  the `references` link scan (schema 8). Still to do: map and location links, clues, sort by hero.
-- Threads gain links (codex entries, maps and locations, sessions), clues (text, where it is found, and
-  planned, planted or found), and the last session that touched them. The threads page sorts by staleness
-  and by hero.
+- W34 is complete: a thread links codex entries, maps, numbered map pins and touched sessions; its clues
+  record text, where found and planned/planted/found status. Threads sort by staleness or linked hero, and
+  deleting a map unlinks its thread references until the map is restored (schema 15).
 - W35 adds a `wrapup` workflow kind. The GM's notes or a recording summary go in. A proposed session log,
   thread changes, codex changes (status, allegiance, notes), new threads and hooks for the next pitch come
   out, reviewed with W33. Expand the existing prep log to include date, threads touched, entities that

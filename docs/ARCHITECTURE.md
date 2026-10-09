@@ -175,11 +175,14 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, and schema 13 adds arc proposals. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, and schema 15 adds thread map, pin and clue links. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
 `schema.SHAPES_DIGEST` is updated. Renaming or removing a field needs its own migration and fixture test.
+Each thread stores map slugs, location links (`id`, map slug, numbered area), and clues (`id`, text, where,
+planned/planted/found status). Map trash journals the removal of thread map and location links with the
+other affected documents, and restore reattaches links only while their thread record still exists.
 
 ## Workflows and jobs
 

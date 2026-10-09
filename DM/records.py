@@ -150,10 +150,11 @@ def page(
     status='',
     pc='',
     sort='',
+    hero_names=None,
 ):
     """Search the records on the server; return a small, stable page to the browser.
 
-    Threads sort by title, or with sort='stale' by the session they last touched, oldest first.
+    Threads sort by title, last touched session, or the first linked hero's display name.
     """
     if not (0 <= offset <= 1000000 and 1 <= limit <= 100):
         raise ValueError('Invalid page range.')
@@ -221,6 +222,25 @@ def page(
                 str(row.get('title', '')).casefold(),
                 row['id'],
             )
+        elif sort == 'hero':
+            hero_names = hero_names or {}
+
+            def sort_key(row):
+                linked = row.get('pcs') if isinstance(row.get('pcs'), list) else []
+                names = sorted(
+                    (
+                        str(hero_names.get(pc) or pc).casefold()
+                        for pc in linked
+                        if isinstance(pc, str)
+                    )
+                )
+                return (
+                    not bool(names),
+                    names[0] if names else '',
+                    str(row.get('title', '')).casefold(),
+                    row['id'],
+                )
+
     found = sorted((record for record in all_records(data, kind) if include(record)), key=sort_key)
     return {
         'items': [summary(row) for row in found[offset : offset + limit]],

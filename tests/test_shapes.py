@@ -60,6 +60,9 @@ class ShapeTests(unittest.TestCase):
                 'threads.threads[0].source is missing',
                 'threads.threads[0].entries is missing',
                 'threads.threads[0].sessions is missing',
+                'threads.threads[0].maps is missing',
+                'threads.threads[0].locations is missing',
+                'threads.threads[0].clues is missing',
             ],
         )
 
