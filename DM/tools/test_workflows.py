@@ -31,6 +31,7 @@ import http_routes
 import workflow
 import request_workflow
 import session_workflow
+import wrapup_workflow
 import revisions
 import records
 import schema
@@ -956,6 +957,338 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(prep['goals'], ['Find the smugglers'])
         self.assertEqual([row['text'] for row in prep['checklist']], ['Print the notice'])
         self.assertEqual(self.stored('inbox')['items'][0]['status'], 'done')
+
+    def seed_wrapup_request(self):
+        """A played session with a half-written log, two threads and two entries, and its wrap-up request."""
+        self.seed(
+            'codex',
+            {
+                'entries': [
+                    shapes.CODEX_ENTRY.new(
+                        id='captain',
+                        type='npc',
+                        name='Captain Rook',
+                        status='alive',
+                        group='Harbour watch',
+                        notes='Stern.',
+                    ),
+                    shapes.CODEX_ENTRY.new(id='tower', type='place', name='The bell tower'),
+                ]
+            },
+        )
+        self.seed(
+            'threads',
+            {
+                'threads': [
+                    shapes.THREAD.new(
+                        id='old-thread', title='The bell', detail='A church bell fell.'
+                    ),
+                    shapes.THREAD.new(id='sealed', title='The sealed door'),
+                ]
+            },
+        )
+        prep = shapes.PREP.new(n=2, title='Session 2', status='ready', threads=['old-thread'])
+        prep['log'].update(summary='Played in the flooded quay.', notes='Keep the captain close.')
+        campaign_core.write_doc('prep/s2', prep)
+        item = {
+            'id': 'req-wrap',
+            'kind': 'wrapup',
+            'session': 's2',
+            'text': 'We freed Captain Rook and the bell tower fell. A voice came from the sealed door.',
+            'status': 'new',
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        return item
+
+    def wrapup_proposal(self):
+        return {
+            'summary': 'The party freed Captain Rook from the flooded cellar.',
+            'outcomes': [
+                {'id': 'freed', 'text': 'Captain Rook is free and owes the party.'},
+                {'id': 'fallen', 'text': 'The bell tower collapsed.'},
+            ],
+            'appeared': ['captain', 'tower', 'nobody-by-that-id', 'captain'],
+            'loot': [
+                {'id': 'seal', 'item': 'Copper seal', 'where': 'Party pack', 'value': '10 gp'}
+            ],
+            'hooks': [{'id': 'door', 'text': 'Someone is behind the sealed door.'}],
+            'threads': [
+                {
+                    'id': 'smugglers',
+                    'title': 'Smugglers at the quay',
+                    'detail': 'Seen loading crates at dusk.',
+                    'status': 'open',
+                }
+            ],
+            'thread_changes': [
+                {'id': 'old-thread', 'status': 'resolved', 'update': 'The bell was found.'}
+            ],
+            'codex_changes': [
+                {
+                    'id': 'captain',
+                    'status': '',
+                    'group': 'Freed',
+                    'notes': 'Owes the party a favour.',
+                }
+            ],
+        }
+
+    def stage_wrapup_draft(self):
+        self.seed_wrapup_request()
+        draft = self.wrapup_proposal()
+        self.request('/api/requests/req-wrap/stage', {'draft': draft})
+        return draft
+
+    def test_wrapup_pack_stage_and_apply_once(self):
+        self.seed_wrapup_request()
+        pack = self.request('/api/requests/req-wrap/pack')
+        self.assertIn('We freed Captain Rook', pack['prompt'])
+        self.assertEqual(
+            set(pack['schema']['properties']), set(wrapup_workflow.SCHEMA['properties'])
+        )
+
+        def broken(**changes):
+            return {**self.wrapup_proposal(), **changes}
+
+        for label, bad in {
+            'a blank summary': broken(summary=' '),
+            'a change to an unknown thread': broken(
+                thread_changes=[{'id': 'nope', 'status': 'open', 'update': 'x'}]
+            ),
+            'a change to an unknown entry': broken(
+                codex_changes=[{'id': 'nope', 'status': 'dead', 'group': '', 'notes': ''}]
+            ),
+            'an empty codex change': broken(
+                codex_changes=[{'id': 'captain', 'status': '', 'group': '', 'notes': ''}]
+            ),
+            'a repeated outcome ID': broken(
+                outcomes=[{'id': 'a', 'text': 'One.'}, {'id': 'a', 'text': 'Two.'}]
+            ),
+            'a new thread reusing an old ID': broken(
+                threads=[{'id': 'sealed', 'title': 'T', 'detail': '', 'status': 'open'}]
+            ),
+            'a loot row without an item': broken(
+                loot=[{'id': 'x', 'item': ' ', 'where': '', 'value': ''}]
+            ),
+        }.items():
+            with self.subTest(bad=label):
+                self.request('/api/requests/req-wrap/stage', {'draft': bad}, expected=400)
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'new')
+        self.request('/api/requests/req-wrap/stage', {'draft': self.wrapup_proposal()})
+        self.request('/api/requests/req-wrap/apply', {'rejected': ['hooks:nope']}, expected=400)
+        self.assertEqual(self.stored('prep/s2')['status'], 'ready')
+
+        self.request('/api/requests/req-wrap/apply', {})
+        self.request('/api/requests/req-wrap/apply', {}, expected=409)
+        applied = self.stored('inbox')['items'][0]
+        self.assertEqual(applied['status'], 'done')
+        prep = self.stored('prep/s2')
+        log = prep['log']
+        self.assertEqual(prep['status'], 'played')
+        self.assertEqual(
+            log['summary'],
+            'Played in the flooded quay.\n\nThe party freed Captain Rook from the flooded cellar.',
+        )
+        self.assertEqual(log['notes'], 'Keep the captain close.')
+        self.assertEqual(
+            log['outcomes'],
+            ['Captain Rook is free and owes the party.', 'The bell tower collapsed.'],
+        )
+        self.assertEqual(log['appeared'], ['captain', 'tower'])
+        self.assertEqual(log['hooks'], ['Someone is behind the sealed door.'])
+        self.assertEqual([row['item'] for row in log['loot']], ['Copper seal'])
+        self.assertEqual(prep['threads'], ['old-thread', 'req-wrap-smugglers'])
+        self.assertEqual(prep['applied_requests'], ['req-wrap'])
+        threads = {row['id']: row for row in self.stored('threads')['threads']}
+        self.assertEqual(threads['old-thread']['status'], 'resolved')
+        self.assertEqual(
+            threads['old-thread']['detail'], 'A church bell fell.\n\nThe bell was found.'
+        )
+        self.assertEqual(threads['old-thread']['sessions'], ['s2'])
+        self.assertEqual(threads['sealed']['status'], 'open')
+        new = threads['req-wrap-smugglers']
+        self.assertEqual((new['sessions'], new['request']), (['s2'], 'req-wrap'))
+        captain = {row['id']: row for row in self.stored('codex')['entries']}['captain']
+        self.assertEqual((captain['status'], captain['group']), ('alive', 'Freed'))
+        self.assertEqual(captain['notes'], 'Stern.\n\nS2: Owes the party a favour.')
+        self.assert_shaped()
+
+    def test_a_wrapup_can_change_records_whose_ids_are_not_lowercase_and_hyphenated(self):
+        # Older and hand-edited records keep whatever ID they were given; only what a wrap-up creates is held
+        # to the proposal ID format.
+        self.seed_wrapup_request()
+        self.seed(
+            'codex',
+            {
+                'entries': [
+                    shapes.CODEX_ENTRY.new(id='Captain_Rook.1', type='npc', name='Captain Rook')
+                ]
+            },
+        )
+        self.seed(
+            'threads',
+            {'threads': [shapes.THREAD.new(id='Old_Thread.1', title='The bell', detail='Fell.')]},
+        )
+        draft = {
+            **self.wrapup_proposal(),
+            'appeared': ['Captain_Rook.1'],
+            'thread_changes': [{'id': 'Old_Thread.1', 'status': 'resolved', 'update': 'Found.'}],
+            'codex_changes': [
+                {
+                    'id': 'Captain_Rook.1',
+                    'status': 'dead',
+                    'group': '',
+                    'notes': 'Fell in the quay.',
+                }
+            ],
+        }
+        self.request('/api/requests/req-wrap/stage', {'draft': draft})
+        self.request('/api/requests/req-wrap/apply', {'rejected': ['thread_changes:Old_Thread.1']})
+        threads = {row['id']: row for row in self.stored('threads')['threads']}
+        self.assertEqual(threads['Old_Thread.1']['status'], 'open')
+        self.assertIn('req-wrap-smugglers', threads)
+        [entry] = self.stored('codex')['entries']
+        self.assertEqual((entry['status'], entry['notes']), ('dead', 'S2: Fell in the quay.'))
+        self.assertEqual(self.stored('prep/s2')['log']['appeared'], ['Captain_Rook.1'])
+
+    def test_a_wrapup_that_stops_part_way_is_completed_without_repeating_itself(self):
+        self.stage_wrapup_draft()
+        box = self.stored('inbox')
+        with self.crash_after(2), self.assertRaises(Crash):
+            request_workflow.apply(
+                box['items'][0], campaign_core.request_read, campaign_core.commit_docs, box
+            )
+        self.assertEqual(campaign_core.recover_commits()['conflicts'], [])
+        self.request('/api/requests/req-wrap/apply', {}, expected=409)
+        prep = self.stored('prep/s2')
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'done')
+        self.assertEqual(prep['log']['outcomes'].count('The bell tower collapsed.'), 1)
+        self.assertEqual(prep['log']['summary'].count('freed Captain Rook'), 1)
+        [old] = [r for r in self.stored('threads')['threads'] if r['id'] == 'old-thread']
+        self.assertEqual(old['detail'].count('The bell was found.'), 1)
+        self.assert_shaped()
+
+    def test_partly_accepted_wrapup_writes_only_the_ticked_rows(self):
+        draft = self.stage_wrapup_draft()
+        self.assertEqual(
+            wrapup_workflow.reviewable_keys(draft),
+            {
+                'outcomes:freed',
+                'outcomes:fallen',
+                'loot:seal',
+                'hooks:door',
+                'threads:smugglers',
+                'thread_changes:old-thread',
+                'codex_changes:captain',
+            },
+        )
+        self.request(
+            '/api/requests/req-wrap/apply',
+            {
+                'rejected': [
+                    'outcomes:fallen',
+                    'loot:seal',
+                    'hooks:door',
+                    'threads:smugglers',
+                    'thread_changes:old-thread',
+                    'codex_changes:captain',
+                ]
+            },
+        )
+        prep = self.stored('prep/s2')
+        self.assertEqual(prep['status'], 'played')
+        self.assertEqual(prep['log']['outcomes'], ['Captain Rook is free and owes the party.'])
+        self.assertEqual((prep['log']['hooks'], prep['log']['loot']), ([], []))
+        self.assertEqual(prep['threads'], ['old-thread'])
+        self.assertIn('freed Captain Rook', prep['log']['summary'])
+        threads = self.stored('threads')['threads']
+        self.assertEqual(
+            [(t['id'], t['status']) for t in threads], [('old-thread', 'open'), ('sealed', 'open')]
+        )
+        self.assertNotIn('session_updates', threads[0])
+        self.assertEqual(threads[0]['sessions'], [])
+        captain = self.stored('codex')['entries'][0]
+        self.assertEqual((captain['group'], captain['notes']), ('Harbour watch', 'Stern.'))
+
+    def test_a_wrapup_is_refused_when_a_record_it_changes_was_edited_after_review(self):
+        self.stage_wrapup_draft()
+        entries = self.stored('codex')
+        entries['entries'][0]['notes'] = 'GM edited this while reviewing.'
+        campaign_core.commit_docs('Synthetic edit', [('codex', entries)])
+        self.request('/api/requests/req-wrap/apply', {}, expected=400)
+        self.assertEqual(self.stored('prep/s2')['status'], 'ready')
+        self.request('/api/requests/req-wrap/stage', {'draft': self.wrapup_proposal()})
+        self.request('/api/requests/req-wrap/apply', {})
+        notes = self.stored('codex')['entries'][0]['notes']
+        self.assertEqual(notes, 'GM edited this while reviewing.\n\nS2: Owes the party a favour.')
+
+    def test_a_wrapup_needs_an_active_session_prep(self):
+        item = self.seed_wrapup_request()
+        for label, change in {
+            'no session': {'session': ''},
+            'a missing session': {'session': 's9'},
+        }.items():
+            with self.subTest(change=label):
+                campaign_core.write_doc('inbox', {'items': [{**item, **change}]})
+                self.request('/api/requests/req-wrap/pack', expected=403)
+        prep = self.stored('prep/s2')
+        prep['archived'] = True
+        campaign_core.write_doc('prep/s2', prep)
+        campaign_core.write_doc('inbox', {'items': [item]})
+        self.request('/api/requests/req-wrap/pack', expected=403)
+
+    def test_the_next_sessions_context_carries_the_wrapups_hooks_and_loot(self):
+        self.stage_wrapup_draft()
+        self.request('/api/requests/req-wrap/apply', {})
+        campaign_core.write_doc('prep/s3', shapes.PREP.new(n=3, title='Session 3'))
+        campaign_core.write_doc(
+            'inbox',
+            {
+                'items': [
+                    {
+                        'id': 'req-next',
+                        'kind': 'session',
+                        'session': 's3',
+                        'text': 'Open the sealed door.',
+                        'status': 'new',
+                    }
+                ]
+            },
+        )
+        pack = self.request('/api/requests/req-next/pack')
+        self.assertIn('Someone is behind the sealed door.', pack['prompt'])
+        self.assertIn('Copper seal', pack['prompt'])
+
+    def test_a_request_is_queued_under_the_draft_kind_of_its_own_workflow(self):
+        self.seed_wrapup_request()
+        for kind, expected in (('wrapup', 'wrapup'), ('session', 'session'), ('plot', 'request')):
+            with self.subTest(kind=kind):
+                box = self.stored('inbox')
+                box['items'] = [
+                    {
+                        'id': 'req-q',
+                        'kind': kind,
+                        'session': 's2',
+                        'text': 'Notes.',
+                        'status': 'new',
+                        'settings': {'hours': 4, 'combat': 2, 'social': 2, 'threads': []},
+                    }
+                ]
+                campaign_core.write_doc('inbox', box)
+                with patch.object(
+                    campaign_core.ai_provider, 'command', return_value=[sys.executable]
+                ) as command:
+                    campaign_core.start_request('req-q')
+                self.assertEqual(command.call_args.args[0], expected)
+                self.assertEqual(
+                    command.call_args.args[1], campaign_core.request_pack(box['items'][0])['schema']
+                )
+
+    def test_the_browser_is_told_which_proposal_rows_can_be_ticked(self):
+        kinds = self.request('/api/state')['review_kinds']
+        self.assertEqual(kinds['other'], ['entries', 'threads', 'scenes', 'handouts'])
+        self.assertEqual(kinds['session'], list(session_workflow.REVIEWABLE))
+        self.assertEqual(kinds['wrapup'], list(wrapup_workflow.REVIEWABLE))
 
     def test_partly_accepted_proposal_writes_only_accepted_items(self):
         campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))

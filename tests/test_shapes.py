@@ -51,6 +51,32 @@ class ShapeTests(unittest.TestCase):
         with self.assertRaisesRegex(shapes.ShapeError, 'key.json: areas must be a list'):
             shapes.MAP_KEY.fill_all({'areas': {}}, 'key.json')
 
+    def test_fill_completes_an_object_held_in_a_field_and_names_its_problems(self):
+        prep = {'n': 1, 'title': 'One', 'log': {'summary': 'Played.', 'loot': [{'item': 'Key'}]}}
+
+        shapes.PREP.fill_all(prep, 'prep.json')
+
+        self.assertEqual(prep['log']['summary'], 'Played.')
+        self.assertEqual((prep['log']['hooks'], prep['log']['appeared']), ([], []))
+        self.assertEqual(prep['log']['loot'], [{'item': 'Key', 'where': '', 'value': ''}])
+        self.assertEqual(shapes.PREP.problems(prep), [])
+        prep['log']['hooks'] = 'a lead'
+        self.assertEqual(shapes.PREP.problems(prep), ['prep.log.hooks is string, not array'])
+        with self.assertRaisesRegex(shapes.ShapeError, 'prep.json: log must be an object'):
+            shapes.PREP.fill_all({'n': 1, 'title': 'One', 'log': 'text'}, 'prep.json')
+
+    def test_a_session_log_is_written_once_any_part_of_it_holds_something(self):
+        self.assertFalse(any(map(shapes.log_written, (None, 'text', {}, shapes.LOG.new()))))
+        for field, value in (
+            ('summary', 'Played.'),
+            ('outcomes', ['A door opened.']),
+            ('hooks', ['A lead.']),
+            ('loot', [{'item': 'Key'}]),
+            ('appeared', ['captain']),
+        ):
+            with self.subTest(field=field):
+                self.assertTrue(shapes.log_written(shapes.LOG.new(**{field: value})))
+
     def test_problems_name_missing_and_mistyped_fields(self):
         thread = {'id': 't', 'title': 'T', 'status': 'open', 'detail': '', 'pcs': 'Ash'}
         self.assertEqual(

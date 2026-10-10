@@ -452,6 +452,7 @@ class Handler(SimpleHTTPRequestHandler):
                 else '',
                 prep=list_docs('prep'),
                 prep_archived=self._archived_preps(),
+                review_kinds=request_workflow.review_kinds(),
                 interrupted_changes=JOURNAL.conflicts(),
             )
         )

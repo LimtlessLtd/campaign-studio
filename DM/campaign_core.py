@@ -775,7 +775,7 @@ def start_request(rid):
         if item.get('status') == 'done':
             raise ValueError('Reopen this request before drafting again.')
         pack = request_pack(item)
-        cmd = ai_provider.command('request', pack['schema'])
+        cmd = ai_provider.command(request_workflow.draft_kind(item), pack['schema'])
         job = new_job(
             'claude',
             'request-draft',
@@ -1248,10 +1248,13 @@ def preps_overview():
         number = re.fullmatch(r's(\d{1,6})', name)
         if number:
             prep = read_json(doc_path('prep/' + name), {})
-            log = prep.get('log') or {}
-            played = bool(log.get('summary') or log.get('notes') or log.get('outcomes'))
             rows.append(
-                dict(id=name, n=int(number[1]), archived=bool(prep.get('archived')), played=played)
+                dict(
+                    id=name,
+                    n=int(number[1]),
+                    archived=bool(prep.get('archived')),
+                    played=shapes.log_written(prep.get('log')),
+                )
             )
     return rows
 

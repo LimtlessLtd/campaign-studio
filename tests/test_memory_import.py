@@ -149,6 +149,20 @@ class MemoryImportTests(unittest.TestCase):
         self.assertEqual(self.studio.stored('prep/s2')['title'], 'Existing prep')
         self.studio.assert_shaped()
 
+    def test_a_log_holding_only_leads_or_loot_is_not_overwritten_by_an_import(self):
+        (self.root / 's2.json').write_text(
+            json.dumps({'session': 's2', 'summary': 'Imported.'}), encoding='utf-8'
+        )
+        prep = shapes.PREP.new(n=2, title='Played')
+        prep['log']['hooks'] = ['Someone is behind the sealed door.']
+        self.studio.seed('prep/s2', prep)
+        report = self.apply('summaries', self.preview('summaries', self.root), self.root)
+        self.assertEqual((report['added'], report['filled'], report['skipped']), (0, 0, 1))
+        self.assertEqual(self.studio.stored('prep/s2')['log']['summary'], '')
+        self.assertEqual(
+            self.studio.stored('prep/s2')['log']['hooks'], ['Someone is behind the sealed door.']
+        )
+
     def test_lore_folder_selection_imports_only_selected_journals(self):
         world = foundry_library.selected_world()
         snapshot = {

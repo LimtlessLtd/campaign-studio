@@ -16,6 +16,8 @@ THEMES = ['city', 'outdoor', 'dungeon', 'cellar', 'temple', 'tavern', 'ship', 'c
 ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
 # The kinds of proposed rows a GM accepts or rejects one at a time (see `item_review`).
 REVIEWABLE = ('maps', 'entries', 'threads', 'thread_changes', 'scenes', 'handouts')
+# Request fields, besides the pitch and the session, that the proposal depends on (`request_workflow.input_hash`).
+INPUTS = ('settings',)
 
 SCHEMA = workflow.obj(
     {
@@ -321,7 +323,7 @@ def without_rejected(draft, rejected):
     return kept
 
 
-def apply(item, read_doc, commit, inbox, party_level=5, rejected=()):
+def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
     """Apply the accepted rows of a reviewed session proposal in one commit.
 
     `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out. The staleness check covers the

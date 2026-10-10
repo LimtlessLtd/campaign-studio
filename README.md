@@ -168,6 +168,14 @@ and handout one at a time: untick what you do not want and only the ticked items
 its place without a map, NPC or clue you left out. Recap, goals, loot and checklist apply as a whole, and
 before/after diffs and "redraft this one" are planned in W33.
 
+After you play, **Wrap up this session** on that prep takes your notes from the table (or a recording
+summary pasted in) and drafts the session log, changes to threads and codex entries, new threads and leads
+for the next session. Untick any outcome, loot row, lead, new thread, thread change or codex change before
+applying; the ticked rows are written in one recoverable change, added to any log you had already begun, and
+the session is marked played. Later recap and pitch drafts read those leads, loot and outcomes. A wrap-up
+only records what your notes say; nothing is written before you apply, and a live AI draft has not yet been
+checked against real notes.
+
 Image briefs are queued with their content. Upload artwork, or configure a local HTTP / remote HTTPS
 image endpoint. The request contract is `{model, prompt, size, n: 1}`; the response must include
 `data[0].b64_json`. Use an environment variable for the API key; settings store its name only.

@@ -47,6 +47,7 @@ class AIProviderTests(unittest.TestCase):
 
         for kind in (
             'request',
+            *request_workflow.WORKFLOWS,
             'content',
             'classify',
             'thread-ledger',
@@ -145,10 +146,25 @@ class AIProviderTests(unittest.TestCase):
         # thread ledger), so adding a kind to the server needs its schema here too.
         source = (ROOT / 'DM' / 'campaign_core.py').read_text(encoding='utf-8')
         kinds = set(re.findall(r"ai_provider\.command\(\s*'([a-z-]+)'", source))
-        self.assertTrue({'request', 'classify', 'thread-ledger', 'arc-options'} <= kinds)
-        for kind in kinds:
+        self.assertTrue({'classify', 'thread-ledger', 'arc-options'} <= kinds)
+        # A request is queued under the kind its own workflow names (see the next test).
+        self.assertIn('ai_provider.command(request_workflow.draft_kind(item)', source)
+        for kind in kinds | {'request', *request_workflow.WORKFLOWS}:
             with self.subTest(kind=kind):
                 self.assertIn('properties', draft_schemas.for_kind(kind))
+
+    def test_each_request_kind_is_drafted_under_its_own_strict_schema(self):
+        # A session pitch was queued as a plain `request`, so the OpenAI and Codex providers held its draft
+        # to the general request schema and every Session Forge proposal failed validation.
+        for kind, module in request_workflow.WORKFLOWS.items():
+            with self.subTest(kind=kind):
+                draft = request_workflow.draft_kind({'kind': kind})
+                self.assertEqual(draft, kind)
+                self.assertEqual(draft_schemas.for_kind(draft), module.SCHEMA)
+        for kind in ('npc', 'encounter', 'plot', 'expand', 'other'):
+            with self.subTest(kind=kind):
+                draft = request_workflow.draft_kind({'kind': kind})
+                self.assertEqual(draft_schemas.for_kind(draft), request_workflow.SCHEMA)
 
     def test_openai_worker_sends_a_tool_free_schema_request_and_parses_its_draft(self):
         draft = {'summary': 'Synthetic draft'}

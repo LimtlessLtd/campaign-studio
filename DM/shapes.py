@@ -29,12 +29,13 @@ def json_type(value):
 class Shape:
     """A stored record type: required fields, defaults for the rest, and the shapes of its lists."""
 
-    def __init__(self, name, required, defaults, rows=None):
+    def __init__(self, name, required, defaults, rows=None, parts=None):
         self.name = name
         self.required = tuple(required)
         self.defaults = defaults
         self.rows = rows or {}  # list field -> Shape of the records in it
-        assert set(self.rows) <= set(defaults), name
+        self.parts = parts or {}  # object field -> Shape of the object held in it
+        assert set(self.rows) | set(self.parts) <= set(defaults), name
 
     def new(self, **fields):
         """A complete new record: required fields first, then defaults, then any extra links."""
@@ -65,6 +66,10 @@ class Shape:
             for row in document[field]:
                 if isinstance(row, dict):
                     shape.fill_all(row, path)
+        for field, shape in self.parts.items():
+            if not isinstance(document[field], dict):
+                raise ShapeError(f'{path}: {field} must be an object.')
+            shape.fill_all(document[field], path)
         return document
 
     def problems(self, record, where=None):
@@ -83,6 +88,9 @@ class Shape:
                 record.get(field) if isinstance(record.get(field), list) else []
             ):
                 found += shape.problems(row, f'{where}.{field}[{i}]')
+        for field, shape in self.parts.items():
+            if isinstance(record.get(field), dict):
+                found += shape.problems(record[field], f'{where}.{field}')
         return found
 
     def describe(self):
@@ -161,6 +169,21 @@ AREA = Shape(
 CODEX = Shape('codex', [], dict(entries=[]), {'entries': CODEX_ENTRY})
 THREADS = Shape('threads', [], dict(threads=[]), {'threads': THREAD})
 ART = Shape('art', [], dict(items=[]), {'items': ART_ITEM})
+# What happened when a session was played (W35). `loot` is what the party was given, `appeared` the codex
+# entries that appeared, and `hooks` the leads the session left for the next pitch.
+LOG = Shape(
+    'session_log',
+    [],
+    dict(summary='', notes='', outcomes=[], loot=[], appeared=[], hooks=[]),
+    {'loot': LOOT},
+)
+
+
+def log_written(log):
+    """True when a session log holds anything: the session was played and its log begun."""
+    return isinstance(log, dict) and any(log.get(field) for field in LOG.defaults)
+
+
 PREP = Shape(
     'prep',
     ['n', 'title'],
@@ -177,9 +200,10 @@ PREP = Shape(
         notes='',
         loot=[],
         handouts=[],
-        log=dict(summary='', notes='', outcomes=[]),
+        log=LOG.new(),
     ),
     {'scenes': SCENE, 'handouts': HANDOUT, 'checklist': CHECKLIST_ITEM, 'loot': LOOT},
+    {'log': LOG},
 )
 MAP_KEY = Shape(
     'map_key',
@@ -314,6 +338,7 @@ SHAPES = {
         CODEX,
         THREADS,
         ART,
+        LOG,
         PREP,
         MAP_KEY,
         WORLD_PIN,
@@ -342,7 +367,12 @@ def describe():
 def fields_digest():
     """A fingerprint of every shape's fields; it changes when a field is added or removed."""
     fields = {
-        name: [sorted(shape.required), sorted(shape.defaults), sorted(shape.rows)]
+        name: [
+            sorted(shape.required),
+            sorted(shape.defaults),
+            sorted(shape.rows),
+            sorted(shape.parts),
+        ]
         for name, shape in SHAPES.items()
     }
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode('utf-8')).hexdigest()

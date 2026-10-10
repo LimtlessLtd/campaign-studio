@@ -264,9 +264,7 @@ class SchemaTests(unittest.TestCase):
         result = self.migrate()
 
         self.assertEqual((result['from'], result['version']), (5, schema.CURRENT))
-        self.assertEqual(
-            self.read('data/prep/s9.json')['log'], {'summary': '', 'notes': '', 'outcomes': []}
-        )
+        self.assertEqual(self.read('data/prep/s9.json')['log'], shapes.LOG.new())
 
     def test_version_six_campaign_splits_records_without_changing_foundry_links(self):
         schema.write_marker(self.data, 6, 'Synthetic version 6 campaign')
@@ -522,6 +520,44 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual((restored['entries'], restored['sessions']), (['old-place'], ['s2']))
         self.assertEqual((restored['maps'], restored['locations'], restored['clues']), ([], [], []))
         self.assertEqual(shapes.THREAD.problems(restored), [])
+        self.assertEqual(self.migrate()['status'], 'current')
+
+    def test_version_fifteen_session_log_gains_loot_who_appeared_and_hooks_without_losing_text(
+        self,
+    ):
+        self.migrate()
+        schema.write_marker(self.data, 15, 'Synthetic version 15 campaign')
+        path = self.dm / 'data/prep/s2.json'
+        path.write_text(
+            json.dumps(
+                {
+                    **shapes.PREP.new(n=2, title='Two'),
+                    'log': {
+                        'summary': 'The party crossed the quay.',
+                        'notes': 'Do not mention the seal.',
+                        'outcomes': ['The gate stands open.'],
+                        'custom': 'kept',
+                    },
+                }
+            ),
+            encoding='utf-8',
+        )
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (15, schema.CURRENT))
+        log = self.read('data/prep/s2.json')['log']
+        self.assertEqual(
+            (log['summary'], log['notes'], log['outcomes'], log['custom']),
+            (
+                'The party crossed the quay.',
+                'Do not mention the seal.',
+                ['The gate stands open.'],
+                'kept',
+            ),
+        )
+        self.assertEqual((log['loot'], log['appeared'], log['hooks']), ([], [], []))
+        self.assertEqual(shapes.PREP.problems(self.read('data/prep/s2.json')), [])
         self.assertEqual(self.migrate()['status'], 'current')
 
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):

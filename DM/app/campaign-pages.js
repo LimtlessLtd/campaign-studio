@@ -14,6 +14,7 @@ const TYPES = {
 };
 const KINDS = {
   session: 'Plan whole session',
+  wrapup: 'Wrap up a played session',
   'battle map': 'Battle map',
   npc: 'NPC',
   item: 'Item',
@@ -219,22 +220,16 @@ async function importRequestProposal(item) {
 }
 /* Items of a proposal the GM has unticked, by request ID, as the `kind:id` keys the server accepts. */
 const rejectedItems = new Map();
-const REVIEWED_KINDS = ['entries', 'threads', 'scenes', 'handouts'];
-const SESSION_REVIEWED_KINDS = [
-  'maps',
-  'entries',
-  'threads',
-  'thread_changes',
-  'scenes',
-  'handouts',
-];
-const reviewedKinds = (item) => (item.kind === 'session' ? SESSION_REVIEWED_KINDS : REVIEWED_KINDS);
+/* The kinds of proposed rows with a tick box come from the server, by request kind. */
+const reviewedKinds = (item) => S.state.review_kinds[item.kind] || S.state.review_kinds.other;
 const threadTitle = (id) => S.recordIndex.threads.find((x) => x.id === id)?.title || id;
-/* A change to an existing thread has no name of its own: it is named by the thread it changes. */
+/* A change to an existing thread or entry has no name of its own: it is named by what it changes. */
 const choiceLabel = (kind, row) =>
   kind === 'thread_changes'
     ? 'Update thread: ' + threadTitle(row.id)
-    : row.name || row.title || row.id;
+    : kind === 'codex_changes'
+      ? 'Update entry: ' + codexName(row.id)
+      : row.name || row.title || row.text || row.item || row.id;
 function itemChoice(item, kind, row) {
   const key = kind + ':' + row.id;
   return h(
@@ -413,9 +408,13 @@ function requestCard(it, box, draw) {
     ),
     field('inbox', it, 'text', {
       type: 'textarea',
-      rows: it.kind === 'session' ? 5 : 2,
+      rows: it.kind === 'session' || it.kind === 'wrapup' ? 5 : 2,
       placeholder:
-        it.kind === 'session' ? 'What is the next session about?' : 'What do you want made?',
+        it.kind === 'session'
+          ? 'What is the next session about?'
+          : it.kind === 'wrapup'
+            ? 'What happened at the table?'
+            : 'What do you want made?',
     }),
     it.kind === 'session' && it.settings
       ? h(
@@ -427,7 +426,9 @@ function requestCard(it, box, draw) {
     h(
       'label',
       {},
-      'Session prep (needed for scenes and handouts)',
+      it.kind === 'wrapup'
+        ? 'Session prep (the session that was played)'
+        : 'Session prep (needed for scenes and handouts)',
       h(
         'select',
         {
@@ -474,9 +475,13 @@ function requestCard(it, box, draw) {
             'entries',
             'threads',
             'thread_changes',
+            'codex_changes',
             'scenes',
             'handouts',
+            'outcomes',
+            'appeared',
             'loot',
+            'hooks',
             'checklist',
             'notes',
           ]
@@ -491,7 +496,11 @@ function requestCard(it, box, draw) {
                   : h(
                       'pre',
                       { class: 'file', tabindex: 0 },
-                      JSON.stringify(it.draft[key], null, 2),
+                      JSON.stringify(
+                        key === 'appeared' ? it.draft[key].map(codexName) : it.draft[key],
+                        null,
+                        2,
+                      ),
                     ),
               ),
             ),
@@ -588,7 +597,7 @@ async function prepPage(name, context) {
   }
   p.loot = p.loot || [];
   p.handouts = p.handouts || [];
-  p.log = Object.assign({ summary: '', notes: '', outcomes: [] }, p.log);
+  p.log = blank('session_log', p.log);
   const threads = await recordChoices('threads', context.signal);
   await recordChoices('codex', context.signal);
   const scenesBox = h('div');
@@ -930,6 +939,21 @@ async function prepPage(name, context) {
     }),
     h('label', {}, 'Outcomes: changes that now stand'),
     listEditor(docName, p.log.outcomes, { placeholder: 'Add an outcome and press Enter' }),
+    h('label', {}, 'Who and what appeared'),
+    picker(docName, p.log.appeared, codexChoices, { placeholder: 'Add an entry…' }),
+    h('label', {}, 'Loot given to the party'),
+    rowsEditor(
+      docName,
+      p.log.loot,
+      [
+        ['item', 'Item', 3],
+        ['where', 'Who has it', 2],
+        ['value', 'Value', 1],
+      ],
+      () => blank('loot'),
+    ),
+    h('label', {}, 'Leads for the next session'),
+    listEditor(docName, p.log.hooks, { placeholder: 'Add a lead and press Enter' }),
     h('h2', {}, 'Scenes'),
     scenesBox,
     h(
@@ -1078,6 +1102,8 @@ async function makePanel(session, context) {
     encounter: 'e.g. A patrol boards the party’s ship; negotiation may avoid combat.',
     handout: 'e.g. A wanted poster issued after a controversial trial.',
     other: 'Anything else to prepare.',
+    wrapup:
+      'e.g. We freed Captain Rook, the bell tower fell, and a voice answered from the sealed door. Paste your notes or a recording summary.',
   };
   const open = (kind) => {
     const ta = h('textarea', { rows: 3, placeholder: hints[kind] || '' });
@@ -1152,8 +1178,19 @@ async function makePanel(session, context) {
       h(
         'div',
         { class: 'card', style: 'margin:10px 0;background:var(--bg2)' },
-        h('b', {}, 'New ' + (KINDS[kind] || kind).toLowerCase()),
+        h(
+          'b',
+          {},
+          kind === 'wrapup' ? 'Wrap up this session' : 'New ' + (KINDS[kind] || kind).toLowerCase(),
+        ),
         ta,
+        kind === 'wrapup'
+          ? h(
+              'p',
+              { class: 'muted' },
+              'One draft proposes the session log, what changed for threads and codex entries, new threads and leads for the next session. You tick what to keep before anything is written, and the session is marked played.',
+            )
+          : null,
         kind === 'session' ? seedBox : null,
         kind === 'session'
           ? h(
@@ -1206,6 +1243,7 @@ async function makePanel(session, context) {
         'div',
         { class: 'row' },
         h('button', { class: 'primary', onclick: () => open('session') }, 'Plan whole session'),
+        h('button', { onclick: () => open('wrapup') }, 'Wrap up this session'),
         ['npc', 'item', 'encounter', 'handout', 'other'].map((k) =>
           h('button', { onclick: () => open(k) }, '+ ' + KINDS[k]),
         ),
@@ -1215,7 +1253,7 @@ async function makePanel(session, context) {
     h(
       'p',
       { class: 'muted', style: 'margin:6px 0 0' },
-      'Draft a complete session from one pitch, or request individual pieces. Review every proposal before applying it. New map briefs wait in the map workflow.',
+      'Draft a complete session from one pitch, wrap up a played session from your notes, or request individual pieces. Review every proposal before applying it. New map briefs wait in the map workflow.',
     ),
     formBox,
     list,
