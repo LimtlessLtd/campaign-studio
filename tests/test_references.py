@@ -39,6 +39,20 @@ def sample():
 
 
 class StalenessTests(unittest.TestCase):
+    def test_hero_names_prefer_codex_player_characters_over_the_public_site(self):
+        with tempfile.TemporaryDirectory() as folder:
+            for entry in (
+                shapes.CODEX_ENTRY.new(id='m', type='pc', name='Mira Vale'),
+                shapes.CODEX_ENTRY.new(id='guard', type='npc', name='Captain Hale'),
+            ):
+                path = Path(records.record_path(folder, 'codex', entry['id']))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(entry), encoding='utf-8')
+            names = records.hero_names(
+                folder, [{'id': 'm', 'name': 'Mira'}, {'id': 'z'}, 'bad', {'name': 'No ID'}]
+            )
+        self.assertEqual(names, {'m': 'Mira Vale', 'z': 'z'})
+
     def test_threads_sort_by_display_name_of_first_linked_hero(self):
         with tempfile.TemporaryDirectory() as folder:
             for key, pcs in (

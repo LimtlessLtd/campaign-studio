@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -637,7 +638,7 @@ class BrowserSmoke(unittest.TestCase):
         self.page.reload()
         self.page.set_viewport_size(NARROW)
         expect(self.page.get_by_text('Ready to review')).to_be_visible()
-        expect(self.page.get_by_text('Include when applying')).to_have_count(0)
+        expect(self.page.get_by_role('checkbox', name=re.compile('Flooded Quay'))).to_be_checked()
         self.assert_accessible('session proposal review at phone width')
         self.page.get_by_role('button', name='Apply to campaign').click()
         expect(self.page.get_by_text('Flooded Quay').first).to_be_visible()
@@ -687,6 +688,56 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_role('button', name='New follow-up')).to_be_visible()
         self.assertEqual(self.stored('codex')['entries'], [])
         self.assertEqual(self.stored('prep/s1')['scenes'][0]['npcs'], [])
+
+    def test_session_item_choices_apply_only_the_ticked_items(self):
+        map_slug, item = self.studio.seed_session_request()
+        self.studio.request(
+            '/api/requests/' + item['id'] + '/stage',
+            {'draft': self.studio.session_proposal(map_slug)},
+        )
+        self.open('#/inbox')
+        self.page.set_viewport_size(NARROW)
+        for label in (
+            'Flooded Quay',
+            'Harbour Watcher',
+            'The smuggler network',
+            'Update thread: The bell',
+            'Harbour notice',
+        ):
+            expect(self.page.get_by_role('checkbox', name=re.compile(label))).to_be_checked()
+        self.assert_accessible('session item review at phone width')
+        self.page.get_by_role('checkbox', name=re.compile('Flooded Quay')).uncheck()
+        self.page.get_by_role('checkbox', name=re.compile('Harbour Watcher')).uncheck()
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_role('button', name='New follow-up')).to_be_visible()
+        self.assertEqual(self.stored('inbox')['items'][0]['created_maps'], [])
+        self.assertEqual([row['id'] for row in self.stored('codex')['entries']], ['existing-npc'])
+        prep = self.stored('prep/s1')
+        quay = prep['scenes'][1]
+        self.assertEqual((quay['title'], quay['map'], quay['npcs']), ('At the quay', '', []))
+        self.assertEqual(len(prep['handouts']), 1)
+
+    def test_a_job_log_that_scrolls_can_be_reached_with_the_keyboard(self):
+        job = dict(
+            id='29991230-000000-aaaa',
+            lane='transcribe',
+            kind='transcribe',
+            status='failed',
+            created=time.time(),
+            label='Transcribe session-one',
+        )
+        campaign_core.JOBS_SERVICE.save_job(job)
+        long_line = (
+            'The transcription program reported a problem with the recording and kept going. '
+        )
+        with open(campaign_core.JOBS_SERVICE.job_file(job['id'], 'log'), 'w') as log:
+            log.write(chr(10).join(f'{n}: {long_line}' for n in range(8)))
+        self.page.set_viewport_size(NARROW)
+        self.open('#/recordings')
+        log = self.page.locator('pre.log')
+        expect(log).to_be_visible()
+        self.assertTrue(log.evaluate('el => el.scrollHeight > el.clientHeight'))
+        self.assert_accessible('long job log at phone width')
 
     def test_codex_pages_and_thread_edits_save_individual_records(self):
         self.studio.seed(

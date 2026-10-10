@@ -527,16 +527,7 @@ class Handler(SimpleHTTPRequestHandler):
         sort = query.get('sort', [''])[0]
         hero_names = None
         if kind == 'threads' and sort == 'hero':
-            hero_names = {
-                row['id']: row.get('name') or row['id']
-                for row in public_content().get('heroes', [])
-                if isinstance(row, dict) and isinstance(row.get('id'), str)
-            }
-            hero_names.update(
-                (row['id'], row.get('name') or row['id'])
-                for row in records.all_records(data, 'codex')
-                if row.get('type') == 'pc'
-            )
+            hero_names = records.hero_names(data, public_content().get('heroes', []))
         return self.send_json(
             records.page(
                 data,

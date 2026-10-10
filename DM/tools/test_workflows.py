@@ -30,6 +30,7 @@ import foundry_upgrade
 import http_routes
 import workflow
 import request_workflow
+import session_workflow
 import revisions
 import records
 import schema
@@ -719,7 +720,11 @@ class StudioIntegration(unittest.TestCase):
         self.assertIn('Treat played logs as canon', pack['prompt'])
         self.assertIn('recap', pack['schema']['properties'])
 
-    def test_session_pitch_stages_and_applies_linked_prep_once(self):
+    def seed_session_request(self):
+        """An imported map, an old NPC and thread and an empty prep, with a session request awaiting a draft.
+
+        Returns the map's slug and the request.
+        """
         slug, _ = self.import_map()
         self.seed(
             'codex',
@@ -749,6 +754,10 @@ class StudioIntegration(unittest.TestCase):
             'settings': {'hours': 4, 'combat': 2, 'social': 3, 'threads': ['old-thread']},
         }
         campaign_core.write_doc('inbox', {'items': [item]})
+        return slug, item
+
+    def test_session_pitch_stages_and_applies_linked_prep_once(self):
+        slug, item = self.seed_session_request()
         pack = self.request('/api/requests/req-session/pack')
         self.assertEqual(pack['schema']['properties']['scenes']['minItems'], 3)
         self.assertIn('Follow the smuggler lead', pack['prompt'])
@@ -759,9 +768,7 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(self.stored('prep/s1')['pitch'], '')
         self.request('/api/requests/req-session/stage', {'draft': draft})
         self.request(
-            '/api/requests/req-session/apply',
-            {'rejected': ['entries:watcher']},
-            expected=400,
+            '/api/requests/req-session/apply', {'rejected': ['entries:nope']}, expected=400
         )
         changed = self.stored('prep/s1')
         changed['notes'] = 'GM edited this while reviewing.'
@@ -863,6 +870,92 @@ class StudioIntegration(unittest.TestCase):
             len(campaign_core.read_json(campaign_core.doc_path('prep/s1'))['goals']), 1
         )
         self.assert_shaped()
+
+    def stage_session_draft(self):
+        slug, _ = self.seed_session_request()
+        draft = self.session_proposal(slug)
+        self.request('/api/requests/req-session/stage', {'draft': draft})
+        return slug, draft
+
+    def test_partly_accepted_session_leaves_out_rejected_items_and_the_links_to_them(self):
+        slug, draft = self.stage_session_draft()
+        keys = session_workflow.reviewable_keys(draft)
+        self.assertEqual(
+            keys,
+            {
+                'maps:quay',
+                'entries:watcher',
+                'threads:smugglers',
+                'thread_changes:old-thread',
+                'scenes:arrival',
+                'scenes:quay-scene',
+                'scenes:aftermath',
+                'handouts:notice',
+            },
+        )
+        rejected = [
+            'maps:quay',
+            'entries:watcher',
+            'threads:smugglers',
+            'thread_changes:old-thread',
+            'handouts:notice',
+        ]
+        self.request(
+            '/api/requests/req-session/apply', {'rejected': rejected + ['maps:nope']}, expected=400
+        )
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'review')
+        self.assertEqual(self.stored('prep/s1')['pitch'], '')
+
+        self.request('/api/requests/req-session/apply', {'rejected': rejected})
+        applied = self.stored('inbox')['items'][0]
+        self.assertEqual(applied['status'], 'done')
+        self.assertEqual(applied['created_maps'], [])
+        self.assertEqual([row['id'] for row in self.stored('codex')['entries']], ['existing-npc'])
+        [old] = self.stored('threads')['threads']
+        self.assertEqual((old['id'], old['status']), ('old-thread', 'open'))
+        self.assertNotIn('session_updates', old)
+        art = campaign_core.read_json(campaign_core.doc_path('art'), {'items': []})
+        self.assertEqual(art['items'], [])
+        prep = self.stored('prep/s1')
+        self.assertEqual(prep['handouts'], [])
+        self.assertEqual(prep['goals'], ['Find the smugglers'])
+        self.assertEqual(prep['threads'], ['old-thread'])
+        self.assertEqual(len(prep['loot']), 1)
+        arrival, quay, aftermath = prep['scenes']
+        self.assertEqual(
+            (arrival['map'], arrival['area'], arrival['npcs']), (slug, 1, ['existing-npc'])
+        )
+        self.assertEqual([clue['thread'] for clue in arrival['clues']], ['old-thread'])
+        # The scene stays, without the map, NPC and clue that pointed at what the GM turned down.
+        self.assertEqual((quay['map'], quay['area'], quay['npcs'], quay['clues']), ('', 0, [], []))
+        self.assertEqual(quay['title'], 'At the quay')
+        self.assertEqual(aftermath['title'], 'Aftermath')
+        self.assert_shaped()
+
+    def test_rejecting_a_scene_keeps_what_the_other_scenes_use(self):
+        _, draft = self.stage_session_draft()
+        self.request(
+            '/api/requests/req-session/apply', {'rejected': ['scenes:aftermath', 'scenes:arrival']}
+        )
+        applied = self.stored('inbox')['items'][0]
+        [new_map] = applied['created_maps']
+        prep = self.stored('prep/s1')
+        [quay] = prep['scenes']
+        self.assertEqual(quay['map'], new_map['slug'])
+        self.assertEqual(quay['npcs'], ['req-session-watcher'])
+        self.assertEqual(quay['clues'][0]['thread'], 'req-session-smugglers')
+        self.assertEqual(len(prep['handouts']), 1)
+        self.assertEqual(self.stored('threads')['threads'][0]['status'], 'foreshadowed')
+
+    def test_a_session_whose_every_item_is_rejected_still_adds_its_goals_and_checklist(self):
+        _, draft = self.stage_session_draft()
+        everything = sorted(session_workflow.reviewable_keys(draft))
+        self.request('/api/requests/req-session/apply', {'rejected': everything})
+        prep = self.stored('prep/s1')
+        self.assertEqual((prep['scenes'], prep['handouts']), ([], []))
+        self.assertEqual(prep['goals'], ['Find the smugglers'])
+        self.assertEqual([row['text'] for row in prep['checklist']], ['Print the notice'])
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'done')
 
     def test_partly_accepted_proposal_writes_only_accepted_items(self):
         campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))

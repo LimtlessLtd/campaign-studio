@@ -137,6 +137,21 @@ def last_session(thread):
     return max(numbers, default=0)
 
 
+def hero_names(data, public_heroes=()):
+    """Display names of the heroes a thread can link, by ID: the public site's, then codex player characters."""
+    names = {
+        row['id']: row.get('name') or row['id']
+        for row in public_heroes
+        if isinstance(row, dict) and isinstance(row.get('id'), str)
+    }
+    names.update(
+        (row['id'], row.get('name') or row['id'])
+        for row in all_records(data, 'codex')
+        if row.get('type') == 'pc'
+    )
+    return names
+
+
 def page(
     data,
     kind,

@@ -62,6 +62,7 @@
   "DM/forge/render2d.py",
   "DM/forge/roofs.py",
   "DM/http_routes.py",
+  "DM/item_review.py",
   "DM/job_service.py",
   "DM/map_trash.py",
   "DM/maps_io.py",

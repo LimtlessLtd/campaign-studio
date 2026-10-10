@@ -28,7 +28,7 @@ Ranked by how much each holds back the goal.
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
 3. **Session workflow** (W33, W35–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
-   Item-level review, readiness and folding played outcomes back into threads remain.
+   Readiness, item review for map workflows and folding played outcomes back into threads remain.
 4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
@@ -52,7 +52,7 @@ into the threads.
 | --------------------- | ------------------------------------------------- | ------------- |
 | 1. Start next session | Recap drafts read the latest earlier session logs | W35           |
 | 2. Pitch              | Session Forge drafts a linked prep                | W33           |
-| 3. Outline            | Whole-session review; no item-level choices yet   | W33           |
+| 3. Outline            | Accept or reject each scene, map, NPC and handout | W33           |
 | 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style              | W42           |
@@ -140,9 +140,12 @@ their row and finding say enough.
   proposal, with an editable JSON import. A scene's map points to a stored slug, while the location number
   stays zero until a new map has a keyed layout. Recent logs lead its context, and W34's touched-session
   links rank active threads by staleness. W41 adds compendium bases for proposed NPCs.
-- General requests now offer item choices for entries, threads, scenes and handouts. W33 extends this to
-  session and map proposals, adds "redraft this one" and shows before/after changes to existing records.
-  Applying writes only accepted items; an edited item is validated again.
+- General requests and Session Forge proposals offer item choices (Session Forge: maps, entries, threads,
+  thread changes, scenes and handouts; the shared `item_review` module holds the key format and the removal).
+  Applying writes only accepted items and drops what linked to a rejected one: a scene stays without a rejected
+  map, NPC or clue. A session's staleness check covers the whole proposal. W33 still has to extend this to map
+  proposals, add "redraft this one" and show before/after changes to existing records. An edited item is
+  validated again.
 
 ### W35 Threads and wrap-up
 
