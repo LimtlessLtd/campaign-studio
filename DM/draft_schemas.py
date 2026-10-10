@@ -36,9 +36,14 @@ def strict_layout_schema():
     return schema
 
 
-# Draft kind (as the server names it when it queues the job) -> builder of its strict schema.
+# Draft kind (as the server names it when it queues the job) -> builder of its strict schema. A request
+# is drafted under its request kind when that kind has a workflow of its own (`request_workflow.draft_kind`).
 BUILDERS = {
     'request': lambda: request_workflow.SCHEMA,
+    **{
+        kind: (lambda module=module: module.SCHEMA)
+        for kind, module in request_workflow.WORKFLOWS.items()
+    },
     'content': lambda: workflow.CONTENT_SCHEMA,
     'classify': lambda: transcript_classifier.SCHEMA,
     'thread-ledger': lambda: thread_ledger.SCHEMA,

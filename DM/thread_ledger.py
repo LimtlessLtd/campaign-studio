@@ -251,7 +251,7 @@ def changes(ledger, selected, read_record, prep):
             record['sessions'] = list(dict.fromkeys([*record.get('sessions', []), session]))
         changed[name] = record
     if outcomes:
-        log = prep.setdefault('log', dict(summary='', notes='', outcomes=[]))
+        log = prep.setdefault('log', shapes.LOG.new())
         log['outcomes'] = list(log.get('outcomes') or []) + outcomes
         summary = '; '.join(event['text'] for event in chosen if event['kind'] == 'outcome')[:1200]
         log['summary'] = '\n\n'.join(x for x in (log.get('summary', ''), summary) if x)

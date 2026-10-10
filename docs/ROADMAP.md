@@ -28,7 +28,7 @@ Ranked by how much each holds back the goal.
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
 3. **Session workflow** (W33, W35–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
-   Readiness, item review for map workflows and folding played outcomes back into threads remain.
+   A wrap-up now folds played outcomes back into threads. Readiness and item review for map workflows remain.
 4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
@@ -57,7 +57,7 @@ into the threads.
 | 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style              | W42           |
 | 7. Publish to Foundry | One map per macro run                             | W38–W40, W47  |
-| 8. Play and wrap up   | A manual session log and "played" status          | W35           |
+| 8. Play and wrap up   | Notes in; reviewed log, thread and codex changes  | W35           |
 
 ## Milestone
 
@@ -152,11 +152,15 @@ their row and finding say enough.
 - W34 is complete: a thread links codex entries, maps, numbered map pins and touched sessions; its clues
   record text, where found and planned/planted/found status. Threads sort by staleness or linked hero, and
   deleting a map unlinks its thread references until the map is restored (schema 15).
-- W35 adds a `wrapup` workflow kind. The GM's notes or a recording summary go in. A proposed session log,
-  thread changes, codex changes (status, allegiance, notes), new threads and hooks for the next pitch come
-  out, reviewed with W33. Expand the existing prep log to include date, threads touched, entities that
-  appeared and loot awarded alongside its player summary, GM notes and outcomes. Migrate older logs
-  without losing their text.
+- The first W35 slice is done. The `wrapup` request kind (`DM/wrapup_workflow.py`) takes the GM's notes or a
+  pasted recording summary and proposes a session log, thread changes, codex changes (status, group,
+  notes), new threads and leads for the next pitch, each row ticked or unticked as in W33. The prep log
+  gained loot given, who appeared and leads (schema 16, older logs keep their text); the prep's date and
+  the threads it touched are read from the prep and the threads' touched sessions rather than copied.
+  Recap and pitch drafts read the latest earlier logs' leads and loot.
+- What remains: offer the newest wrap-up's leads as seeds in the next pitch box beside the arc seeds
+  (`arcSeedsBox`), and start a wrap-up from a transcript's confirmed play, prefilled with the thread
+  ledger's applied outcomes (W70), so a recording and the table notes meet in one proposal.
 
 ### W36, W37 Readiness and party
 

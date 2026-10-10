@@ -54,6 +54,7 @@ flowchart LR
 | `DM/workflow.py`                      | Map proposal schemas, layout DSL, stale checks, staging and content apply             |
 | `DM/request_workflow.py`              | General request schema, input fingerprint, validation and idempotent apply            |
 | `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply      |
+| `DM/wrapup_workflow.py`               | Played-session notes: reviewed log, thread and codex changes and one apply            |
 | `DM/item_review.py`                   | Item-by-item review: the `kind:id` keys a GM rejects and the rows that remain         |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
@@ -170,13 +171,13 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 | `data/ledger/<id>.json`      | `ledger`      | reviewed evidence events for one transcript (`ledger_event`)         |
 | `data/arcs/<id>.json`        | `arc`         | options proposed for chosen loose threads (`arc_option`)             |
 | `data/table-lore.json`       | `table_lore`  | notes on gags the GM confirmed as banter (`table_lore_item`)         |
-| `data/prep/<session>.json`   | `prep`        | scenes with thread clues, handouts, checklist items, loot            |
+| `data/prep/<session>.json`   | `prep`        | scenes with clues, handouts, checklist, loot, and a `session_log`    |
 | `maps/<slug>/key.json`       | `map_key`     | areas (with journal entries, events, loot), events                   |
 
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, and schema 15 adds thread map, pin and clue links. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, schema 15 adds thread map, pin and clue links, and schema 16 adds loot given, who appeared and leads to each session log. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -211,6 +212,18 @@ the session apply makes no Foundry write or paid call. The GM may reject any pro
 thread change, scene or handout (`rejected`: `kind:id` keys, via `DM/item_review.py`, which general requests
 share). A kept scene loses its map, NPC or clue links to a rejected row, rejected rows contribute no art
 brief, and the staleness check still covers the whole proposal.
+The `wrapup` request kind uses `DM/wrapup_workflow.py`: the GM's notes about a played prep go in, and the
+proposal holds a session log (summary, outcomes, who appeared, loot given, leads for the next pitch), changes
+to existing threads and codex entries, and new threads. Each outcome, loot row, lead, new thread and change is a
+row the GM can reject (`item_review`); no row links to another, so rejecting one changes no other.
+Apply appends to the prep's `log` (it never replaces text the GM wrote), marks the prep played, records the
+session on the threads it changed and commits the prep, threads and codex with the request's done status last.
+Its staleness check covers the prep and every thread and entry the proposal changes. Both request workflows sit
+in `request_workflow.WORKFLOWS`: a module provides `SCHEMA`, `REVIEWABLE`, `options`, `prompt_pack`,
+`validate`, `base_hash`, `reviewable_keys` and `apply`, and a new kind is one row there. A request is queued
+to the AI provider under its workflow's name (`request_workflow.draft_kind`), so the OpenAI and Codex
+providers hold the draft to that workflow's strict schema from `draft_schemas.BUILDERS`; other kinds share
+the general `request` schema. `review_kinds` in `/api/state` tells the browser which rows carry a tick box.
 
 Map and request drafts share `DM/context.py`. It reserves identity for linked and pinned codex records,
 summarises active threads, then fills the remaining budget with linked details, name matches and a compact

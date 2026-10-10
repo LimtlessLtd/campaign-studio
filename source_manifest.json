@@ -94,6 +94,7 @@
   "DM/references.py",
   "DM/usage.py",
   "DM/workflow.py",
+  "DM/wrapup_workflow.py",
   "LICENSE",
   "README.md",
   "SECURITY.md",

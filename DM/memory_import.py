@@ -165,12 +165,12 @@ def _session_candidate(source, identity, title, log, n=0):
     outcomes = log.get('outcomes') or []
     if not isinstance(outcomes, list) or any(not isinstance(item, str) for item in outcomes):
         raise ValueError('Session outcomes must be a list of text.')
-    clean = {
-        'summary': _short(log.get('summary')),
-        'notes': _short(log.get('notes')),
-        'outcomes': [_short(item, 1000) for item in outcomes[:50]],
-    }
-    if not clean['summary'] and not clean['notes'] and not clean['outcomes']:
+    clean = shapes.LOG.new(
+        summary=_short(log.get('summary')),
+        notes=_short(log.get('notes')),
+        outcomes=[_short(item, 1000) for item in outcomes[:50]],
+    )
+    if not shapes.log_written(clean):
         return None
     record = {'id': identity, 'n': n, 'title': _short(title, 300) or identity, 'log': clean}
     return _candidate(
@@ -427,8 +427,7 @@ def changes(proposal_value, selected, read_doc, data):
                 current = shapes.PREP.new(n=row['n'], title=row['title'])
                 report['added'] += 1
             else:
-                previous = current.get('log') or {}
-                if previous.get('summary') or previous.get('notes') or previous.get('outcomes'):
+                if shapes.log_written(current.get('log')):
                     report['skipped'] += 1
                     continue
                 current = deepcopy(current)

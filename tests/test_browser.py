@@ -590,7 +590,10 @@ class BrowserSmoke(unittest.TestCase):
                 ('+ Add handout', 'Loot for this session'),
                 ('+ add', 'Checklist'),
             ):
-                action = self.page.get_by_role('button', name=button, exact=True).bounding_box()
+                # The session log has an add button of its own (loot given), above this one.
+                action = self.page.get_by_role(
+                    'button', name=button, exact=True
+                ).last.bounding_box()
                 section = self.page.get_by_role('heading', name=heading).bounding_box()
                 self.assertIsNotNone(action)
                 self.assertIsNotNone(section)
@@ -716,6 +719,57 @@ class BrowserSmoke(unittest.TestCase):
         quay = prep['scenes'][1]
         self.assertEqual((quay['title'], quay['map'], quay['npcs']), ('At the quay', '', []))
         self.assertEqual(len(prep['handouts']), 1)
+
+    def test_wrapup_from_the_prep_page_applies_only_the_ticked_rows(self):
+        self.studio.seed_wrapup_request()
+        self.studio.seed('inbox', {'items': []})
+        self.page.set_viewport_size(NARROW)
+        self.open('#/prep/s2')
+        self.page.get_by_role('button', name='Wrap up this session').click()
+        notes = 'We freed Captain Rook and the bell tower fell. A voice came from the sealed door.'
+        self.page.get_by_placeholder(re.compile('We freed Captain Rook')).fill(notes)
+        self.page.get_by_role('button', name='Save for later').click()
+        expect(self.page.get_by_text('Wrap up a played session')).to_be_visible()
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        [item] = self.stored('inbox')['items']
+        self.assertEqual((item['kind'], item['session'], item['text']), ('wrapup', 's2', notes))
+
+        # The draft arrives (a fake provider here); the prep page then shows it for review.
+        self.studio.request(
+            '/api/requests/' + item['id'] + '/stage', {'draft': self.studio.wrapup_proposal()}
+        )
+        self.page.reload()
+        for label in (
+            'Captain Rook is free and owes the party.',
+            'The bell tower collapsed.',
+            'Copper seal',
+            'Someone is behind the sealed door.',
+            'Smugglers at the quay',
+            'Update thread: The bell',
+            'Update entry: Captain Rook',
+        ):
+            expect(self.page.get_by_role('checkbox', name=re.compile(label))).to_be_checked()
+        self.assert_accessible('wrap-up review at phone width')
+        self.page.get_by_role('checkbox', name=re.compile('The bell tower collapsed')).uncheck()
+        self.page.get_by_role('checkbox', name=re.compile('Update thread: The bell')).uncheck()
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_role('button', name='New follow-up')).to_be_visible()
+
+        prep = self.stored('prep/s2')
+        self.assertEqual(prep['status'], 'played')
+        self.assertEqual(prep['log']['outcomes'], ['Captain Rook is free and owes the party.'])
+        self.assertEqual(prep['log']['hooks'], ['Someone is behind the sealed door.'])
+        self.assertEqual(prep['log']['appeared'], ['captain', 'tower'])
+        self.assertEqual(prep['threads'], ['old-thread', item['id'] + '-smugglers'])
+        old = {t['id']: t for t in self.stored('threads')['threads']}['old-thread']
+        self.assertEqual((old['status'], old['sessions']), ('open', []))
+        group = {e['id']: e for e in self.stored('codex')['entries']}['captain']['group']
+        self.assertEqual(group, 'Freed')
+        # The log on the page shows what was written, and a phone can still reach every control.
+        expect(self.page.get_by_label('Status')).to_have_value('played')
+        lead = self.page.get_by_role('textbox', name='Add a lead and press Enter 1')
+        expect(lead).to_have_value('Someone is behind the sealed door.')
+        self.assert_accessible('prep log after a wrap-up at phone width')
 
     def test_a_job_log_that_scrolls_can_be_reached_with_the_keyboard(self):
         job = dict(

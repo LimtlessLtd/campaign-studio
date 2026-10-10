@@ -11,6 +11,7 @@ import context as prompt_context
 import item_review
 import session_workflow
 import workflow
+import wrapup_workflow
 
 REQUEST_ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 PREP_ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
@@ -25,9 +26,16 @@ KINDS = {
     'journal',
     'expand',
     'session',
+    'wrapup',
 }
 ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
 STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
+# Request kinds with a proposal workflow of their own. Each module provides SCHEMA, options, prompt_pack,
+# validate, base_hash, reviewable_keys, REVIEWABLE and apply (the signatures in `session_workflow`), and may
+# name the request fields besides id, kind, text and session that its proposal depends on in INPUTS. A new
+# kind adds one row here; `draft_schemas` then serves its schema to the AI providers.
+WORKFLOWS = {'session': session_workflow, 'wrapup': wrapup_workflow}
+NEEDS_SESSION = {'encounter', 'handout', 'event', 'journal', *WORKFLOWS}
 
 FOCUS = workflow.obj(
     {
@@ -103,10 +111,15 @@ SCHEMA = workflow.obj(
 )
 
 
+def draft_kind(item):
+    """What the AI providers call this request's draft, and so which strict schema they hold it to."""
+    return item['kind'] if item['kind'] in WORKFLOWS else 'request'
+
+
 def input_hash(item):
     source = {key: item.get(key, '') for key in ('id', 'kind', 'text', 'session', 'codex')}
-    if item.get('kind') == 'session':
-        source['settings'] = item.get('settings') or {}
+    for key in getattr(WORKFLOWS.get(item.get('kind')), 'INPUTS', ()):
+        source[key] = item.get(key) or {}
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode('utf-8')).hexdigest()
 
 
@@ -129,10 +142,10 @@ def validate_request(item, read_doc):
     if session:
         if not PREP_ID.fullmatch(str(session)) or read_doc('prep/' + session) is None:
             raise ValueError('The linked session prep no longer exists.')
-    elif item['kind'] in ('encounter', 'handout', 'event', 'journal', 'session'):
+    elif item['kind'] in NEEDS_SESSION:
         raise ValueError('Link a session prep to this request first.')
-    if item['kind'] == 'session':
-        session_workflow.options(item, read_doc)
+    if item['kind'] in WORKFLOWS:
+        WORKFLOWS[item['kind']].options(item, read_doc)
     return session
 
 
@@ -152,8 +165,14 @@ def recent_logs(read_doc, prep_names, current='', limit=3):
         if current_n is not None and number >= current_n:
             continue
         outcomes = [str(x) for x in log.get('outcomes') or [] if isinstance(x, str) and x.strip()]
+        hooks = [str(x) for x in log.get('hooks') or [] if isinstance(x, str) and x.strip()]
+        loot = [
+            str(row.get('item'))
+            for row in log.get('loot') or []
+            if isinstance(row, dict) and str(row.get('item') or '').strip()
+        ]
         summary, notes = str(log.get('summary') or '').strip(), str(log.get('notes') or '').strip()
-        if summary or notes or outcomes:
+        if summary or notes or outcomes or hooks or loot:
             found.append(
                 (
                     number,
@@ -163,6 +182,8 @@ def recent_logs(read_doc, prep_names, current='', limit=3):
                         'summary': prompt_context.short(summary, 700),
                         'gm_notes': prompt_context.short(notes, 400),
                         'outcomes': [prompt_context.short(x, 120) for x in outcomes[:6]],
+                        'loot': [prompt_context.short(x, 80) for x in loot[:6]],
+                        'hooks': [prompt_context.short(x, 140) for x in hooks[:6]],
                     },
                 )
             )
@@ -174,8 +195,8 @@ def prompt_pack(
     item, read_doc, campaign, budget_chars=prompt_context.DEFAULT_BUDGET, prep_names=()
 ):
     session = validate_request(item, read_doc)
-    if item['kind'] == 'session':
-        return session_workflow.prompt_pack(
+    if item['kind'] in WORKFLOWS:
+        return WORKFLOWS[item['kind']].prompt_pack(
             item, read_doc, campaign, budget_chars, prep_names, recent_logs
         )
     codex = read_doc('codex') or {'entries': []}
@@ -249,8 +270,8 @@ def prompt_pack(
 
 def validate(item, draft, read_doc):
     session = validate_request(item, read_doc)
-    if item['kind'] == 'session':
-        return session_workflow.validate(item, draft, read_doc)
+    if item['kind'] in WORKFLOWS:
+        return WORKFLOWS[item['kind']].validate(item, draft, read_doc)
     if not isinstance(draft, dict):
         raise ValueError('The proposal must be a JSON object.')
     if len(json.dumps(draft, ensure_ascii=False)) > 240000:
@@ -322,6 +343,17 @@ def expand_entry(codex, item, focus, prefix, proposed_ids):
 REVIEWABLE = ('entries', 'threads', 'scenes', 'handouts')
 
 
+def review_kinds():
+    """The kinds of proposed rows a GM can accept or reject one at a time, by request kind.
+
+    The browser reads this, so it keeps no second list. A kind without a workflow of its own uses `other`.
+    """
+    return {
+        'other': list(REVIEWABLE),
+        **{kind: list(module.REVIEWABLE) for kind, module in WORKFLOWS.items()},
+    }
+
+
 def reviewable_keys(draft):
     """The `kind:id` keys a GM can accept or reject one at a time."""
     return item_review.keys(draft, REVIEWABLE)
@@ -350,8 +382,8 @@ def stage(item, draft, read_doc):
     item.update(
         status='review', draft=clean, draft_source=input_hash(item), result=clean['summary']
     )
-    if item['kind'] == 'session':
-        item['draft_base'] = session_workflow.base_hash(item, clean, read_doc)
+    if item['kind'] in WORKFLOWS:
+        item['draft_base'] = WORKFLOWS[item['kind']].base_hash(item, clean, read_doc)
     item.pop('error', None)
     return item
 
@@ -370,8 +402,8 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
         raise ValueError('This request has no proposal awaiting review.')
     if item.get('draft_source') != input_hash(item):
         raise ValueError('The request changed after drafting. Make a new proposal.')
-    if item['kind'] == 'session':
-        return session_workflow.apply(item, read_doc, commit, inbox, party_level, rejected)
+    if item['kind'] in WORKFLOWS:
+        return WORKFLOWS[item['kind']].apply(item, read_doc, commit, inbox, rejected, party_level)
     draft = validate(item, item['draft'], read_doc)
     if rejected:
         draft = without_rejected(draft, rejected)
