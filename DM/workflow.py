@@ -82,7 +82,7 @@ COUNTED = ('npcs', 'items', 'journals', 'events')
 # The rows of a content proposal the GM accepts or rejects one at a time. Each belongs to a numbered
 # location and none links to another, so leaving one out changes no other row. The location descriptions
 # (`areas`) stay whole: validation requires one for every selected location.
-CONTENT_ROWS = ('npcs', 'items', 'journals', 'events', 'threads')
+CONTENT_ROWS = COUNTED + ('threads',)
 
 
 def scope_areas(value):
@@ -161,7 +161,7 @@ def advance(value, draft):
         raise ValueError('The AI proposal must be a JSON object with a summary.')
     validate_schema(draft, CONTENT_SCHEMA)
     batch = value['batches'][value['batch']]
-    taken = {r['id'] for p in value['parts'] for name in COUNTED + ('threads',) for r in p[name]}
+    taken = {r['id'] for p in value['parts'] for name in CONTENT_ROWS for r in p[name]}
     value['parts'].append(check_content(value, deepcopy(draft), set(batch), quota(value), taken))
     value.update(batch=value['batch'] + 1, retries=0, rejection='', retry_draft=None)
     if value['batch'] < len(value['batches']):
@@ -169,7 +169,7 @@ def advance(value, draft):
         save(value)
         return True
     merged = {'summary': ' '.join(p['summary'] for p in value['parts'] if p['summary'])}
-    for name in ('areas',) + COUNTED + ('threads',):
+    for name in ('areas',) + CONTENT_ROWS:
         merged[name] = [r for p in value['parts'] for r in p[name]]
     targets = value['brief'].get('content', {})
     short = [
@@ -396,7 +396,7 @@ def prompt_pack(value, campaign_info, for_run=False):
             'drafted': [
                 r.get('name') or r.get('title')
                 for p in value['parts']
-                for name in COUNTED + ('threads',)
+                for name in CONTENT_ROWS
                 for r in p[name]
             ],
         }
