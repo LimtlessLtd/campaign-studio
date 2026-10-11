@@ -230,7 +230,36 @@ const choiceLabel = (kind, row) =>
     : kind === 'codex_changes'
       ? 'Update entry: ' + codexName(row.id)
       : row.name || row.title || row.text || row.item || row.id;
-function itemChoice(item, kind, row) {
+/* The fields a proposed change alters in a record that already exists: the old value, then the new or added text. */
+function changeList(changes) {
+  const shown = (text) => text || '(blank)';
+  return h(
+    'ul',
+    { class: 'changes' },
+    changes.map((change) =>
+      h(
+        'li',
+        {},
+        h('b', {}, change.label + ': '),
+        change.added !== undefined
+          ? [
+              change.before ? h('span', { class: 'muted' }, change.before + ' ') : null,
+              h('ins', {}, '+ ' + change.added),
+            ]
+          : [h('del', {}, shown(change.before)), ' → ', h('ins', {}, shown(change.after))],
+      ),
+    ),
+  );
+}
+/* Where the server's preview of `key` appears once it arrives; the slot stays empty for a row that adds only. */
+function changeSlot(diffs, key, title) {
+  const slot = h('div');
+  diffs.then((all) => {
+    if (all[key]?.length) render(slot, h('b', {}, title), changeList(all[key]));
+  });
+  return slot;
+}
+function itemChoice(item, kind, row, diffs) {
   const key = kind + ':' + row.id;
   return h(
     'div',
@@ -253,6 +282,7 @@ function itemChoice(item, kind, row) {
       h('span', { class: 'muted' }, 'Include when applying'),
     ),
     h('pre', { class: 'file', tabindex: 0 }, JSON.stringify(row, null, 2)),
+    changeSlot(diffs, key, 'What this changes'),
   );
 }
 async function applyRequestProposal(item) {
@@ -292,6 +322,10 @@ function statusChip(it) {
 }
 function requestCard(it, box, draw) {
   const isMap = ['battle map', 'stock map'].includes(it.kind);
+  const diffs =
+    it.status === 'review' && it.draft
+      ? api('/api/requests/' + it.id + '/diff').catch(() => ({}))
+      : Promise.resolve({});
   return h(
     'div',
     { class: 'card', style: 'margin-bottom:10px' },
@@ -468,6 +502,9 @@ function requestCard(it, box, draw) {
             { class: 'muted' },
             'Untick what you do not want. Applying adds only the ticked items, and anything you keep drops its links to the ones you leave out.',
           ),
+          it.kind === 'expand'
+            ? changeSlot(diffs, 'focus', 'Added to ' + codexName(it.codex))
+            : null,
           ...[
             'recap',
             'goals',
@@ -492,7 +529,7 @@ function requestCard(it, box, draw) {
                 {},
                 h('b', {}, key),
                 reviewedKinds(it).includes(key)
-                  ? it.draft[key].map((row) => itemChoice(it, key, row))
+                  ? it.draft[key].map((row) => itemChoice(it, key, row, diffs))
                   : h(
                       'pre',
                       { class: 'file', tabindex: 0 },

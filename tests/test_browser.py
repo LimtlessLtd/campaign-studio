@@ -708,6 +708,8 @@ class BrowserSmoke(unittest.TestCase):
             'Harbour notice',
         ):
             expect(self.page.get_by_role('checkbox', name=re.compile(label))).to_be_checked()
+        expect(self.page.get_by_text('Status: open → foreshadowed')).to_be_visible()
+        expect(self.page.get_by_text('+ The bell is their signal.')).to_be_visible()
         self.assert_accessible('session item review at phone width')
         self.page.get_by_role('checkbox', name=re.compile('Flooded Quay')).uncheck()
         self.page.get_by_role('checkbox', name=re.compile('Harbour Watcher')).uncheck()
@@ -719,6 +721,24 @@ class BrowserSmoke(unittest.TestCase):
         quay = prep['scenes'][1]
         self.assertEqual((quay['title'], quay['map'], quay['npcs']), ('At the quay', '', []))
         self.assertEqual(len(prep['handouts']), 1)
+
+    def test_an_expand_proposal_shows_the_text_it_adds_to_the_entry(self):
+        self.studio.seed_expand_request()
+        self.studio.request(
+            '/api/requests/req-expand/stage', {'draft': self.studio.expand_proposal()}
+        )
+        self.open('#/inbox')
+        self.page.set_viewport_size(NARROW)
+        expect(self.page.get_by_text('Added to Harbour Gate')).to_be_visible()
+        expect(self.page.get_by_text('+ Its lamps burn blue.')).to_be_visible()
+        expect(self.page.get_by_text('+ A smuggler tunnel runs beneath.')).to_be_visible()
+        self.assert_accessible('expand review at phone width')
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_role('button', name='New follow-up')).to_be_visible()
+        gate = {e['id']: e for e in self.stored('codex')['entries']}['gate']
+        self.assertEqual(gate['public'], 'A gate.\n\nIts lamps burn blue.')
+        # Applied, the proposal no longer previews a change.
+        self.assertEqual(self.page.get_by_text('Added to Harbour Gate').count(), 0)
 
     def test_wrapup_from_the_prep_page_applies_only_the_ticked_rows(self):
         self.studio.seed_wrapup_request()
@@ -749,6 +769,12 @@ class BrowserSmoke(unittest.TestCase):
             'Update entry: Captain Rook',
         ):
             expect(self.page.get_by_role('checkbox', name=re.compile(label))).to_be_checked()
+        # Changes to records that already exist show what they hold now beside what they will hold.
+        thread = self.page.get_by_role('listitem').filter(has_text='Status: open → resolved')
+        expect(thread).to_have_count(1)
+        expect(self.page.get_by_text('+ The bell was found.')).to_be_visible()
+        expect(self.page.get_by_text('Group: Harbour watch → Freed')).to_be_visible()
+        expect(self.page.get_by_text('+ S2: Owes the party a favour.')).to_be_visible()
         self.assert_accessible('wrap-up review at phone width')
         self.page.get_by_role('checkbox', name=re.compile('The bell tower collapsed')).uncheck()
         self.page.get_by_role('checkbox', name=re.compile('Update thread: The bell')).uncheck()

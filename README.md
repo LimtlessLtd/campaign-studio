@@ -165,8 +165,10 @@ new map briefs as layout workflows. Open each map brief in Maps & locations to d
 the session action does not generate or export a map or publish anything to Foundry. Recent played-session
 logs enter the draft as reference material. Review each new map, cast entry, thread, thread change, scene
 and handout one at a time: untick what you do not want and only the ticked items are applied. A scene keeps
-its place without a map, NPC or clue you left out. Recap, goals, loot and checklist apply as a whole, and
-before/after diffs and "redraft this one" are planned in W33.
+its place without a map, NPC or clue you left out. Recap, goals, loot and checklist apply as a whole. A change
+to a thread or codex entry that already exists shows what it holds now beside what it will hold (the old
+status struck through, text added after the end of the old text), and so does the text an expand request adds
+to its entry. "Redraft this one" is planned in W33.
 
 After you play, **Wrap up this session** on that prep takes your notes from the table (or a recording
 summary pasted in) and drafts the session log, changes to threads and codex entries, new threads and leads

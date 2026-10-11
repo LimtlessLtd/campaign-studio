@@ -56,6 +56,7 @@ flowchart LR
 | `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply      |
 | `DM/wrapup_workflow.py`               | Played-session notes: reviewed log, thread and codex changes and one apply            |
 | `DM/item_review.py`                   | Item-by-item review: the `kind:id` keys a GM rejects and the rows that remain         |
+| `DM/record_changes.py`                | Changes a proposal makes to existing records, applied and previewed by one function   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
 | `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration            |
@@ -220,10 +221,17 @@ Apply appends to the prep's `log` (it never replaces text the GM wrote), marks t
 session on the threads it changed and commits the prep, threads and codex with the request's done status last.
 Its staleness check covers the prep and every thread and entry the proposal changes. Both request workflows sit
 in `request_workflow.WORKFLOWS`: a module provides `SCHEMA`, `REVIEWABLE`, `options`, `prompt_pack`,
-`validate`, `base_hash`, `reviewable_keys` and `apply`, and a new kind is one row there. A request is queued
+`validate`, `base_hash`, `reviewable_keys`, `diff` and `apply`, and a new kind is one row there (`KINDS`
+follows from it). A request is queued
 to the AI provider under its workflow's name (`request_workflow.draft_kind`), so the OpenAI and Codex
 providers hold the draft to that workflow's strict schema from `draft_schemas.BUILDERS`; other kinds share
 the general `request` schema. `review_kinds` in `/api/state` tells the browser which rows carry a tick box.
+`GET /api/requests/<id>/diff` previews, for a request awaiting review, what its proposal does to records that
+already exist: a thread change, a codex change, or the text an expand request adds under `focus`. Each key is
+the row's `kind:id` and each value lists `{label, before, after}` or `{label, before, added}` for the fields
+that change. `DM/record_changes.py` holds the update that apply runs (`update_thread`, `update_entry`) and
+the preview runs the same update on a copy of the stored record, so the two cannot disagree; the preview
+reads current records and changes nothing. A proposal that only adds records has an empty diff.
 
 Map and request drafts share `DM/context.py`. It reserves identity for linked and pinned codex records,
 summarises active threads, then fills the remaining budget with linked details, name matches and a compact

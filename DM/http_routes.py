@@ -119,6 +119,10 @@ ROUTES = {
             '_get_request_pack',
         ),
         (
+            lambda path: path.startswith('/api/requests/') and path.endswith('/diff'),
+            '_get_request_diff',
+        ),
+        (
             lambda path: path.startswith('/api/maps/') and path.endswith('/workspace'),
             '_get_map_workspace',
         ),
@@ -709,19 +713,25 @@ class Handler(SimpleHTTPRequestHandler):
             )
         return self.send_json(value)
 
-    def _get_request_pack(self, path, query, p):
+    def _stored_request(self, path):
         rid = path.split('/')[3]
         if not request_workflow.REQUEST_ID.fullmatch(rid):
             raise Invalid('Invalid request ID.')
-        box = read_json(doc_path('inbox'), {'items': []})
-        item = request_item(box, rid)
+        item = request_item(read_json(doc_path('inbox'), {'items': []}), rid)
         if not item:
             raise NotFound('No such request.')
+        return item
+
+    def _get_request_pack(self, path, query, p):
+        item = self._stored_request(path)
         try:
             return self.send_json(request_pack(item))
         except ValueError as error:
             # The existing read API treats map requests as inaccessible prompt packs.
             raise Forbidden(str(error)) from error
+
+    def _get_request_diff(self, path, query, p):
+        return self.send_json(request_workflow.diff(self._stored_request(path), request_read))
 
     def _get_map_workspace(self, path, query, p):
         slug = path.split('/')[3]

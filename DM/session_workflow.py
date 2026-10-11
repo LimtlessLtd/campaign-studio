@@ -7,6 +7,7 @@ from copy import deepcopy
 
 import context as prompt_context
 import item_review
+import record_changes
 import records
 import shapes
 import workflow
@@ -300,6 +301,11 @@ def base_hash(item, draft, read_doc):
     return hashlib.sha256(json.dumps(base, sort_keys=True).encode('utf-8')).hexdigest()
 
 
+def diff(draft, item, read_doc):
+    """What the proposed thread changes would do to the threads they name (see `record_changes`)."""
+    return record_changes.thread_changes(draft, item, read_doc)
+
+
 def reviewable_keys(draft):
     """The `kind:id` keys a GM can accept or reject one at a time."""
     return item_review.keys(draft, REVIEWABLE)
@@ -391,14 +397,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
         )
     by_thread = {t['id']: t for t in old_threads['threads']}
     for row in draft['thread_changes']:
-        target = by_thread[row['id']]
-        target['status'] = row['status']
-        if row['update'].strip():
-            target['detail'] = '\n\n'.join(
-                x for x in (target.get('detail', ''), row['update']) if x.strip()
-            )
-        target['sessions'] = list(dict.fromkeys([*target.get('sessions', []), item['session']]))
-        target.setdefault('session_updates', []).append(item['id'])
+        record_changes.update_thread(by_thread[row['id']], row, item['session'], item['id'])
     for row in draft['entries'] + draft['handouts']:
         if row['image_prompt'].strip():
             old_art['items'].append(
