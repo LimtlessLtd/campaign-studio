@@ -19,6 +19,7 @@ WORKFLOW_INTERFACE = (
     'prompt_pack',
     'validate',
     'base_hash',
+    'ensure_current',
     'reviewable_keys',
     'diff',
     'apply',

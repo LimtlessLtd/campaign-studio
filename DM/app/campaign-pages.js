@@ -279,12 +279,42 @@ function includeBox(proposalId, key, label) {
     h('span', { class: 'muted' }, 'Include when applying'),
   );
 }
+/* Ask the AI to write one row of a request's proposal again; the other rows stay as reviewed. */
+function redraftRow(item, key, label) {
+  const f = { note: '' };
+  modal(
+    'Redraft this one',
+    `The AI writes "${label}" again and leaves the rest of the proposal as you reviewed it.`,
+    formInput(f, 'note', 'What should change? (optional)', { type: 'textarea', rows: 4 }),
+    async () => {
+      if (S.pending.inbox) await flush('inbox');
+      await post('/api/requests/' + item.id + '/redraft', { key, note: f.note });
+      // The new row starts ticked, whatever the GM thought of the one it replaces.
+      rejectedItems.get(item.id)?.delete(key);
+      await load('inbox', { items: [] });
+      await poll();
+      route(true);
+    },
+    `Draft with ${S.state.ai.label}`,
+  );
+}
 function itemChoice(item, kind, row, diffs) {
   const key = kind + ':' + row.id;
+  const label = choiceLabel(kind, row);
   return h(
     'div',
     { class: 'card', style: 'margin:4px 0' },
-    includeBox(item.id, key, choiceLabel(kind, row)),
+    includeBox(item.id, key, label),
+    S.state.ai.available
+      ? h(
+          'button',
+          {
+            'aria-label': 'Redraft this one: ' + label,
+            onclick: () => redraftRow(item, key, label),
+          },
+          'Redraft this one',
+        )
+      : null,
     h('pre', { class: 'file', tabindex: 0 }, JSON.stringify(row, null, 2)),
     changeSlot(diffs, key, 'What this changes'),
   );
@@ -309,7 +339,9 @@ function statusChip(it) {
     it.status === 'doing'
       ? job && job.status === 'queued'
         ? `queued for ${S.state.ai.label}`
-        : `${S.state.ai.label} is drafting…`
+        : it.redraft
+          ? `${S.state.ai.label} is writing one item again…`
+          : `${S.state.ai.label} is drafting…`
       : it.status === 'review'
         ? 'Ready to review'
         : it.status;

@@ -301,6 +301,12 @@ def base_hash(item, draft, read_doc):
     return hashlib.sha256(json.dumps(base, sort_keys=True).encode('utf-8')).hexdigest()
 
 
+def ensure_current(item, draft, read_doc):
+    """Refuse a proposal whose prep or threads were edited after it was staged."""
+    if item.get('draft_base') != base_hash(item, draft, read_doc):
+        raise ValueError('The session prep or a linked thread changed after review. Draft again.')
+
+
 def diff(draft, item, read_doc):
     """What the proposed thread changes would do to the threads they name (see `record_changes`)."""
     return record_changes.thread_changes(draft, item, read_doc)
@@ -336,8 +342,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
     whole proposal, so a rejected row cannot hide a prep or thread edited after review.
     """
     draft = validate(item, item['draft'], read_doc)
-    if item.get('draft_base') != base_hash(item, draft, read_doc):
-        raise ValueError('The session prep or a linked thread changed after review. Draft again.')
+    ensure_current(item, draft, read_doc)
     draft = without_rejected(draft, rejected)
     prefix = item['id'] + '-'
     old_codex = read_doc('codex') or {'entries': []}

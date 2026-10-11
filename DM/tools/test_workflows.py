@@ -1454,6 +1454,237 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(saved['scenes'][0]['npcs'], [])
         self.assertEqual(len(saved['handouts']), 1)
 
+    def redraft(self, rid, key, answer, note='', code=0, tail=''):
+        """Start writing one row again with a fake provider, then finish the job with `answer` as its output.
+
+        Returns the job and what was queued for the provider.
+        """
+        captured = {}
+
+        def fake_job(lane, kind, label, cmd, prompt, **extra):
+            captured.update(kind=kind, cmd=cmd, prompt=prompt, extra=extra)
+            return {'id': 'job-redraft', **extra}
+
+        with (
+            patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
+            patch.object(campaign_core, 'new_job', side_effect=fake_job),
+        ):
+            job = self.request(f'/api/requests/{rid}/redraft', {'key': key, 'note': note})
+        self.write_job_output(job, answer)
+        campaign_core.finish_redraft(job, code, tail)
+        return job, captured
+
+    def write_job_output(self, job, answer):
+        log = Path(campaign_core.job_file(job['id'], 'log'))
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text(json.dumps({'structured_output': answer}))
+
+    def start_redraft(self, rid, key):
+        """Queue a redraft with a fake provider and return its job, which has not finished."""
+        with (
+            patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
+            patch.object(
+                campaign_core,
+                'new_job',
+                side_effect=lambda *a, **extra: {'id': 'job-redraft', **extra},
+            ),
+        ):
+            return self.request(f'/api/requests/{rid}/redraft', {'key': key})
+
+    def stage_request_draft(self):
+        campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))
+        item = {
+            'id': 'req-part',
+            'kind': 'encounter',
+            'text': 'Create a harbour encounter.',
+            'session': 's1',
+            'status': 'new',
+        }
+        campaign_core.write_doc('inbox', {'items': [item]})
+        self.request('/api/requests/req-part/stage', {'draft': self.request_proposal()})
+        return self.stored('inbox')['items'][0]['draft']
+
+    def test_one_row_of_a_request_proposal_is_written_again_alone(self):
+        before = self.stage_request_draft()
+        job, queued = self.redraft(
+            'req-part',
+            'entries:watcher',
+            {'row': {**before['entries'][0], 'id': 'other', 'name': 'Quay Warden'}},
+            note='Make the watcher an older woman.',
+        )
+
+        self.assertEqual(queued['kind'], 'request-redraft')
+        self.assertEqual(job['row'], 'entries:watcher')
+        # The AI is asked for that one row, under a schema that holds it to one entry.
+        schema = json.loads(queued['cmd'][queued['cmd'].index('--json-schema') + 1])
+        self.assertEqual(list(schema['properties']), ['row'])
+        self.assertEqual(schema['properties']['row']['properties']['type']['enum'][0], 'npc')
+        self.assertIn('REDRAFT ONE ROW', queued['prompt'])
+        self.assertIn('entries:watcher', queued['prompt'])
+        self.assertIn('Make the watcher an older woman.', queued['prompt'])
+        self.assertIn('Create a harbour encounter.', queued['prompt'])
+
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual(saved['status'], 'review')
+        self.assertNotIn('redraft', saved)
+        # Only the row changed, and it kept its ID, so the scene's link to it still holds.
+        [entry] = saved['draft']['entries']
+        self.assertEqual((entry['id'], entry['name']), ('watcher', 'Quay Warden'))
+        self.assertEqual({**saved['draft'], 'entries': []}, {**before, 'entries': []})
+        self.assertEqual(saved['draft']['scenes'][0]['npcs'], ['watcher'])
+        self.request('/api/requests/req-part/apply', {})
+        self.assertEqual([e['name'] for e in self.stored('codex')['entries']], ['Quay Warden'])
+
+    def test_a_row_being_written_again_blocks_other_changes_to_its_request(self):
+        before = self.stage_request_draft()
+        self.start_redraft('req-part', 'threads:rival')
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual((saved['status'], saved['redraft']), ('doing', 'threads:rival'))
+        self.request('/api/requests/req-part/apply', {}, expected=409)
+        self.request('/api/requests/req-part/stage', {'draft': {}}, expected=409)
+        self.request('/api/requests/req-part/redraft', {'key': 'scenes:gate'}, expected=400)
+        # The reviewed proposal is still there to come back to.
+        self.assertEqual(saved['draft'], before)
+
+    def test_a_redraft_that_fails_or_is_stopped_keeps_the_proposal_in_review(self):
+        before = self.stage_request_draft()
+        good = {'row': {**before['entries'][0], 'name': 'Quay Warden'}}
+        cases = (
+            ('entries:watcher', good, 1, 'The AI command failed badly.', 'failed badly'),
+            ('entries:watcher', {'row': {'id': 'watcher'}}, 0, '', 'missing'),
+            ('entries:watcher', {'entries': []}, 0, '', 'missing row'),
+            (
+                'scenes:gate',
+                {'row': {**before['scenes'][0], 'npcs': ['nobody']}},
+                0,
+                '',
+                'unknown NPC',
+            ),
+        )
+        for key, answer, code, tail, message in cases:
+            with self.subTest(message=message):
+                self.redraft('req-part', key, answer, code=code, tail=tail)
+                saved = self.stored('inbox')['items'][0]
+                self.assertEqual(saved['status'], 'review')
+                self.assertNotIn('redraft', saved)
+                self.assertIn(message, saved['error'])
+                self.assertEqual(saved['draft'], before)
+        # A job stopped by the GM, or by a restart, settles the same way.
+        job = self.start_redraft('req-part', 'entries:watcher')
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'doing')
+        campaign_core.settle_failed_job(job, 'Stopped.')
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual(
+            (saved['status'], saved['error'], saved['draft']), ('review', 'Stopped.', before)
+        )
+        self.assertNotIn('redraft', saved)
+
+    def test_a_row_that_is_not_in_the_proposal_is_never_sent_to_the_ai(self):
+        self.stage_request_draft()
+        with patch.object(campaign_core, 'new_job') as queued:
+            for key in ('entries:nobody', 'goals:0', 'notes:x', 'entries', ''):
+                with self.subTest(key=key):
+                    self.request('/api/requests/req-part/redraft', {'key': key}, expected=400)
+            self.request('/api/requests/req-part/redraft', {}, expected=400)
+            self.request('/api/requests/req-part/redraft', {'key': ['entries:a']}, expected=400)
+        queued.assert_not_called()
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'review')
+
+    def test_a_proposal_drafted_for_other_wording_is_not_redrafted(self):
+        self.stage_request_draft()
+        box = self.stored('inbox')
+        box['items'][0]['text'] = 'Create a quite different encounter.'
+        campaign_core.write_doc('inbox', box)
+        with patch.object(campaign_core, 'new_job') as queued:
+            refused = self.request(
+                '/api/requests/req-part/redraft', {'key': 'entries:watcher'}, expected=400
+            )
+        self.assertIn('changed after drafting', refused['error'])
+        queued.assert_not_called()
+
+    def test_a_request_edited_while_a_row_is_written_again_keeps_the_old_row(self):
+        before = self.stage_request_draft()
+        job = self.start_redraft('req-part', 'entries:watcher')
+        box = self.stored('inbox')
+        box['items'][0]['text'] = 'Create something else entirely.'
+        campaign_core.write_doc('inbox', box)
+        self.write_job_output(job, {'row': {**before['entries'][0], 'name': 'Quay Warden'}})
+        campaign_core.finish_redraft(job, 0, '')
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual(saved['status'], 'review')
+        self.assertIn('changed during the redraft', saved['error'])
+        self.assertEqual(saved['draft'], before)
+
+    def test_a_session_row_is_written_again_for_a_codex_provider_and_stale_prep_is_refused(self):
+        self.stage_session_draft()
+        draft = self.stored('inbox')['items'][0]['draft']
+        scene = next(row for row in draft['scenes'] if row['id'] == 'quay-scene')
+        with (
+            patch.object(
+                campaign_core.ai_provider, 'command', return_value=[sys.executable]
+            ) as command,
+            patch.object(
+                campaign_core,
+                'new_job',
+                side_effect=lambda *a, **extra: {'id': 'job-redraft', **extra},
+            ),
+        ):
+            job = self.request('/api/requests/req-session/redraft', {'key': 'scenes:quay-scene'})
+        # A strict provider is told which row to hold the AI to.
+        self.assertEqual(command.call_args.args[0], 'session:scenes')
+        self.assertEqual(list(command.call_args.args[1]['properties']), ['row'])
+        self.write_job_output(job, {'row': {**scene, 'title': 'At the sunken quay'}})
+        campaign_core.finish_redraft(job, 0, '')
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual(saved['status'], 'review')
+        titles = {row['id']: row['title'] for row in saved['draft']['scenes']}
+        self.assertEqual(titles['quay-scene'], 'At the sunken quay')
+        self.assertEqual(titles['arrival'], 'Arrival')
+        self.assertEqual(saved['draft']['maps'], draft['maps'])
+        # The staged proposal is as current as before, so it still applies.
+        request_workflow.ensure_current(saved, campaign_core.request_read)
+
+        # The prep was edited after the proposal was staged, so it is not built on.
+        campaign_core.write_doc(
+            'prep/s1', {**self.stored('prep/s1'), 'goals': ['Edited at review']}
+        )
+        refused = self.request(
+            '/api/requests/req-session/redraft', {'key': 'scenes:arrival'}, expected=400
+        )
+        self.assertIn('changed after review', refused['error'])
+        self.assertEqual(self.stored('inbox')['items'][0]['status'], 'review')
+
+    def test_a_wrapup_row_is_written_again_and_applies_as_written(self):
+        self.stage_wrapup_draft()
+        before = self.stored('inbox')['items'][0]['draft']
+        _, queued = self.redraft(
+            'req-wrap',
+            'hooks:door',
+            {'row': {'id': 'ignored', 'text': 'A child is behind the sealed door.'}},
+        )
+        self.assertIn('hooks:door', queued['prompt'])
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual(saved['status'], 'review')
+        self.assertEqual(
+            saved['draft']['hooks'], [{'id': 'door', 'text': 'A child is behind the sealed door.'}]
+        )
+        self.assertEqual({**saved['draft'], 'hooks': []}, {**before, 'hooks': []})
+        self.request('/api/requests/req-wrap/apply', {})
+        self.assertIn('A child is behind', ' '.join(self.stored('prep/s2')['log']['hooks']))
+
+    def test_a_wrapup_changed_while_a_row_is_written_again_is_refused(self):
+        self.stage_wrapup_draft()
+        before = self.stored('inbox')['items'][0]['draft']
+        job = self.start_redraft('req-wrap', 'outcomes:fallen')
+        entries = self.stored('codex')
+        entries['entries'][0]['notes'] = 'GM edited this while the AI wrote.'
+        campaign_core.commit_docs('Synthetic edit', [('codex', entries)])
+        self.write_job_output(job, {'row': {'id': 'fallen', 'text': 'It crumbled.'}})
+        campaign_core.finish_redraft(job, 0, '')
+        saved = self.stored('inbox')['items'][0]
+        self.assertEqual((saved['status'], saved['draft']), ('review', before))
+        self.assertIn('changed after review', saved['error'])
+
     def seed_expand_request(self):
         """A codex entry and a request to expand it, awaiting a draft."""
         self.seed(

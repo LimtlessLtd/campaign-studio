@@ -56,6 +56,7 @@ flowchart LR
 | `DM/session_workflow.py`              | Session proposal schema, links, stale review guard and recoverable session apply      |
 | `DM/wrapup_workflow.py`               | Played-session notes: reviewed log, thread and codex changes and one apply            |
 | `DM/item_review.py`                   | Item-by-item review: the `kind:id` keys a GM rejects and the rows that remain         |
+| `DM/redraft.py`                       | One row of a staged proposal written again alone: answer schema, prompt and check     |
 | `DM/record_changes.py`                | Changes a proposal makes to existing records, applied and previewed by one function   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
@@ -221,8 +222,8 @@ Apply appends to the prep's `log` (it never replaces text the GM wrote), marks t
 session on the threads it changed and commits the prep, threads and codex with the request's done status last.
 Its staleness check covers the prep and every thread and entry the proposal changes. Both request workflows sit
 in `request_workflow.WORKFLOWS`: a module provides `SCHEMA`, `REVIEWABLE`, `options`, `prompt_pack`,
-`validate`, `base_hash`, `reviewable_keys`, `diff` and `apply`, and a new kind is one row there (`KINDS`
-follows from it). A request is queued
+`validate`, `base_hash`, `ensure_current`, `reviewable_keys`, `diff` and `apply`, and a new kind is one row
+there (`KINDS` follows from it). A request is queued
 to the AI provider under its workflow's name (`request_workflow.draft_kind`), so the OpenAI and Codex
 providers hold the draft to that workflow's strict schema from `draft_schemas.BUILDERS`; other kinds share
 the general `request` schema. `review_kinds` in `/api/state` tells the browser which rows carry a tick box.
@@ -232,6 +233,20 @@ the row's `kind:id` and each value lists `{label, before, after}` or `{label, be
 that change. `DM/record_changes.py` holds the update that apply runs (`update_thread`, `update_entry`) and
 the preview runs the same update on a copy of the stored record, so the two cannot disagree; the preview
 reads current records and changes nothing. A proposal that only adds records has an empty diff.
+
+A row of a request's proposal can be written again alone (`POST /api/requests/<id>/redraft`: the `kind:id`
+key and an optional note). `request_workflow.redraft_pack` builds the request's own prompt pack with the staged
+proposal, the row and the note after it (`DM/redraft.py`), and a schema for the answer, `{"row": <one row>}`,
+taken from the proposal schema's array of that kind: only an array of objects with an `id` can be redrafted. A
+provider that holds the draft to a strict schema by name gets `<proposal kind>:<row kind>` (for example
+`session:scenes`), which `draft_schemas.for_kind` turns into that envelope. The job (`request-redraft`, started
+by `campaign_core.start_redraft`) leaves the request in `doing` with its draft untouched, so every other
+change to the request is refused as it is for any draft in progress. `finish_redraft` checks the request has not
+changed, validates the answer, swaps the row in under the old ID (`item_review.replaced`, so links from other
+rows hold) and stages the whole proposal again, which validates all of it; `ensure_current` (the check `apply`
+runs) must pass first and again at the end, so a prep, thread or entry edited in between refuses the redraft
+rather than being masked by the new `draft_base`. A failed, cancelled or interrupted redraft returns the
+request to `review` with the same proposal (`SETTLERS` field `redraft`).
 
 A map's content proposal has the same item review: `workflow.CONTENT_ROWS` (npcs, items, journals, events and
 threads) are the rows a GM can reject, `POST /api/workflow/<id>/apply` accepts `rejected` for a content draft
@@ -263,7 +278,7 @@ API returns the last such line as `progress`. Cancelling stops the job's whole p
 own children (ffmpeg, a whisper.cpp program) end with it.
 A finished job's result is stored by `campaign_core.FINISHERS` (by job kind) and a failed, cancelled or
 interrupted job marks what it was producing through `SETTLERS` (by the field that names its record: `request`,
-`transcript`, `classify`, `ledger`, `arc`). A new draft kind adds a row to each instead of a branch.
+`redraft`, `transcript`, `classify`, `ledger`, `arc`). A new draft kind adds a row to each instead of a branch.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 

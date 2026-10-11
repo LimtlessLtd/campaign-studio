@@ -10,6 +10,7 @@ import shapes
 import context as prompt_context
 import item_review
 import record_changes
+import redraft
 import session_workflow
 import workflow
 import wrapup_workflow
@@ -19,9 +20,9 @@ PREP_ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
 ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
 STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
 # Request kinds with a proposal workflow of their own. Each module provides SCHEMA, options, prompt_pack,
-# validate, base_hash, reviewable_keys, REVIEWABLE, diff and apply (the signatures in `session_workflow`),
-# and may name the request fields besides id, kind, text and session that its proposal depends on in INPUTS.
-# A new kind adds one row here; `KINDS` and `draft_schemas` follow from it.
+# validate, base_hash, ensure_current, reviewable_keys, REVIEWABLE, diff and apply (the signatures in
+# `session_workflow`), and may name the request fields besides id, kind, text and session that its
+# proposal depends on in INPUTS. A new kind adds one row here; `KINDS` and `draft_schemas` follow from it.
 WORKFLOWS = {'session': session_workflow, 'wrapup': wrapup_workflow}
 KINDS = {
     'npc',
@@ -114,6 +115,12 @@ SCHEMA = workflow.obj(
 def draft_kind(item):
     """What the AI providers call this request's draft, and so which strict schema they hold it to."""
     return item['kind'] if item['kind'] in WORKFLOWS else 'request'
+
+
+def schema_for(item):
+    """The schema of the proposal this request is drafted to."""
+    module = WORKFLOWS.get(item.get('kind'))
+    return module.SCHEMA if module else SCHEMA
 
 
 def input_hash(item):
@@ -386,6 +393,12 @@ def reviewable_keys(draft):
     return item_review.keys(draft, REVIEWABLE)
 
 
+def reviewable(item):
+    """The kinds of proposed rows this request's proposal lets a GM accept, reject or redraft one at a time."""
+    module = WORKFLOWS.get(item.get('kind'))
+    return module.REVIEWABLE if module else REVIEWABLE
+
+
 def without_rejected(draft, rejected):
     """The draft minus rejected items, with links to a rejected entry removed from what stays."""
     kept, gone = item_review.without(draft, rejected, REVIEWABLE)
@@ -415,6 +428,59 @@ def stage(item, draft, read_doc):
     return item
 
 
+def ensure_reviewable(item):
+    """Refuse a request with no proposal awaiting review, or one drafted before the request changed."""
+    if item.get('status') != 'review' or not item.get('draft'):
+        raise ValueError('This request has no proposal awaiting review.')
+    if item.get('draft_source') != input_hash(item):
+        raise ValueError('The request changed after drafting. Make a new proposal.')
+
+
+def ensure_current(item, read_doc):
+    """The staged proposal, validated again, unless it was drafted against records that have changed since."""
+    ensure_reviewable(item)
+    draft = validate(item, item['draft'], read_doc)
+    if item['kind'] in WORKFLOWS:
+        WORKFLOWS[item['kind']].ensure_current(item, draft, read_doc)
+    return draft
+
+
+def redraft_pack(item, where, note, read_doc, campaign, budget_chars, prep_names=()):
+    """What to ask the AI to write the row `where` names again, in the staged proposal.
+
+    Returns the prompt, the schema of the answer and the draft kind a provider holds it to. The proposal
+    and the row ride in the prompt, so the request's own context gets that much less of the budget.
+    """
+    draft = ensure_current(item, read_doc)
+    row = item_review.find(draft, where, reviewable(item))
+    kind = where.partition(':')[0]
+    note = redraft.clean_note(note)
+    shown = len(json.dumps(draft, ensure_ascii=False)) + len(json.dumps(row, ensure_ascii=False))
+    pack = prompt_pack(
+        item,
+        read_doc,
+        campaign,
+        max(prompt_context.MIN_BUDGET, budget_chars - shown - len(note) - redraft.OVERHEAD),
+        prep_names,
+    )
+    return {
+        'prompt': redraft.prompt(pack['prompt'], draft, where, row, note),
+        'schema': redraft.envelope(pack['schema'], kind),
+        'draft_kind': redraft.provider_kind(draft_kind(item), kind),
+    }
+
+
+def redraft_row(item, where, output, read_doc):
+    """Write the row `where` names again from the AI's `output`, and stage the whole proposal again.
+
+    The other rows are exactly what the GM reviewed, and nothing is stored unless the proposal with the
+    new row in it validates and was not made stale by an edit while the AI wrote.
+    """
+    draft = ensure_current(item, read_doc)
+    row = redraft.new_row(schema_for(item), where.partition(':')[0], output)
+    stage(item, item_review.replaced(draft, where, row, reviewable(item)), read_doc)
+
+
 def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
     """Apply the accepted part of a reviewed draft and the request's done status in one commit.
 
@@ -425,10 +491,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
         raise ValueError(
             'This request was already applied. Start a new request for further changes.'
         )
-    if item.get('status') != 'review' or not item.get('draft'):
-        raise ValueError('This request has no proposal awaiting review.')
-    if item.get('draft_source') != input_hash(item):
-        raise ValueError('The request changed after drafting. Make a new proposal.')
+    ensure_reviewable(item)
     if item['kind'] in WORKFLOWS:
         return WORKFLOWS[item['kind']].apply(item, read_doc, commit, inbox, rejected, party_level)
     draft = validate(item, item['draft'], read_doc)

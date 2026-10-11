@@ -14,7 +14,14 @@ TOKEN_FIELDS = (
     'cache_read_input_tokens',
     'cache_creation_input_tokens',
 )
-DRAFT_KINDS = ('request-draft', 'ai-workflow', 'classify', 'thread-ledger', 'arc-options')
+DRAFT_KINDS = (
+    'request-draft',
+    'request-redraft',
+    'ai-workflow',
+    'classify',
+    'thread-ledger',
+    'arc-options',
+)
 
 
 def _count(value):

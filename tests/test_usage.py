@@ -45,6 +45,11 @@ class UsageTests(unittest.TestCase):
         self.assertIsNone(job['usage']['cost_usd'])
         self.assertEqual(job['usage']['seconds'], 3.5)
 
+    def test_a_row_written_again_counts_as_a_paid_draft(self):
+        job = {'kind': 'request-redraft'}
+        usage.record(job, CLAUDE_RESULT)
+        self.assertIn('usage', job)
+
     def test_output_without_usage_or_a_draft_job_records_nothing(self):
         for raw in ('not json', '[]', json.dumps({'result': '{}'}), ''):
             self.assertIsNone(usage.from_output(raw))
