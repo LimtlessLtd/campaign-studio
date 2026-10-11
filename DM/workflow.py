@@ -13,6 +13,7 @@ import campaign
 import records
 import config
 import context as prompt_context
+import item_review
 import shapes
 import storage
 
@@ -78,6 +79,10 @@ WHOLE_MAP = 30  # maps up to this size are drafted in one response
 PLAIN_KINDS = {'house'}  # areas that take a rollable template instead of a drafted description
 PLAIN_TEXT = 'An ordinary {kind} like its neighbours. Use its starter loot; nothing here is tied to the campaign yet.'
 COUNTED = ('npcs', 'items', 'journals', 'events')
+# The rows of a content proposal the GM accepts or rejects one at a time. Each belongs to a numbered
+# location and none links to another, so leaving one out changes no other row. The location descriptions
+# (`areas`) stay whole: validation requires one for every selected location.
+CONTENT_ROWS = ('npcs', 'items', 'journals', 'events', 'threads')
 
 
 def scope_areas(value):
@@ -748,11 +753,30 @@ def parse_output(raw):
     return result
 
 
-def apply_content(value, commit):
-    """Link a reviewed content draft. commit(label, changes) writes every document together."""
+def review_kinds():
+    """The kinds of proposed rows a GM can accept or reject one at a time, by workflow kind.
+
+    The browser reads this, so it keeps no second list. A layout is accepted or refined as a whole.
+    """
+    return {'content': list(CONTENT_ROWS)}
+
+
+def reviewable_keys(draft):
+    """The `kind:id` keys a GM can accept or reject one at a time in a content draft."""
+    return item_review.keys(draft, CONTENT_ROWS)
+
+
+def apply_content(value, commit, rejected=()):
+    """Link a reviewed content draft. commit(label, changes) writes every document together.
+
+    `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out. The whole draft is validated
+    first, so a rejected row cannot hide a stale or invalid proposal.
+    """
     if value['status'] != 'review' or value['kind'] != 'content':
         raise ValueError('This workflow has no content draft awaiting review.')
-    draft = validate(value, deepcopy(value['draft']))
+    draft, _ = item_review.without(
+        validate(value, deepcopy(value['draft'])), rejected, CONTENT_ROWS
+    )
     slug = value['map']
     key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
     codex = records.collection(campaign.active().data, 'codex')
@@ -792,7 +816,7 @@ def apply_content(value, commit):
             target['creatures'] = '\n'.join(
                 x for x in (target.get('creatures', ''), a['creatures']) if x
             )
-    for kind in ('npcs', 'items', 'journals', 'events', 'threads'):
+    for kind in CONTENT_ROWS:
         counts[kind] = len(draft[kind])
         for row in draft[kind]:
             rid = prefix + row['id']
@@ -868,6 +892,7 @@ def apply_content(value, commit):
         status='applied',
         applied=datetime.datetime.now().isoformat(timespec='seconds'),
         counts=counts,
+        rejected=sorted(set(rejected)),
     )
     # The workflow status is written last, so 'applied' always means every link exists.
     commit(

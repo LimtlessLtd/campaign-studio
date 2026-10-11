@@ -74,6 +74,8 @@ Set `DM_PORT` before launch to use a different port. Set `DM_HOME` to a folder t
   the selected pin by one percent without dragging. **Add location** on a battle map also uses a map tap.
 - A new map can automatically queue a content draft after rendering. Content drafts respect your selected
   counts and thread connections. Apply them after review. Per-location Generate buttons use the same workflow.
+  Each proposed NPC, item, journal entry, event and thread has an **Include when applying** tick box: untick
+  what you do not want and only the ticked rows are added. The location descriptions always apply.
 - A whole-map content draft describes every numbered location in one AI response, which large generated
   districts exceed. On those maps, use the per-location Generate buttons until batched stocking lands.
 

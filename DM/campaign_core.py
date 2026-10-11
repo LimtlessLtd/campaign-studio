@@ -1661,8 +1661,8 @@ def map_busy(slug):
     )
 
 
-def apply_content(wid):
-    """Link a reviewed content draft to the map, codex, threads and art queue."""
+def apply_content(wid, rejected=()):
+    """Link a reviewed content draft, less the `rejected` rows, to the map, codex, threads and art queue."""
     with LOCK:
         value = workflow.get(wid)
         if value['status'] != 'review':
@@ -1670,7 +1670,9 @@ def apply_content(wid):
         workflow.check_base(value)
         revisions.checkpoint(value['map'], 'Before applying AI content', campaign.active())
         stocked = {'type': 'mark_stocked', 'slug': value['map']}
-        return workflow.apply_content(value, functools.partial(commit_docs, after=[stocked]))
+        return workflow.apply_content(
+            value, functools.partial(commit_docs, after=[stocked]), rejected
+        )
 
 
 def restore_revision(slug, rid):

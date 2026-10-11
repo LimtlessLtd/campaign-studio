@@ -348,6 +348,67 @@ class StudioIntegration(unittest.TestCase):
         self.request('/api/workflow/' + value['id'] + '/apply', {}, expected=400)
         self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
 
+    def test_partly_accepted_map_content_writes_only_the_ticked_rows(self):
+        slug, brief = self.import_map()
+        value = workflow.stage(workflow.create(slug, brief), self.proposal())
+        self.assertEqual(
+            workflow.reviewable_keys(value['draft']),
+            {'npcs:watcher', 'items:key', 'journals:letter', 'events:patrol', 'threads:gate'},
+        )
+        route = '/api/workflow/' + value['id'] + '/apply'
+        # A key the proposal does not hold, or a malformed list, is refused before anything is written.
+        self.request(route, {'rejected': ['npcs:nobody']}, expected=400)
+        self.request(route, {'rejected': 'npcs:watcher'}, expected=400)
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        self.assertEqual(workflow.get(value['id'])['status'], 'review')
+
+        applied = self.request(route, {'rejected': ['npcs:watcher', 'events:patrol']})
+
+        self.assertEqual(applied['status'], 'applied')
+        self.assertEqual(
+            applied['counts'], {'npcs': 0, 'items': 1, 'journals': 1, 'events': 0, 'threads': 1}
+        )
+        self.assertEqual(applied['rejected'], ['events:patrol', 'npcs:watcher'])
+        prefix = value['id'] + '-'
+        self.assertEqual(sorted(e['id'] for e in self.stored('codex')['entries']), [prefix + 'key'])
+        art = campaign_core.read_json(campaign_core.doc_path('art'))['items']
+        self.assertEqual(
+            sorted(a['id'] for a in art), ['art-' + prefix + 'key', 'art-' + prefix + 'letter']
+        )
+        area = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))['areas'][0]
+        self.assertEqual(
+            (area.get('npcs', []), area['items'], area.get('events', [])),
+            ([], [prefix + 'key'], []),
+        )
+        self.assertEqual(area['threads'], [prefix + 'gate'])
+        self.assertIn(prefix + 'letter', [entry['id'] for entry in area['journal']])
+        self.assert_shaped()
+        # The location descriptions are not rows to leave out: they apply whatever else is rejected.
+        self.assertEqual(area['creatures'], 'Two watchmen.')
+
+    def test_map_content_with_every_row_rejected_still_describes_its_locations(self):
+        slug, brief = self.import_map()
+        value = workflow.stage(workflow.create(slug, brief), self.proposal())
+        everything = sorted(workflow.reviewable_keys(value['draft']))
+
+        applied = self.request('/api/workflow/' + value['id'] + '/apply', {'rejected': everything})
+
+        self.assertEqual(sum(applied['counts'].values()), 0)
+        self.assertFalse(os.path.isfile(campaign_core.doc_path('codex')))
+        area = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))['areas'][0]
+        self.assertEqual(area['creatures'], 'Two watchmen.')
+        self.assertEqual([entry['title'] for entry in area['journal']], ['Additional scene detail'])
+        index = campaign_core.read_json(campaign_core.doc_path('maps/index'))
+        self.assertTrue(next(m for m in index['items'] if m['slug'] == slug)['stocked'])
+
+    def test_a_layout_proposal_is_accepted_whole(self):
+        slug, brief = self.import_map()
+        layout = workflow.create(slug, brief, kind='layout')
+        refused = self.request(
+            '/api/workflow/' + layout['id'] + '/apply', {'rejected': ['npcs:watcher']}, expected=400
+        )
+        self.assertIn('as a whole', refused['error'])
+
     def crash_after(self, count):
         """Stop the next commit after count document writes, as a killed server would."""
         written = []
@@ -1361,6 +1422,10 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(kinds['other'], ['entries', 'threads', 'scenes', 'handouts'])
         self.assertEqual(kinds['session'], list(session_workflow.REVIEWABLE))
         self.assertEqual(kinds['wrapup'], list(wrapup_workflow.REVIEWABLE))
+        self.assertEqual(
+            self.request('/api/state')['map_review_kinds'],
+            {'content': ['npcs', 'items', 'journals', 'events', 'threads']},
+        )
 
     def test_partly_accepted_proposal_writes_only_accepted_items(self):
         campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))

@@ -1695,6 +1695,9 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
   const working = w.status === 'running';
   const ready = w.status === 'review';
   const draft = w.draft;
+  // The rows of a content proposal that carry a tick box come from the server, as for requests.
+  const contentKinds = S.state.map_review_kinds.content;
+  const leftOut = new Set(w.rejected);
   const labels = {
     layout: 'Layout design',
     revision: 'Layout revision',
@@ -1750,21 +1753,29 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
                 h(
                   'div',
                   { class: 'draft-counts' },
-                  ['npcs', 'items', 'journals', 'events', 'threads'].map((k) =>
-                    badge(`${draft[k]?.length || 0} ${k}`),
-                  ),
+                  contentKinds.map((k) => badge(`${draft[k]?.length || 0} ${k}`)),
                 ),
                 h(
                   'details',
                   { class: 'draft-details' },
                   h('summary', {}, 'Review proposed content'),
-                  ['npcs', 'items', 'journals', 'events', 'threads'].flatMap((k) =>
+                  ready
+                    ? h(
+                        'p',
+                        { class: 'muted' },
+                        'Untick what you do not want. Applying adds only the ticked items; the location descriptions below always apply.',
+                      )
+                    : null,
+                  contentKinds.flatMap((k) =>
                     (draft[k] || []).map((e) =>
                       h(
                         'div',
                         { class: 'draft-entry' },
-                        h('b', {}, e.name || e.title),
+                        ready
+                          ? includeBox(w.id, k + ':' + e.id, e.name || e.title)
+                          : h('b', {}, e.name || e.title),
                         badge('Area ' + e.area),
+                        leftOut.has(k + ':' + e.id) ? badge('Left out') : null,
                         h('p', {}, e.public || e.text || e.detail || e.trigger),
                         e.effect ? h('p', {}, e.effect) : null,
                         e.notes ? h('p', { class: 'muted' }, e.notes) : null,
@@ -1814,7 +1825,10 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
               onclick: () =>
                 attempt(async () => {
                   await flushAll();
-                  await post('/api/workflow/' + w.id + '/apply', {});
+                  await post('/api/workflow/' + w.id + '/apply', {
+                    rejected: [...(rejectedItems.get(w.id) || [])],
+                  });
+                  rejectedItems.delete(w.id);
                   toast(
                     w.kind === 'content'
                       ? 'Campaign content applied.'
@@ -1840,6 +1854,7 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
                   formInput(f, 'instruction', 'What should change?', { type: 'textarea', rows: 4 }),
                   async () => {
                     await post('/api/workflow/' + w.id + '/feedback', f);
+                    rejectedItems.delete(w.id);
                     await poll();
                     route(true);
                   },
@@ -1857,6 +1872,7 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
               onclick: () =>
                 attempt(async () => {
                   await post('/api/workflow/' + w.id + '/run', {});
+                  rejectedItems.delete(w.id);
                   await poll();
                   route(true);
                 }),
@@ -1906,6 +1922,7 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
                   formInput(f, 'text', 'Proposal JSON', { type: 'textarea', rows: 10 }),
                   async () => {
                     await post('/api/workflow/' + w.id + '/stage', { draft: JSON.parse(f.text) });
+                    rejectedItems.delete(w.id);
                     route(true);
                   },
                   'Validate & review',
