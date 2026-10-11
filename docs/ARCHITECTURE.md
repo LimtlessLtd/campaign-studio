@@ -233,6 +233,13 @@ that change. `DM/record_changes.py` holds the update that apply runs (`update_th
 the preview runs the same update on a copy of the stored record, so the two cannot disagree; the preview
 reads current records and changes nothing. A proposal that only adds records has an empty diff.
 
+A map's content proposal has the same item review: `workflow.CONTENT_ROWS` (npcs, items, journals, events and
+threads) are the rows a GM can reject, `POST /api/workflow/<id>/apply` accepts `rejected` for a content draft
+and `map_review_kinds` in `/api/state` tells the browser which rows carry a tick box. The whole draft is
+validated and checked for staleness first, and a rejected row adds no codex entry, link or art brief. No row
+links to another, and the location descriptions apply whatever is rejected, so leaving a row out changes no
+other row. The applied workflow keeps the keys left out as `rejected`, so its card can say so. A layout proposal is accepted or refined as a whole, and the route refuses `rejected` for one.
+
 Map and request drafts share `DM/context.py`. It reserves identity for linked and pinned codex records,
 summarises active threads, then fills the remaining budget with linked details, name matches and a compact
 codex index. Prompt/schema size is bounded by `context_budget_chars` in settings (64,000 by default); a

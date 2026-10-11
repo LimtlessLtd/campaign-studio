@@ -457,6 +457,7 @@ class Handler(SimpleHTTPRequestHandler):
                 prep=list_docs('prep'),
                 prep_archived=self._archived_preps(),
                 review_kinds=request_workflow.review_kinds(),
+                map_review_kinds=workflow.review_kinds(),
                 interrupted_changes=JOURNAL.conflicts(),
             )
         )
@@ -1360,11 +1361,8 @@ class Handler(SimpleHTTPRequestHandler):
                 request_workflow.stage(item, p['draft'], request_read)
                 write_doc('inbox', box)
             else:
-                rejected = p.get('rejected') or []
-                if not isinstance(rejected, list) or not all(isinstance(k, str) for k in rejected):
-                    raise Invalid('Rejected items must be a list of keys.')
                 request_workflow.apply(
-                    item, request_read, commit_docs, box, rejected, party_level()
+                    item, request_read, commit_docs, box, self._rejected_keys(p), party_level()
                 )
             return self.send_json(item)
 
@@ -1658,6 +1656,14 @@ class Handler(SimpleHTTPRequestHandler):
         )
         return self.send_json({'workflow': value, 'job': job})
 
+    @staticmethod
+    def _rejected_keys(p):
+        """The `kind:id` keys of the proposal rows the GM unticked, from an apply request."""
+        rejected = p.get('rejected') or []
+        if not isinstance(rejected, list) or not all(isinstance(k, str) for k in rejected):
+            raise Invalid('Rejected items must be a list of keys.')
+        return rejected
+
     def _post_workflow(self, path, query, p):
         parts = path.split('/')
         if len(parts) != 5:
@@ -1718,8 +1724,11 @@ class Handler(SimpleHTTPRequestHandler):
             slug = value['map']
             if map_busy(slug):
                 raise Conflict('Wait for the current job to finish before applying this proposal.')
+            rejected = self._rejected_keys(p)
             if value['kind'] == 'content':
-                return self.send_json(apply_content(value['id']))
+                return self.send_json(apply_content(value['id'], rejected))
+            if rejected:
+                raise Invalid('A layout proposal is accepted or refined as a whole.')
             return self.send_json(apply_layout(value['id']))
         raise NotFound('Unknown workflow action.')
 

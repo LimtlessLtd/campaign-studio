@@ -218,7 +218,7 @@ async function importRequestProposal(item) {
     'Validate & review',
   );
 }
-/* Items of a proposal the GM has unticked, by request ID, as the `kind:id` keys the server accepts. */
+/* Items of a proposal the GM has unticked, by request or workflow ID, as the `kind:id` keys the server accepts. */
 const rejectedItems = new Map();
 /* The kinds of proposed rows with a tick box come from the server, by request kind. */
 const reviewedKinds = (item) => S.state.review_kinds[item.kind] || S.state.review_kinds.other;
@@ -259,28 +259,32 @@ function changeSlot(diffs, key, title) {
   });
   return slot;
 }
+/* The tick box for one row of a proposal (a request or a map workflow, by `proposalId`); unticking it adds `key`. */
+function includeBox(proposalId, key, label) {
+  return h(
+    'label',
+    { class: 'row' },
+    h('input', {
+      type: 'checkbox',
+      checked: !rejectedItems.get(proposalId)?.has(key),
+      onchange: (event) => {
+        // Read the shared set when the box changes: every box of a proposal is drawn before any is unticked.
+        const rejected = rejectedItems.get(proposalId) || new Set();
+        if (event.target.checked) rejected.delete(key);
+        else rejected.add(key);
+        rejectedItems.set(proposalId, rejected);
+      },
+    }),
+    h('b', {}, label),
+    h('span', { class: 'muted' }, 'Include when applying'),
+  );
+}
 function itemChoice(item, kind, row, diffs) {
   const key = kind + ':' + row.id;
   return h(
     'div',
     { class: 'card', style: 'margin:4px 0' },
-    h(
-      'label',
-      { class: 'row' },
-      h('input', {
-        type: 'checkbox',
-        checked: !rejectedItems.get(item.id)?.has(key),
-        onchange: (event) => {
-          // Read the shared set when the box changes: every box of a proposal is drawn before any is unticked.
-          const rejected = rejectedItems.get(item.id) || new Set();
-          if (event.target.checked) rejected.delete(key);
-          else rejected.add(key);
-          rejectedItems.set(item.id, rejected);
-        },
-      }),
-      h('b', {}, choiceLabel(kind, row)),
-      h('span', { class: 'muted' }, 'Include when applying'),
-    ),
+    includeBox(item.id, key, choiceLabel(kind, row)),
     h('pre', { class: 'file', tabindex: 0 }, JSON.stringify(row, null, 2)),
     changeSlot(diffs, key, 'What this changes'),
   );

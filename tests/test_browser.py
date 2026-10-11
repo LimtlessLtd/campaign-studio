@@ -1110,6 +1110,30 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_text('The Watcher').first).to_be_visible()
         self.assert_accessible('codex')
 
+    def test_map_content_review_applies_only_the_ticked_rows(self):
+        slug, brief = self.studio.import_map()
+        workflow.stage(workflow.create(slug, brief), self.studio.proposal())
+        self.open('#/maps/' + slug)
+        self.page.set_viewport_size(NARROW)
+        self.page.get_by_role('button', name='AI workflow').click()
+        self.page.locator('summary', has_text='Review proposed content').click()
+        for label in ('The Watcher', 'Copper key', 'A letter', 'Patrol', 'Beyond the gate'):
+            expect(self.page.get_by_role('checkbox', name=re.compile(label))).to_be_checked()
+        self.assert_accessible('map content item review at phone width')
+        self.page.get_by_role('checkbox', name=re.compile('The Watcher')).uncheck()
+        self.page.get_by_role('checkbox', name=re.compile('Patrol')).uncheck()
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_text('Campaign content applied.')).to_be_visible()
+        self.assertEqual(
+            [entry['name'] for entry in self.stored('codex')['entries']], ['Copper key']
+        )
+        # Once applied the card is a record, not a form: no tick boxes, and the rows left out say so.
+        self.open('#/maps/' + slug)
+        self.page.get_by_role('button', name='AI workflow').click()
+        self.page.locator('summary', has_text='Review proposed content').click()
+        expect(self.page.get_by_text('Left out')).to_have_count(2)
+        self.assertEqual(self.page.get_by_role('checkbox', name=re.compile('Patrol')).count(), 0)
+
     def test_request_context_preview_can_pin_a_codex_entry(self):
         self.studio.seed(
             'codex',
