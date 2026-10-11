@@ -7,7 +7,7 @@
     "check:js": "node --check DM/app/merge.js && node --check DM/app/controls.js && node --check DM/app/state.js && node --check DM/app/campaign-pages.js && node --check DM/app/map-pages.js && node --check DM/app/world-pages.js && node --check DM/app/foundry-pages.js && node --check DM/app/live-library.js && node --check DM/app/memory-page.js && node --check DM/app/recordings-page.js && node --check DM/app/arcs-page.js && node --check DM/app/transcript-review.js && node --check DM/app/thread-ledger.js && node --check DM/app/studio.js && node --check DM/app/app.js && node tools/check_macro.cjs && node tools/check_foundry_live.cjs && node tools/check_foundry_import.cjs && node tools/check_merge.cjs && node tools/check_routes.cjs && node tools/check_state.cjs"
   },
   "devDependencies": {
-    "axe-core": "4.13.0",
+    "axe-core": "4.14.0",
     "prettier": "3.9.9"
   }
 }
