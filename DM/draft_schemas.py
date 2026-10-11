@@ -8,6 +8,7 @@ Claude Code is passed the schema the caller built and needs no conversion.
 from copy import deepcopy
 
 import arc_options
+import redraft
 import request_workflow
 import thread_ledger
 import transcript_classifier
@@ -54,8 +55,12 @@ BUILDERS = {
 
 
 def for_kind(kind):
-    """The strict schema for a draft kind. A new kind adds one row to `BUILDERS`."""
-    build = BUILDERS.get(kind)
+    """The strict schema for a draft kind, or for one row of it written alone ('<draft kind>:<row kind>').
+
+    A new kind adds one row to `BUILDERS`; its rows can be redrafted if they are objects with an `id`.
+    """
+    proposal, _, row = kind.partition(redraft.SEPARATOR)
+    build = BUILDERS.get(proposal)
     if build is None:
         raise ValueError('Unknown structured draft kind.')
-    return build()
+    return redraft.envelope(build(), row) if row else build()

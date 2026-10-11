@@ -58,6 +58,12 @@ class AIProviderTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 check_strict(draft_schemas.for_kind(kind))
 
+        # The row a proposal kind writes again alone is held to a strict schema of its own.
+        for proposal, module in {'request': request_workflow, **request_workflow.WORKFLOWS}.items():
+            for row in module.REVIEWABLE:
+                with self.subTest(kind=proposal, row=row):
+                    check_strict(draft_schemas.for_kind(f'{proposal}:{row}'))
+
         layout = draft_schemas.for_kind('layout')
         self.assertEqual(layout, draft_schemas.for_kind('revision'))
         operation = layout['properties']['operations']['items']

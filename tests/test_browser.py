@@ -722,6 +722,69 @@ class BrowserSmoke(unittest.TestCase):
         self.assertEqual((quay['title'], quay['map'], quay['npcs']), ('At the quay', '', []))
         self.assertEqual(len(prep['handouts']), 1)
 
+    def test_one_item_of_a_proposal_is_redrafted_on_phone_and_desktop(self):
+        campaign_core.write_doc('prep/s1', fixtures.shapes.PREP.new(n=1, title='Session 1'))
+        campaign_core.write_doc(
+            'inbox',
+            {
+                'items': [
+                    {
+                        'id': 'req-review',
+                        'kind': 'encounter',
+                        'text': 'Create a harbour encounter.',
+                        'session': 's1',
+                        'status': 'new',
+                    }
+                ]
+            },
+        )
+        draft = self.studio.request_proposal()
+        self.studio.request('/api/requests/req-review/stage', {'draft': draft})
+        queued = {}
+
+        def fake_job(lane, kind, label, cmd, prompt, **extra):
+            queued.update(prompt=prompt, **extra)
+            return {'id': 'job-redraft', **extra}
+
+        with (
+            patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
+            patch.object(campaign_core, 'new_job', side_effect=fake_job),
+        ):
+            current = 'Harbour Watcher'
+            for viewport in (NARROW, DESKTOP):
+                width = str(viewport['width'])
+                self.page.set_viewport_size(viewport)
+                self.open('#/inbox')
+                self.page.get_by_role('checkbox', name=re.compile(current)).uncheck()
+                self.page.get_by_role(
+                    'button', name=re.compile('Redraft this one: ' + current)
+                ).click()
+                self.page.get_by_label('What should change?').fill('Make the guard older.')
+                self.assert_accessible('redraft dialog at ' + width)
+                self.page.get_by_role('button', name=re.compile('^Draft with')).click()
+                expect(self.page.get_by_text('is writing one item again')).to_be_visible()
+                self.assertEqual(self.stored('inbox')['items'][0]['status'], 'doing')
+                self.assertIn('Make the guard older.', queued['prompt'])
+                # Nothing else can be applied while the AI writes; the proposal is shown again after.
+                self.assertEqual(
+                    self.page.get_by_role('button', name='Apply to campaign').count(), 0
+                )
+
+                job = {key: value for key, value in queued.items() if key != 'prompt'}
+                job['id'] = 'job-redraft'
+                row = self.stored('inbox')['items'][0]['draft']['entries'][0]
+                current = 'Quay Warden ' + width
+                self.studio.write_job_output(job, {'row': {**row, 'name': current}})
+                campaign_core.finish_redraft(job, 0, '')
+                # The new row appears ticked, in place of the one the GM had unticked.
+                expect(self.page.get_by_role('checkbox', name=re.compile(current))).to_be_checked(
+                    timeout=10000
+                )
+                self.assert_accessible('redrafted proposal at ' + width)
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_role('button', name='New follow-up')).to_be_visible()
+        self.assertEqual([e['name'] for e in self.stored('codex')['entries']], ['Quay Warden 1280'])
+
     def test_an_expand_proposal_shows_the_text_it_adds_to_the_entry(self):
         self.studio.seed_expand_request()
         self.studio.request(

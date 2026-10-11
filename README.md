@@ -170,7 +170,9 @@ and handout one at a time: untick what you do not want and only the ticked items
 its place without a map, NPC or clue you left out. Recap, goals, loot and checklist apply as a whole. A change
 to a thread or codex entry that already exists shows what it holds now beside what it will hold (the old
 status struck through, text added after the end of the old text), and so does the text an expand request adds
-to its entry. "Redraft this one" is planned in W33.
+to its entry. **Redraft this one** on any proposed row (general, session and wrap-up requests) asks the AI to
+write just that row again, with an optional note on what to change: the rest of the proposal stays as you
+reviewed it, and the new row starts ticked. Redrafting a row of a map's content proposal is planned in W33.
 
 After you play, **Wrap up this session** on that prep takes your notes from the table (or a recording
 summary pasted in) and drafts the session log, changes to threads and codex entries, new threads and leads

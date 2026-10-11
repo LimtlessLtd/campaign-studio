@@ -472,6 +472,16 @@ def fail_request(job, message):
         write_doc('inbox', box)
 
 
+def fail_redraft(job, message):
+    """Return a request to review when its redraft ends without a new row. It keeps the proposal it had."""
+    box = read_json(doc_path('inbox'), {'items': []})
+    item = request_item(box, job['redraft'])
+    if item and item.get('status') == 'doing' and item.get('job') == job['id']:
+        item.pop('redraft', None)
+        item.update(status='review', error=message)
+        write_doc('inbox', box)
+
+
 def discard_transcription(job, message):
     """A transcription that did not finish leaves no staged result or scratch audio."""
     transcription.discard(campaign.active().jobs, job['transcript'])
@@ -642,11 +652,37 @@ def finish_request(job, code, tail):
         job.update(status='failed', note=str(error))
 
 
+def finish_redraft(job, code, tail):
+    """Splice the row the AI wrote again into the proposal it came from, which stays in review."""
+    box = read_json(doc_path('inbox'), {'items': []})
+    item = request_item(box, job['redraft'])
+    if not item or item.get('status') != 'doing' or item.get('job') != job['id']:
+        job.update(status='failed', note='The request was removed or changed during the redraft.')
+        return
+    try:
+        if code:
+            raise ValueError(tail[-1000:] or 'The AI command failed.')
+        if request_workflow.input_hash(item) != job['source']:
+            raise ValueError('The request changed during the redraft. Make a new proposal.')
+        with open(job_file(job['id'], 'log'), encoding='utf-8') as file:
+            raw = file.read()
+        item.pop('redraft', None)
+        item.update(status='review', error='')
+        request_workflow.redraft_row(item, job['row'], workflow.parse_output(raw), request_read)
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        # The proposal on disk is untouched: only a validated whole replaces it.
+        job.update(status='failed', note=str(error))
+        fail_redraft(job, str(error))
+        return
+    write_doc('inbox', box)
+
+
 # What a job leaves to settle. A new draft kind adds a row here instead of a branch in finish_job or
 # settle_failed_job: FINISHERS stores a finished job's result by kind; SETTLERS marks what a failed job
 # was producing, by the field that names the record it belongs to.
 FINISHERS = {
     'request-draft': finish_request,
+    'request-redraft': finish_redraft,
     'transcribe': finish_transcription,
     'classify': finish_classification,
     'thread-ledger': finish_ledger,
@@ -654,6 +690,7 @@ FINISHERS = {
 }
 SETTLERS = (
     ('request', fail_request),
+    ('redraft', fail_redraft),
     ('transcript', discard_transcription),
     ('classify', fail_classification),
     ('ledger', fail_ledger),
@@ -786,6 +823,40 @@ def start_request(rid):
             source=request_workflow.input_hash(item),
         )
         item.update(status='doing', job=job['id'], draft=None, error='')
+        write_doc('inbox', box)
+        return job
+
+
+def start_redraft(rid, where, note=''):
+    """Ask the AI to write one row of a request's proposal again; the rest of the proposal stays as reviewed."""
+    with LOCK:
+        box = read_json(doc_path('inbox'), {'items': []})
+        item = request_item(box, rid)
+        if not item:
+            raise ValueError('No such request.')
+        if item.get('applied') or item.get('status') != 'review' or not item.get('draft'):
+            raise ValueError('Only a proposal awaiting review can have a row written again.')
+        pack = request_workflow.redraft_pack(
+            item,
+            where,
+            note,
+            request_read,
+            campaign_facts(),
+            config.settings()['context_budget_chars'],
+            prep_names=list_docs('prep'),
+        )
+        cmd = ai_provider.command(pack['draft_kind'], pack['schema'])
+        job = new_job(
+            'claude',
+            'request-redraft',
+            'Redraft: ' + where,
+            cmd,
+            pack['prompt'],
+            redraft=rid,
+            row=where,
+            source=request_workflow.input_hash(item),
+        )
+        item.update(status='doing', job=job['id'], redraft=where, error='')
         write_doc('inbox', box)
         return job
 

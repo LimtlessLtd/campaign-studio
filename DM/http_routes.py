@@ -86,6 +86,7 @@ from campaign_core import (
     start_arcs,
     start_auto_run,
     start_classification,
+    start_redraft,
     start_request,
     start_ledger,
     start_transcription,
@@ -1344,6 +1345,10 @@ class Handler(SimpleHTTPRequestHandler):
         rid, action = parts[3:]
         if action == 'run':
             return self.send_json(start_request(rid))
+        if action == 'redraft':
+            if not isinstance(p.get('key'), str):
+                raise Invalid('Choose the item to write again.')
+            return self.send_json(start_redraft(rid, p['key'], p.get('note')))
         if action not in ('stage', 'apply', 'context'):
             raise Invalid('Unknown request action.')
         with LOCK:

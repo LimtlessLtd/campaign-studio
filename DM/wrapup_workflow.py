@@ -219,6 +219,14 @@ def base_hash(item, draft, read_doc):
     return hashlib.sha256(json.dumps(base, sort_keys=True).encode('utf-8')).hexdigest()
 
 
+def ensure_current(item, draft, read_doc):
+    """Refuse a proposal whose prep, threads or codex entries were edited after it was staged."""
+    if item.get('draft_base') != base_hash(item, draft, read_doc):
+        raise ValueError(
+            'The session prep, a linked thread or a codex entry changed after review. Draft again.'
+        )
+
+
 def reviewable_keys(draft):
     """The `kind:id` keys a GM can accept or reject one at a time."""
     return item_review.keys(draft, REVIEWABLE)
@@ -296,10 +304,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
     `party_level` is accepted so every request workflow shares one signature; a wrap-up makes no maps.
     """
     draft = validate(item, item['draft'], read_doc)
-    if item.get('draft_base') != base_hash(item, draft, read_doc):
-        raise ValueError(
-            'The session prep, a linked thread or a codex entry changed after review. Draft again.'
-        )
+    ensure_current(item, draft, read_doc)
     draft = without_rejected(draft, rejected)
     session = item['session']
     all_threads = read_doc('threads') or {'threads': []}

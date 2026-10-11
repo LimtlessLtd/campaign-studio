@@ -28,7 +28,7 @@ Ranked by how much each holds back the goal.
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
 3. **Session workflow** (W33, W35–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
-   A wrap-up now folds played outcomes back into threads. Readiness and "redraft this one" remain.
+   A wrap-up now folds played outcomes back into threads. Readiness and redrafting a map-content row remain.
 4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
@@ -148,7 +148,10 @@ their row and finding say enough.
   (`record_changes`: the preview runs the update that apply runs, on a copy; `GET /api/requests/<id>/diff`).
   A map's content proposal (npcs, items, journals, events and threads) has the same tick boxes
   (`workflow.CONTENT_ROWS`, served as `map_review_kinds`); its location descriptions apply whole, and a
-  layout is accepted or refined as a whole. W33 still has to add "redraft this one". An edited item is
+  layout is accepted or refined as a whole. Any row of a general, session or wrap-up proposal can be written
+  again alone (`DM/redraft.py`, `POST /api/requests/<id>/redraft`): a row-only AI answer is swapped in under the
+  old ID and the whole proposal is validated and checked for staleness again. W33 still has to add the same for
+  a map's content proposal, whose rows are drafted by a different workflow record. An edited item is
   validated again.
 
 ### W35 Threads and wrap-up
