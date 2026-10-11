@@ -9,12 +9,20 @@ from copy import deepcopy
 import shapes
 import context as prompt_context
 import item_review
+import record_changes
 import session_workflow
 import workflow
 import wrapup_workflow
 
 REQUEST_ID = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 PREP_ID = re.compile(r'^[a-z0-9][a-z0-9_-]{0,63}$')
+ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
+STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
+# Request kinds with a proposal workflow of their own. Each module provides SCHEMA, options, prompt_pack,
+# validate, base_hash, reviewable_keys, REVIEWABLE, diff and apply (the signatures in `session_workflow`),
+# and may name the request fields besides id, kind, text and session that its proposal depends on in INPUTS.
+# A new kind adds one row here; `KINDS` and `draft_schemas` follow from it.
+WORKFLOWS = {'session': session_workflow, 'wrapup': wrapup_workflow}
 KINDS = {
     'npc',
     'item',
@@ -25,16 +33,8 @@ KINDS = {
     'event',
     'journal',
     'expand',
-    'session',
-    'wrapup',
+    *WORKFLOWS,
 }
-ENTRY_TYPES = ['npc', 'item', 'place', 'faction', 'monster', 'god']
-STATUSES = ['open', 'planned', 'foreshadowed', 'resolved']
-# Request kinds with a proposal workflow of their own. Each module provides SCHEMA, options, prompt_pack,
-# validate, base_hash, reviewable_keys, REVIEWABLE and apply (the signatures in `session_workflow`), and may
-# name the request fields besides id, kind, text and session that its proposal depends on in INPUTS. A new
-# kind adds one row here; `draft_schemas` then serves its schema to the AI providers.
-WORKFLOWS = {'session': session_workflow, 'wrapup': wrapup_workflow}
 NEEDS_SESSION = {'encounter', 'handout', 'event', 'journal', *WORKFLOWS}
 
 FOCUS = workflow.obj(
@@ -334,13 +334,40 @@ def expand_entry(codex, item, focus, prefix, proposed_ids):
         return
     for field in ('public', 'secrets'):
         if focus[field].strip():
-            entry[field] = '\n\n'.join(x for x in (entry.get(field, ''), focus[field]) if x.strip())
+            entry[field] = record_changes.joined(entry.get(field, ''), focus[field])
     links = [prefix + link if link in proposed_ids else link for link in focus['links']]
     entry['related'] = list(dict.fromkeys([*entry.get('related', []), *links]))
     entry.setdefault('expanded_by', []).append(item['id'])
 
 
 REVIEWABLE = ('entries', 'threads', 'scenes', 'handouts')
+EXPANDED_FIELDS = (('public', 'Public text', True), ('secrets', 'GM secrets', True))
+
+
+def diff(item, read_doc):
+    """What a staged proposal would change in records that already exist, by the key of the row that does it.
+
+    Each value lists the changed fields (see `record_changes.changed_fields`); an expand request's text for
+    its entry is under `focus`. A proposal that only adds records changes nothing, so its diff is empty.
+    """
+    if item.get('status') != 'review' or not item.get('draft'):
+        return {}
+    draft = validate(item, item['draft'], read_doc)
+    if item['kind'] in WORKFLOWS:
+        return WORKFLOWS[item['kind']].diff(draft, item, read_doc)
+    focus = draft['focus']
+    if not any(focus.values()):
+        return {}
+    entry = next(e for e in codex_entries(read_doc) if e['id'] == item['codex'])
+    expanded = deepcopy(entry)
+    expand_entry(
+        {'entries': [expanded]},
+        item,
+        focus,
+        item['id'] + '-',
+        {row['id'] for row in draft['entries']},
+    )
+    return {'focus': record_changes.changed_fields(entry, expanded, EXPANDED_FIELDS)}
 
 
 def review_kinds():
@@ -546,7 +573,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
                 shapes.CHECKLIST_ITEM.new(text=text) for text in draft['checklist']
             )
             if draft['notes'].strip():
-                prep['notes'] = '\n\n'.join(x for x in (prep.get('notes', ''), draft['notes']) if x)
+                prep['notes'] = record_changes.joined(prep.get('notes', ''), draft['notes'])
             prep.setdefault('applied_requests', []).append(item['id'])
             changes.append(('prep/' + session, prep))
     item.update(status='done', result=draft['summary'], applied=time.time())

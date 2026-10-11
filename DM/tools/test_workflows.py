@@ -767,7 +767,21 @@ class StudioIntegration(unittest.TestCase):
         broken['scenes'][1]['map'] = 'no-such-map'
         self.request('/api/requests/req-session/stage', {'draft': broken}, expected=400)
         self.assertEqual(self.stored('prep/s1')['pitch'], '')
+        self.assertEqual(self.request('/api/requests/req-session/diff'), {})
         self.request('/api/requests/req-session/stage', {'draft': draft})
+        self.assertEqual(
+            self.request('/api/requests/req-session/diff'),
+            {
+                'thread_changes:old-thread': [
+                    {'label': 'Status', 'before': 'open', 'after': 'foreshadowed'},
+                    {
+                        'label': 'Detail',
+                        'before': 'A church bell fell.',
+                        'added': 'The bell is their signal.',
+                    },
+                ]
+            },
+        )
         self.request(
             '/api/requests/req-session/apply', {'rejected': ['entries:nope']}, expected=400
         )
@@ -1222,6 +1236,64 @@ class StudioIntegration(unittest.TestCase):
         notes = self.stored('codex')['entries'][0]['notes']
         self.assertEqual(notes, 'GM edited this while reviewing.\n\nS2: Owes the party a favour.')
 
+    def test_a_wrapup_previews_what_each_change_does_and_apply_does_exactly_that(self):
+        self.stage_wrapup_draft()
+        shown = self.request('/api/requests/req-wrap/diff')
+        # Only rows that change a record that already exists have a diff; the others add whole records.
+        self.assertEqual(
+            shown,
+            {
+                'thread_changes:old-thread': [
+                    {'label': 'Status', 'before': 'open', 'after': 'resolved'},
+                    {
+                        'label': 'Detail',
+                        'before': 'A church bell fell.',
+                        'added': 'The bell was found.',
+                    },
+                ],
+                'codex_changes:captain': [
+                    {'label': 'Group', 'before': 'Harbour watch', 'after': 'Freed'},
+                    {
+                        'label': 'Notes',
+                        'before': 'Stern.',
+                        'added': 'S2: Owes the party a favour.',
+                    },
+                ],
+            },
+        )
+        self.request('/api/requests/req-wrap/apply', {})
+        thread = {row['id']: row for row in self.stored('threads')['threads']}['old-thread']
+        captain = {row['id']: row for row in self.stored('codex')['entries']}['captain']
+        status, detail = shown['thread_changes:old-thread']
+        group, notes = shown['codex_changes:captain']
+        self.assertEqual(thread['status'], status['after'])
+        self.assertEqual(thread['detail'], 'A church bell fell.\n\n' + detail['added'])
+        self.assertEqual(captain['group'], group['after'])
+        self.assertEqual(captain['notes'], 'Stern.\n\n' + notes['added'])
+        # Once applied there is nothing left to review.
+        self.assertEqual(self.request('/api/requests/req-wrap/diff'), {})
+
+    def test_a_wrapup_that_only_adds_records_has_no_diff(self):
+        self.seed_wrapup_request()
+        draft = {**self.wrapup_proposal(), 'thread_changes': [], 'codex_changes': []}
+        self.request('/api/requests/req-wrap/stage', {'draft': draft})
+        self.assertEqual(self.request('/api/requests/req-wrap/diff'), {})
+        self.request('/api/requests/nobody/diff', expected=404)
+
+    def test_a_restated_status_shows_only_the_text_added(self):
+        self.seed_wrapup_request()
+        change = {'id': 'sealed', 'status': 'open', 'update': 'A voice answered.'}
+        draft = {**self.wrapup_proposal(), 'thread_changes': [change], 'codex_changes': []}
+        self.request('/api/requests/req-wrap/stage', {'draft': draft})
+        self.assertEqual(
+            self.request('/api/requests/req-wrap/diff'),
+            {
+                'thread_changes:sealed': [
+                    {'label': 'Detail', 'before': '', 'added': 'A voice answered.'}
+                ]
+            },
+        )
+
     def test_a_wrapup_needs_an_active_session_prep(self):
         item = self.seed_wrapup_request()
         for label, change in {
@@ -1317,7 +1389,8 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(saved['scenes'][0]['npcs'], [])
         self.assertEqual(len(saved['handouts']), 1)
 
-    def test_expand_entry_adds_text_links_and_art_once(self):
+    def seed_expand_request(self):
+        """A codex entry and a request to expand it, awaiting a draft."""
         self.seed(
             'codex',
             {
@@ -1336,9 +1409,10 @@ class StudioIntegration(unittest.TestCase):
             'status': 'new',
         }
         campaign_core.write_doc('inbox', {'items': [item]})
-        pack = self.request('/api/requests/req-expand/pack')
-        self.assertIn('Harbour Gate', pack['prompt'])
-        draft = {
+        return item
+
+    def expand_proposal(self):
+        return {
             'summary': 'Gate lore.',
             'focus': {
                 'public': 'Its lamps burn blue.',
@@ -1365,10 +1439,30 @@ class StudioIntegration(unittest.TestCase):
             'checklist': [],
             'notes': '',
         }
+
+    def test_expand_entry_adds_text_links_and_art_once(self):
+        item = self.seed_expand_request()
+        pack = self.request('/api/requests/req-expand/pack')
+        self.assertIn('Harbour Gate', pack['prompt'])
+        draft = self.expand_proposal()
         broken = {**draft, 'focus': {**draft['focus'], 'links': ['nobody']}}
         self.request('/api/requests/req-expand/stage', {'draft': broken}, expected=400)
         self.request('/api/requests/req-expand/stage', {'draft': draft})
+        self.assertEqual(
+            self.request('/api/requests/req-expand/diff'),
+            {
+                'focus': [
+                    {'label': 'Public text', 'before': 'A gate.', 'added': 'Its lamps burn blue.'},
+                    {
+                        'label': 'GM secrets',
+                        'before': '',
+                        'added': 'A smuggler tunnel runs beneath.',
+                    },
+                ]
+            },
+        )
         self.request('/api/requests/req-expand/apply', {})
+        self.assertEqual(self.request('/api/requests/req-expand/diff'), {})
         entries = {e['id']: e for e in self.stored('codex')['entries']}
         self.assertEqual(entries['gate']['public'], 'A gate.\n\nIts lamps burn blue.')
         self.assertEqual(entries['gate']['related'], ['req-expand-keeper'])

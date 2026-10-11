@@ -143,8 +143,10 @@ their row and finding say enough.
 - General requests and Session Forge proposals offer item choices (Session Forge: maps, entries, threads,
   thread changes, scenes and handouts; the shared `item_review` module holds the key format and the removal).
   Applying writes only accepted items and drops what linked to a rejected one: a scene stays without a rejected
-  map, NPC or clue. A session's staleness check covers the whole proposal. W33 still has to extend this to map
-  proposals, add "redraft this one" and show before/after changes to existing records. An edited item is
+  map, NPC or clue. A session's staleness check covers the whole proposal. A change to a thread or codex entry
+  that already exists, and the text an expand request adds to its entry, shows its before and after
+  (`record_changes`: the preview runs the update that apply runs, on a copy; `GET /api/requests/<id>/diff`).
+  W33 still has to extend item choices to map proposals and add "redraft this one". An edited item is
   validated again.
 
 ### W35 Threads and wrap-up

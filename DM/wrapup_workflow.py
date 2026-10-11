@@ -14,6 +14,7 @@ from copy import deepcopy
 
 import context as prompt_context
 import item_review
+import record_changes
 import records
 import shapes
 import workflow
@@ -229,10 +230,6 @@ def without_rejected(draft, rejected):
     return kept
 
 
-def _added(old, new):
-    return '\n\n'.join(x for x in (old, new) if x and x.strip())
-
-
 def _appended(existing, rows):
     """`existing` followed by the text of each row it does not already hold."""
     texts = (_clean(row['text'], TEXT_LIMIT) for row in rows)
@@ -242,7 +239,7 @@ def _appended(existing, rows):
 def write_log(prep, draft):
     """Add the proposal's log to the prep's, never replacing what the GM wrote, and mark it played."""
     log = shapes.LOG.fill(prep.setdefault('log', {}))
-    log['summary'] = _added(log['summary'], draft['summary'].strip())
+    log['summary'] = record_changes.joined(log['summary'], draft['summary'].strip())
     log['outcomes'] = _appended(log['outcomes'], draft['outcomes'])
     log['hooks'] = _appended(log['hooks'], draft['hooks'])
     log['loot'] += [
@@ -273,27 +270,22 @@ def change_threads(threads, draft, item):
         )
     by_id = {thread['id']: thread for thread in threads}
     for row in draft['thread_changes']:
-        target = by_id[row['id']]
-        target['status'] = row['status']
-        if row['update'].strip():
-            target['detail'] = _added(target.get('detail', ''), row['update'].strip())
-        target['sessions'] = list(dict.fromkeys([*target.get('sessions', []), session]))
-        target.setdefault('session_updates', []).append(item['id'])
+        record_changes.update_thread(by_id[row['id']], row, session, item['id'])
 
 
 def change_entries(entries, draft, session):
     """Apply the status, group (allegiance) and notes changes to existing codex entries."""
     by_id = {entry['id']: entry for entry in entries}
     for row in draft['codex_changes']:
-        target = by_id[row['id']]
-        if row['status'].strip():
-            target['status'] = row['status'].strip()
-        if row['group'].strip():
-            target['group'] = row['group'].strip()
-        if row['notes'].strip():
-            target['notes'] = _added(
-                target.get('notes', ''), f'{session.upper()}: {row["notes"].strip()}'
-            )
+        record_changes.update_entry(by_id[row['id']], row, session)
+
+
+def diff(draft, item, read_doc):
+    """What the proposed thread and codex changes would do to the records they name."""
+    return {
+        **record_changes.thread_changes(draft, item, read_doc),
+        **record_changes.entry_changes(draft, item, read_doc),
+    }
 
 
 def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
