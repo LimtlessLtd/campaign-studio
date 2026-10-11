@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'DM'))
+import content_redraft
 import draft_schemas
 import item_review
 import redraft
@@ -94,6 +95,58 @@ class EnvelopeTests(unittest.TestCase):
         for kind in ('request:goals', 'request:nothing', 'nothing:entries', 'layout:operations'):
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 draft_schemas.for_kind(kind)
+
+
+def content_draft():
+    return {
+        'summary': 'A quay.',
+        'areas': [
+            {'n': 1, 'text': 'The quay.', 'creatures': 'Gulls.'},
+            {'n': 2, 'text': 'The cellar.', 'creatures': 'Rats.'},
+        ],
+        'npcs': [
+            {'id': 'ann', 'name': 'Ann', 'area': 1, 'public': 'Tall.', 'secrets': 'A spy.'},
+            {'id': 'bo', 'name': 'Bo', 'area': 2, 'public': 'Short.', 'secrets': 'A thief.'},
+        ],
+        'items': [],
+        'journals': [
+            {'id': 'note', 'title': 'A note', 'area': 2, 'text': 'Hidden.', 'secrets': 'X'}
+        ],
+        'events': [],
+        'threads': [],
+    }
+
+
+class OutlineTests(unittest.TestCase):
+    def test_a_row_sees_its_own_location_and_the_name_of_every_other_row(self):
+        draft = content_draft()
+        outline = content_redraft.outline(draft, draft['npcs'][0])
+        self.assertEqual(outline['summary'], 'A quay.')
+        self.assertEqual(outline['location'], draft['areas'][0])
+        self.assertEqual(
+            outline['other_rows'],
+            {
+                'npcs': [{'id': 'bo', 'name': 'Bo', 'location': 2}],
+                'items': [],
+                'journals': [{'id': 'note', 'name': 'A note', 'location': 2}],
+                'events': [],
+                'threads': [],
+            },
+        )
+
+    def test_the_other_rows_full_text_stays_out_of_the_outline(self):
+        draft = content_draft()
+        text = json.dumps(content_redraft.outline(draft, draft['journals'][0]))
+        for private in ('A spy.', 'A thief.', 'Tall.', 'Hidden.', 'The quay.'):
+            self.assertNotIn(private, text)
+        self.assertIn('The cellar.', text)  # the location the journal entry is in
+
+
+class PromptSizeTests(unittest.TestCase):
+    def test_the_size_reserved_for_the_prompt_is_never_less_than_what_it_adds(self):
+        row, note = {'id': 'a', 'name': 'Ann'}, 'Older.'
+        added = len(redraft.prompt('PACK', draft(), 'entries:a', row, note)) - len('PACK')
+        self.assertGreaterEqual(redraft.added_chars(draft(), row, note), added)
 
 
 class PromptTests(unittest.TestCase):

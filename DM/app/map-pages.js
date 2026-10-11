@@ -1731,7 +1731,8 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
       ? h(
           'p',
           { class: 'muted' },
-          'The AI is drafting a proposal. You can continue working elsewhere in the campaign.',
+          (w.redraft ? 'The AI is writing one item again.' : 'The AI is drafting a proposal.') +
+            ' You can continue working elsewhere in the campaign.',
         )
       : null,
     draft
@@ -1776,6 +1777,16 @@ function workflowCard(w, slugArg, onApplied = () => route(true)) {
                           : h('b', {}, e.name || e.title),
                         badge('Area ' + e.area),
                         leftOut.has(k + ':' + e.id) ? badge('Left out') : null,
+                        ready
+                          ? redraftBox(
+                              w.id,
+                              k + ':' + e.id,
+                              e.name || e.title,
+                              async (key, note) => {
+                                await post('/api/workflow/' + w.id + '/redraft', { key, note });
+                              },
+                            )
+                          : null,
                         h('p', {}, e.public || e.text || e.detail || e.trigger),
                         e.effect ? h('p', {}, e.effect) : null,
                         e.notes ? h('p', { class: 'muted' }, e.notes) : null,

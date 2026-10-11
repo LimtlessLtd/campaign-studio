@@ -360,7 +360,11 @@ def schema(kind):
     return CONTENT_SCHEMA if kind == 'content' else LAYOUT_SCHEMA
 
 
-def prompt_pack(value, campaign_info, for_run=False):
+def prompt_pack(value, campaign_info, for_run=False, reserve=0):
+    """The prompt, schema and context summary for a workflow's next AI run.
+
+    `reserve` is how many characters the caller adds to the prompt afterwards; the context leaves room.
+    """
     if for_run and needs_plan(value):
         value = deepcopy(value)  # A preview plans the next run without changing the saved workflow.
         begin(value)
@@ -472,7 +476,10 @@ change map dimensions. Make purposeful detail, sight lines, cover, landmarks and
         linked_ids=linked,
         linked_threads=linked_threads,
         pins=value.get('context_pins', []),
-        budget_chars=config.settings().get('context_budget_chars', prompt_context.DEFAULT_BUDGET),
+        budget_chars=max(
+            prompt_context.MIN_BUDGET,
+            config.settings().get('context_budget_chars', prompt_context.DEFAULT_BUDGET) - reserve,
+        ),
     )
     return {
         'workflow': value['id'],
@@ -766,17 +773,20 @@ def reviewable_keys(draft):
     return item_review.keys(draft, CONTENT_ROWS)
 
 
+def staged_content(value):
+    """The content draft awaiting review, validated again. Raises ValueError if there is none or the map moved."""
+    if value['status'] != 'review' or value['kind'] != 'content':
+        raise ValueError('This workflow has no content draft awaiting review.')
+    return validate(value, deepcopy(value['draft']))
+
+
 def apply_content(value, commit, rejected=()):
     """Link a reviewed content draft. commit(label, changes) writes every document together.
 
     `rejected` lists `kind:id` keys (see `reviewable_keys`) to leave out. The whole draft is validated
     first, so a rejected row cannot hide a stale or invalid proposal.
     """
-    if value['status'] != 'review' or value['kind'] != 'content':
-        raise ValueError('This workflow has no content draft awaiting review.')
-    draft, _ = item_review.without(
-        validate(value, deepcopy(value['draft'])), rejected, CONTENT_ROWS
-    )
+    draft, _ = item_review.without(staged_content(value), rejected, CONTENT_ROWS)
     slug = value['map']
     key = read(os.path.join(campaign.active().maps, slug, 'key.json'), {'areas': []})
     codex = records.collection(campaign.active().data, 'codex')

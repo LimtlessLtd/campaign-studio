@@ -455,12 +455,11 @@ def redraft_pack(item, where, note, read_doc, campaign, budget_chars, prep_names
     row = item_review.find(draft, where, reviewable(item))
     kind = where.partition(':')[0]
     note = redraft.clean_note(note)
-    shown = len(json.dumps(draft, ensure_ascii=False)) + len(json.dumps(row, ensure_ascii=False))
     pack = prompt_pack(
         item,
         read_doc,
         campaign,
-        max(prompt_context.MIN_BUDGET, budget_chars - shown - len(note) - redraft.OVERHEAD),
+        max(prompt_context.MIN_BUDGET, budget_chars - redraft.added_chars(draft, row, note)),
         prep_names,
     )
     return {

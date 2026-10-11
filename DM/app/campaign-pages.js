@@ -279,24 +279,41 @@ function includeBox(proposalId, key, label) {
     h('span', { class: 'muted' }, 'Include when applying'),
   );
 }
-/* Ask the AI to write one row of a request's proposal again; the other rows stay as reviewed. */
-function redraftRow(item, key, label) {
-  const f = { note: '' };
-  modal(
-    'Redraft this one',
-    `The AI writes "${label}" again and leaves the rest of the proposal as you reviewed it.`,
-    formInput(f, 'note', 'What should change? (optional)', { type: 'textarea', rows: 4 }),
-    async () => {
-      if (S.pending.inbox) await flush('inbox');
-      await post('/api/requests/' + item.id + '/redraft', { key, note: f.note });
-      // The new row starts ticked, whatever the GM thought of the one it replaces.
-      rejectedItems.get(item.id)?.delete(key);
-      await load('inbox', { items: [] });
-      await poll();
-      route(true);
+/* The "Redraft this one" button of a proposal row (a request or a map workflow, by `proposalId`).
+   `send(key, note)` posts the redraft and reloads whatever holds the proposal. */
+function redraftBox(proposalId, key, label, send) {
+  if (!S.state.ai.available) return null;
+  return h(
+    'button',
+    {
+      'aria-label': 'Redraft this one: ' + label,
+      onclick: () => {
+        const f = { note: '' };
+        modal(
+          'Redraft this one',
+          `The AI writes "${label}" again and leaves the rest of the proposal as you reviewed it.`,
+          formInput(f, 'note', 'What should change? (optional)', { type: 'textarea', rows: 4 }),
+          async () => {
+            await send(key, f.note);
+            // The new row starts ticked, whatever the GM thought of the one it replaces.
+            rejectedItems.get(proposalId)?.delete(key);
+            await poll();
+            route(true);
+          },
+          `Draft with ${S.state.ai.label}`,
+        );
+      },
     },
-    `Draft with ${S.state.ai.label}`,
+    'Redraft this one',
   );
+}
+/* Ask the AI to write one row of a request's proposal again. */
+function redraftRequestRow(item, key, label) {
+  return redraftBox(item.id, key, label, async (row, note) => {
+    if (S.pending.inbox) await flush('inbox');
+    await post('/api/requests/' + item.id + '/redraft', { key: row, note });
+    await load('inbox', { items: [] });
+  });
 }
 function itemChoice(item, kind, row, diffs) {
   const key = kind + ':' + row.id;
@@ -305,16 +322,7 @@ function itemChoice(item, kind, row, diffs) {
     'div',
     { class: 'card', style: 'margin:4px 0' },
     includeBox(item.id, key, label),
-    S.state.ai.available
-      ? h(
-          'button',
-          {
-            'aria-label': 'Redraft this one: ' + label,
-            onclick: () => redraftRow(item, key, label),
-          },
-          'Redraft this one',
-        )
-      : null,
+    redraftRequestRow(item, key, label),
     h('pre', { class: 'file', tabindex: 0 }, JSON.stringify(row, null, 2)),
     changeSlot(diffs, key, 'What this changes'),
   );

@@ -10,13 +10,12 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W77
+Next ID: W78
 
 | ID  | Priority | Work                                                                                                                       | Acceptance criteria                                                                                 |
 | --- | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | W74 | 2        | Owner-assisted live check of recordings to draft: a real recording, Whisper model and Claude run through the automatic run | Requests, cost, window count, limit message and passage quality recorded; failures become rows      |
 | W76 | 2        | Owner-assisted live check of the Codex provider: one small draft through `codex exec`, its events, usage and limit message | Event shapes, flags, tool lock-down and limit wording recorded; the stream guard's lists corrected  |
-| W33 | 2        | Proposal review, remainder: redraft one row of a map's content proposal (everything else done)                             | One rejected or weak row of a map's content draft can be redrafted alone                            |
 | W35 | 2        | Wrap-up, remainder: offer a wrap-up's leads as pitch seeds; start one from a transcript (notes done)                       | The pitch box lists the latest leads; a transcript prefills its wrap-up from the ledger             |
 | W36 | 2        | Readiness board on each prep, with a one-click fix for each gap                                                            | Each check reads stored state; a fixture exercises every gap                                        |
 | W37 | 2        | Party roster, remainder: encounter budget checks against the party (characters read and AI context done)                   | A prep's encounters are rated against the party's size and level                                    |
@@ -35,6 +34,7 @@ Next ID: W77
 | W65 | 2        | Edit Foundry scene settings in Studio: playlist and music, lighting, weather, grid and other fields                        | A scene's music and settings edit in Studio and reach Foundry on export                             |
 | W66 | 2        | AI proposes pins on the overworld map for scenes whose names match its labels                                              | A scene named like a map label gets a reviewed pin proposal; none apply unreviewed                  |
 | W67 | 2        | Studio never deletes from Foundry: every link and Studio-made detail can be unlinked or removed                            | Each linked record offers unlink or remove; Foundry data is never touched                           |
+| W77 | 3        | Before and after for the thread changes in an arc option and a thread ledger (reuse `record_changes`)                      | A review row shows the thread as it is and as it will be; the preview cannot differ from apply      |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                                    | Two folders with one name import separately; older snapshots still open                             |
 | W10 | 3        | Installer and performance budgets for very large maps                                                                      | Clean-machine install test and measured time/memory at documented map sizes                         |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped)                | Services receive their `Campaign` explicitly (no process-wide active campaign)                      |

@@ -16,6 +16,7 @@ import arc_options
 import auto_run
 import commits
 import config
+import content_redraft
 import foundry_library
 import foundry_party
 import map_trash
@@ -482,6 +483,18 @@ def fail_redraft(job, message):
         write_doc('inbox', box)
 
 
+def fail_content_redraft(job, message):
+    """Return a content workflow to review when writing one row again ends without it. The draft is kept."""
+    try:
+        value = workflow.get(job['content_redraft'])
+    except ValueError:
+        return  # the workflow was removed
+    if value.get('status') == 'running' and value.get('job') == job['id']:
+        value.pop('redraft', None)
+        value.update(status='review', error=message[:1000])
+        workflow.save(value)
+
+
 def discard_transcription(job, message):
     """A transcription that did not finish leaves no staged result or scratch audio."""
     transcription.discard(campaign.active().jobs, job['transcript'])
@@ -677,12 +690,37 @@ def finish_redraft(job, code, tail):
     write_doc('inbox', box)
 
 
+def finish_content_redraft(job, code, tail):
+    """Splice the row the AI wrote again into the content draft it came from, which stays in review."""
+    try:
+        value = workflow.get(job['content_redraft'])
+    except ValueError:
+        job.update(status='failed', note='The workflow was removed during the redraft.')
+        return
+    if value.get('status') != 'running' or value.get('job') != job['id']:
+        job.update(status='failed', note='The workflow changed during the redraft.')
+        return
+    try:
+        if code:
+            raise ValueError(tail[-1000:] or 'The AI command failed.')
+        with open(job_file(job['id'], 'log'), encoding='utf-8') as file:
+            raw = file.read()
+        value.pop('redraft', None)
+        value.update(status='review', error='')
+        content_redraft.write_again(value, job['row'], workflow.parse_output(raw))
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        # The draft on disk is untouched: only a validated whole replaces it.
+        job.update(status='failed', note=str(error))
+        fail_content_redraft(job, str(error))
+
+
 # What a job leaves to settle. A new draft kind adds a row here instead of a branch in finish_job or
 # settle_failed_job: FINISHERS stores a finished job's result by kind; SETTLERS marks what a failed job
 # was producing, by the field that names the record it belongs to.
 FINISHERS = {
     'request-draft': finish_request,
     'request-redraft': finish_redraft,
+    'content-redraft': finish_content_redraft,
     'transcribe': finish_transcription,
     'classify': finish_classification,
     'thread-ledger': finish_ledger,
@@ -691,6 +729,7 @@ FINISHERS = {
 SETTLERS = (
     ('request', fail_request),
     ('redraft', fail_redraft),
+    ('content_redraft', fail_content_redraft),
     ('transcript', discard_transcription),
     ('classify', fail_classification),
     ('ledger', fail_ledger),
@@ -1675,6 +1714,29 @@ def start_workflow(value):
             slug=value['map'],
         )
         value.update(status='running', job=job['id'], error='')
+        workflow.save(value)
+        return job
+
+
+def start_content_redraft(wid, where, note=''):
+    """Ask the AI to write one row of a map's content draft again; the rest of the draft stays as reviewed."""
+    with LOCK:
+        value = workflow.get(wid)
+        if value['status'] != 'review' or value['kind'] != 'content':
+            raise ValueError('Only a content draft awaiting review can have a row written again.')
+        pack = content_redraft.pack(value, where, note, campaign_info())
+        cmd = ai_provider.command(pack['draft_kind'], pack['schema'])
+        job = new_job(
+            'claude',
+            'content-redraft',
+            'Redraft: ' + where + ' · ' + value['brief']['name'],
+            cmd,
+            pack['prompt'],
+            content_redraft=wid,
+            row=where,
+            slug=value['map'],
+        )
+        value.update(status='running', job=job['id'], redraft=where, error='')
         workflow.save(value)
         return job
 

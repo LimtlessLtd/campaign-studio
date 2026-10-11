@@ -46,6 +46,16 @@ def clean_note(note):
     return str(note or '').strip()[:MAX_NOTE]
 
 
+def added_chars(proposal, row, note):
+    """How many characters `prompt` adds to the pack's own prompt, so the caller can leave them out of its budget."""
+    return (
+        len(json.dumps(proposal, ensure_ascii=False))
+        + len(json.dumps(row, ensure_ascii=False))
+        + len(note)
+        + OVERHEAD
+    )
+
+
 def prompt(pack_prompt, draft, where, row, note):
     """The proposal's own prompt, then the task of writing `row` (the one `where` names) again."""
     return (

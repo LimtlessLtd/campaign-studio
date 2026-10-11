@@ -409,6 +409,150 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assertIn('as a whole', refused['error'])
 
+    def staged_content(self):
+        """A map with a staged content draft; returns the workflow and the map's slug."""
+        slug, brief = self.import_map()
+        return workflow.stage(workflow.create(slug, brief), self.proposal()), slug
+
+    def content_redraft(self, wid, key, answer, note='', code=0, tail=''):
+        """Write one row of a content draft again, finishing the job with `answer` as its output."""
+        job, captured = self.queue_redraft(f'/api/workflow/{wid}/redraft', key, note)
+        self.write_job_output(job, answer)
+        campaign_core.finish_content_redraft(job, code, tail)
+        return job, captured
+
+    def test_one_row_of_a_map_content_draft_is_written_again_alone(self):
+        value, slug = self.staged_content()
+        before = workflow.get(value['id'])['draft']
+        job, queued = self.content_redraft(
+            value['id'],
+            'npcs:watcher',
+            {'row': {**before['npcs'][0], 'id': 'other', 'name': 'Quay Warden'}},
+            note='Make the watcher an older woman.',
+        )
+
+        self.assertEqual((queued['kind'], job['row']), ('content-redraft', 'npcs:watcher'))
+        self.assertEqual(job['content_redraft'], value['id'])
+        self.assertEqual(job['slug'], slug)
+        # The AI is asked for that one row, under a schema that holds it to one NPC.
+        schema = json.loads(queued['cmd'][queued['cmd'].index('--json-schema') + 1])
+        self.assertEqual(list(schema['properties']), ['row'])
+        self.assertIn('secrets', schema['properties']['row']['properties'])
+        prompt = queued['prompt']
+        self.assertIn('REDRAFT ONE ROW', prompt)
+        self.assertIn('Make the watcher an older woman.', prompt)
+        # It sees where the row stands and what else was drafted, not the other rows' full text.
+        self.assertIn('Additional scene detail', prompt)
+        self.assertIn('Copper key', prompt)
+        self.assertNotIn('A forgery.', prompt)
+        self.assertNotIn('Opens a gate.', prompt)
+
+        saved = workflow.get(value['id'])
+        self.assertEqual((saved['status'], saved['error']), ('review', ''))
+        self.assertNotIn('redraft', saved)
+        # Only the row changed, and it kept its ID.
+        [npc] = saved['draft']['npcs']
+        self.assertEqual((npc['id'], npc['name']), ('watcher', 'Quay Warden'))
+        self.assertEqual({**saved['draft'], 'npcs': []}, {**before, 'npcs': []})
+
+        applied = self.request(
+            '/api/workflow/' + value['id'] + '/apply', {'rejected': ['events:patrol']}
+        )
+        self.assertEqual(applied['status'], 'applied')
+        self.assertIn('Quay Warden', [e['name'] for e in self.stored('codex')['entries']])
+
+    def test_a_content_draft_is_locked_while_one_of_its_rows_is_written_again(self):
+        value, _ = self.staged_content()
+        job, _ = self.queue_redraft(f'/api/workflow/{value["id"]}/redraft', 'items:key')
+        running = workflow.get(value['id'])
+        self.assertEqual((running['status'], running['redraft']), ('running', 'items:key'))
+        self.assertEqual(running['job'], job['id'])
+        base = '/api/workflow/' + value['id']
+        self.request(base + '/apply', {}, expected=400)
+        self.request(base + '/feedback', {'instruction': 'Change it.'}, expected=400)
+        self.request(base + '/redraft', {'key': 'npcs:watcher'}, expected=400)
+        for action in ('run', 'stage', 'context'):
+            self.request(f'{base}/{action}', {}, expected=409)
+        # The reviewed draft is still there to come back to.
+        self.assertEqual(running['draft'], self.proposal())
+
+    def test_a_content_redraft_that_fails_or_is_stopped_keeps_the_draft_in_review(self):
+        value, _ = self.staged_content()
+        before = workflow.get(value['id'])['draft']
+        good = {'row': {**before['npcs'][0], 'name': 'Quay Warden'}}
+        bad_thread = {**before['threads'][0], 'status': 'someday'}
+        cases = (
+            ('npcs:watcher', good, 1, 'The AI command failed badly.', 'failed badly'),
+            ('npcs:watcher', {'row': {'id': 'watcher'}}, 0, '', 'missing'),
+            ('npcs:watcher', {'npcs': []}, 0, '', 'missing row'),
+            ('npcs:watcher', {'row': {**good['row'], 'area': 7}}, 0, '', 'not on this map'),
+            ('threads:gate', {'row': bad_thread}, 0, '', 'unsupported value'),
+        )
+        for key, answer, code, tail, message in cases:
+            with self.subTest(message=message):
+                self.content_redraft(value['id'], key, answer, code=code, tail=tail)
+                saved = workflow.get(value['id'])
+                self.assertEqual(saved['status'], 'review')
+                self.assertNotIn('redraft', saved)
+                self.assertIn(message, saved['error'])
+                self.assertEqual(saved['draft'], before)
+        # A job stopped by the GM, or by a restart, settles the same way.
+        job, _ = self.queue_redraft(f'/api/workflow/{value["id"]}/redraft', 'npcs:watcher')
+        self.assertEqual(workflow.get(value['id'])['status'], 'running')
+        campaign_core.settle_failed_job(job, 'Stopped.')
+        saved = workflow.get(value['id'])
+        self.assertEqual(
+            (saved['status'], saved['error'], saved['draft']), ('review', 'Stopped.', before)
+        )
+        self.assertNotIn('redraft', saved)
+
+    def test_a_row_that_is_not_in_the_content_draft_is_never_sent_to_the_ai(self):
+        value, slug = self.staged_content()
+        route = '/api/workflow/' + value['id'] + '/redraft'
+        with patch.object(campaign_core, 'new_job') as queued:
+            for key in ('npcs:nobody', 'areas:1', 'summary:x', 'npcs', ''):
+                with self.subTest(key=key):
+                    self.request(route, {'key': key}, expected=400)
+            self.request(route, {}, expected=400)
+            self.request(route, {'key': ['npcs:watcher']}, expected=400)
+            # A layout proposal is accepted or refined as a whole.
+            layout = workflow.create(slug, self.import_map()[1], kind='layout')
+            self.request(
+                f'/api/workflow/{layout["id"]}/redraft', {'key': 'npcs:watcher'}, expected=400
+            )
+        queued.assert_not_called()
+        self.assertEqual(workflow.get(value['id'])['status'], 'review')
+
+    def test_a_map_changed_while_a_row_is_written_again_keeps_the_old_row(self):
+        value, slug = self.staged_content()
+        before = workflow.get(value['id'])['draft']
+        job, _ = self.queue_redraft(f'/api/workflow/{value["id"]}/redraft', 'npcs:watcher')
+        key = campaign_core.read_json(campaign_core.doc_path('mapkey/' + slug))
+        key['areas'][0]['at'] = [0, 0]
+        campaign_core.write_doc('mapkey/' + slug, key)
+        self.write_job_output(job, {'row': {**before['npcs'][0], 'name': 'Quay Warden'}})
+        campaign_core.finish_content_redraft(job, 0, '')
+        saved = workflow.get(value['id'])
+        self.assertEqual((saved['status'], saved['draft']), ('review', before))
+        self.assertIn('changed after this workflow started', saved['error'])
+
+    def test_a_content_row_is_written_again_for_a_strict_provider(self):
+        value, _ = self.staged_content()
+        with (
+            patch.object(
+                campaign_core.ai_provider, 'command', return_value=[sys.executable]
+            ) as command,
+            patch.object(
+                campaign_core,
+                'new_job',
+                side_effect=lambda *a, **extra: {'id': 'job-redraft', **extra},
+            ),
+        ):
+            self.request('/api/workflow/' + value['id'] + '/redraft', {'key': 'events:patrol'})
+        # A strict provider is told which row to hold the AI to.
+        self.assertEqual(command.call_args.args[0], 'content:events')
+        self.assertEqual(list(command.call_args.args[1]['properties']), ['row'])
+
     def crash_after(self, count):
         """Stop the next commit after count document writes, as a killed server would."""
         written = []
@@ -1454,8 +1598,8 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(saved['scenes'][0]['npcs'], [])
         self.assertEqual(len(saved['handouts']), 1)
 
-    def redraft(self, rid, key, answer, note='', code=0, tail=''):
-        """Start writing one row again with a fake provider, then finish the job with `answer` as its output.
+    def queue_redraft(self, path, key, note=''):
+        """Ask for one row to be written again, with a fake provider that never runs.
 
         Returns the job and what was queued for the provider.
         """
@@ -1469,7 +1613,15 @@ class StudioIntegration(unittest.TestCase):
             patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
             patch.object(campaign_core, 'new_job', side_effect=fake_job),
         ):
-            job = self.request(f'/api/requests/{rid}/redraft', {'key': key, 'note': note})
+            job = self.request(path, {'key': key, 'note': note})
+        return job, captured
+
+    def redraft(self, rid, key, answer, note='', code=0, tail=''):
+        """Write one row of a request again, finishing the job with `answer` as its output.
+
+        Returns the job and what was queued for the provider.
+        """
+        job, captured = self.queue_redraft(f'/api/requests/{rid}/redraft', key, note)
         self.write_job_output(job, answer)
         campaign_core.finish_redraft(job, code, tail)
         return job, captured
@@ -1480,16 +1632,8 @@ class StudioIntegration(unittest.TestCase):
         log.write_text(json.dumps({'structured_output': answer}))
 
     def start_redraft(self, rid, key):
-        """Queue a redraft with a fake provider and return its job, which has not finished."""
-        with (
-            patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
-            patch.object(
-                campaign_core,
-                'new_job',
-                side_effect=lambda *a, **extra: {'id': 'job-redraft', **extra},
-            ),
-        ):
-            return self.request(f'/api/requests/{rid}/redraft', {'key': key})
+        """Queue a redraft of a request's row and return its job, which has not finished."""
+        return self.queue_redraft(f'/api/requests/{rid}/redraft', key)[0]
 
     def stage_request_draft(self):
         campaign_core.write_doc('prep/s1', shapes.PREP.new(n=1, title='Session 1'))
