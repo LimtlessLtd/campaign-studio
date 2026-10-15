@@ -1,8 +1,8 @@
 """Build one versioned Foundry import manifest from a saved session prep.
 
 The manifest is copied into Foundry Data, never into the world's database. The GM macro applies it
-through Foundry's document API. Write the manifest last so a failed map export cannot publish a partial
-session; a retry safely replaces the same stable session ID.
+through Foundry's document API. Write the manifest last; a failed map export leaves the previous manifest,
+though earlier map files may have been refreshed. A retry replaces the same stable session ID.
 """
 
 import json

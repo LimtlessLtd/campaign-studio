@@ -527,6 +527,8 @@ folders. An entry
 whose UUID belongs to the selected Foundry world is linked without creating or moving the original. The
 macro never deletes a Foundry document; retries update its own tags and preserve GM pages and tokens. A
 failed macro run may have applied earlier maps, and can safely be retried after the problem is fixed.
+Likewise, a failed export keeps the previous manifest but may have refreshed earlier map files; export again
+after fixing the error before importing.
 
 The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12 or v13
 scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while other systems get journal

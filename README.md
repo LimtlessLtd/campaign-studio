@@ -223,8 +223,9 @@ same folder. Run the current import macro as GM and choose the session: one run 
 journals, D&D 5e descriptive sheets and GM-only handout journals into session folders. Repeating the export
 and import updates Studio-tagged documents under stable IDs while keeping GM additions. A GM-only session
 overview lists its linked cast and items; imported Foundry actors and items are linked to their originals
-instead of copied. A failed export does not publish a partial
-new bundle. Player-visible handout pages, scene pages and token placement remain planned work.
+instead of copied. A failed export keeps the previous manifest but may have copied some maps; fix the
+error and export again before importing. Player-visible handout pages, scene pages and token placement
+remain planned work.
 
 The macro also creates/updates D&D 5e NPC and loot item sheets by stable studio IDs. Stat blocks and item
 mechanics are notes: they need GM review and are not automatically converted into attacks or activities.
