@@ -175,6 +175,12 @@ write just that row again, with an optional note on what to change: the rest of 
 reviewed it, and the new row starts ticked. A map's content proposal has the same button on each proposed
 NPC, item, journal entry, event and thread.
 
+Each session prep has a **Session readiness** board. It checks saved scene outlines, linked map files,
+stocking and Foundry copy freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and
+encounter plans. Use a gap's action to open the relevant editor, then **Recheck** after saving. It checks
+the current map export only: a session bundle, token art and encounter ratings against the party are still
+planned.
+
 After you play, **Wrap up this session** on that prep takes your notes from the table (or a recording
 summary pasted in) and drafts the session log, changes to threads and codex entries, new threads and leads
 for the next session. Untick any outcome, loot row, lead, new thread, thread change or codex change before

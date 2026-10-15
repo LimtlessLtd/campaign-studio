@@ -29,7 +29,8 @@ Ranked by how much each holds back the goal.
    history and context.
 3. **Session workflow** (W35–W37). Session Forge turns a pitch into a linked prep and queued map briefs.
    Request and map-content proposals are reviewed row by row: untick, redraft one row alone, or apply what
-   is ticked. A wrap-up folds played outcomes back into threads. Readiness and encounter budgets remain.
+   is ticked. A wrap-up folds played outcomes back into threads. Each prep now has a readiness board;
+   encounter budget ratings remain.
 4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
@@ -53,7 +54,7 @@ into the threads.
 | --------------------- | ------------------------------------------------- | ------------- |
 | 1. Start next session | Recap drafts read the latest earlier session logs | W35           |
 | 2. Pitch              | Session Forge drafts a linked prep                | W35           |
-| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | W36, W37      |
+| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | W37           |
 | 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style              | W42           |
@@ -149,12 +150,14 @@ their row and finding say enough.
   (`arcSeedsBox`), and start a wrap-up from a transcript's confirmed play, prefilled with the thread
   ledger's applied outcomes (W70), so a recording and the table notes meet in one proposal.
 
-### W36, W37 Readiness and party
+### W37 Party encounter budgets
 
-- **Readiness** checks stored state for one prep: maps rendered, stocked and exported; scene NPCs with stats
-  or a compendium base, a portrait and a token; art ready; handouts written; threads touched; encounters
-  within the party's budget; a Foundry export newer than the prep's last change. Each failed check links to
-  the action that fixes it.
+- W36 is complete: the board on each prep checks saved scene outlines, linked map files, content and
+  export freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and encounter plans.
+  Each gap opens the map, NPC, art queue or exact prep section that can fix it. A map copy is current only
+  when its export follows the prep and map files' latest edits; older map entries without a stamp ask for
+  a fresh export. The board rates neither encounter difficulty against the party nor token art yet: those
+  belong to W37 and W40. The existing Foundry export copies maps only; W38 adds a session bundle.
 - W37 needs character levels and classes. In dnd5e they come from class items embedded in each actor (keys
   `!actors.items!<actor>.<item>` in the world database), which the World Library reader now reads into `stats` (`foundry_party`). Every AI draft's `campaign.party` carries the roster's size and average level, and Session Forge map briefs take that level. Encounter budget checks do not use it yet.
 

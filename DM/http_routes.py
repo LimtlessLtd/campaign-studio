@@ -23,6 +23,7 @@ import map_trash
 import maps_io
 import memory_import
 import packaging_source
+import prep_readiness
 import references
 import job_service
 import remote_access
@@ -106,6 +107,10 @@ ROUTES = {
         (lambda path: path == '/api/state', '_get_state'),
         (lambda path: path == '/api/shapes', '_get_shapes'),
         (lambda path: path == '/api/settings', '_get_settings'),
+        (
+            lambda path: path.startswith('/api/prep/') and path.endswith('/readiness'),
+            '_get_prep_readiness',
+        ),
         (lambda path: path == '/api/context/search', '_get_context_search'),
         (lambda path: path.startswith('/api/records/'), '_get_records'),
         (lambda path: path == '/api/foundry/backup/plan', '_get_backup_plan'),
@@ -474,6 +479,15 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _get_shapes(self, path, query, p):
         return self.send_json(shapes.describe())
+
+    def _get_prep_readiness(self, path, query, p):
+        parts = path.split('/')
+        if len(parts) != 5 or parts[:3] != ['', 'api', 'prep'] or parts[4] != 'readiness':
+            raise Invalid('Invalid prep readiness route.')
+        result = prep_readiness.report(parts[3], campaign.active())
+        if result is None:
+            raise NotFound('No such prep.')
+        return self.send_json(result)
 
     def _get_settings(self, path, query, p):
         cfg = config.settings()

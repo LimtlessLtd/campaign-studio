@@ -409,6 +409,38 @@ input[type='range'] {
   border-color: var(--line);
   background: var(--card);
 }
+.readiness-board {
+  margin: 20px 0 28px;
+}
+.readiness-board > .spread {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.readiness-board h2,
+.readiness-board p {
+  margin: 0;
+}
+.readiness-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.readiness-row .muted {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .readiness-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .readiness-row > :last-child:not(:nth-child(2)) {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
 hr {
   border: 0;
   border-top: 1px solid var(--line);

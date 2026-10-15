@@ -110,6 +110,8 @@ def import_image(p, save_doc, here=None):
         roofs_preview='',
         key=here.relative(os.path.join(folder, 'key.json')),
         in_foundry=False,
+        exported_at=0,
+        exported_world='',
         session='',
         stocked=False,
         updated=datetime.datetime.now().isoformat(),
@@ -187,6 +189,7 @@ def export(slug, save_doc, here=None):
         forge.write_foundry_index(target)
         entry.update(
             in_foundry=True,
+            exported_at=datetime.datetime.now(datetime.timezone.utc).timestamp(),
             exported_world=tag['targetWorld'],
             stocked=bool((key or {}).get('stocked')),
             session=(key or {}).get('session', ''),

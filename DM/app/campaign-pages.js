@@ -681,6 +681,92 @@ async function prepPage(name, context) {
   p.log = blank('session_log', p.log);
   const threads = await recordChoices('threads', context.signal);
   await recordChoices('codex', context.signal);
+  const readinessBox = h('section', {
+    class: 'card readiness-board',
+    'aria-label': 'Session readiness',
+  });
+  const readinessAction = (action) =>
+    action.section
+      ? h(
+          'button',
+          {
+            onclick: () =>
+              document.getElementById('prep-' + action.section)?.scrollIntoView({
+                behavior: 'smooth',
+              }),
+          },
+          action.label,
+        )
+      : h(
+          'a',
+          {
+            class: 'btn',
+            href: action.href,
+            onclick: () => {
+              if (action.tab && action.href.startsWith('#/maps/')) {
+                S.studioTabs ||= {};
+                S.studioTabs[decodeURIComponent(action.href.slice('#/maps/'.length))] = action.tab;
+              }
+            },
+          },
+          action.label,
+        );
+  const drawReadiness = (report) =>
+    render(
+      readinessBox,
+      h(
+        'div',
+        { class: 'spread' },
+        h(
+          'div',
+          {},
+          h('h2', {}, 'Session readiness'),
+          h(
+            'p',
+            { class: 'muted' },
+            report.error || `${report.gaps} gaps in saved prep and linked records`,
+          ),
+        ),
+        h(
+          'button',
+          {
+            onclick: async () => {
+              try {
+                if (S.pending[docName]) await flush(docName);
+                drawReadiness(await context.api('/api/prep/' + name + '/readiness'));
+              } catch (error) {
+                if (error.name !== 'AbortError')
+                  drawReadiness({ error: error.message, checks: [] });
+              }
+            },
+          },
+          'Recheck',
+        ),
+      ),
+      ...(report.checks || []).map((check) =>
+        h(
+          'div',
+          { class: 'readiness-row' },
+          h(
+            'span',
+            { class: 'badge' + (check.status === 'ready' ? ' good' : '') },
+            check.status === 'not-applicable'
+              ? 'N/A'
+              : check.status === 'ready'
+                ? 'Ready'
+                : 'Needs work',
+          ),
+          h('div', {}, h('b', {}, check.title), h('p', { class: 'muted' }, check.detail)),
+          check.action ? readinessAction(check.action) : null,
+        ),
+      ),
+    );
+  try {
+    drawReadiness(await context.api('/api/prep/' + name + '/readiness'));
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
+    drawReadiness({ error: error.message, checks: [] });
+  }
   const scenesBox = h('div');
   const drawScenes = () =>
     render(
@@ -961,6 +1047,7 @@ async function prepPage(name, context) {
           'This session is archived. Restore it to bring it back to the list.',
         )
       : null,
+    readinessBox,
     h(
       'div',
       { class: 'three' },
@@ -985,7 +1072,7 @@ async function prepPage(name, context) {
       ),
       h(
         'div',
-        {},
+        { id: 'prep-threads' },
         h('label', {}, 'Threads to push'),
         picker(docName, p.threads, threadChoices, { placeholder: 'Add a thread…' }),
         h(
@@ -1035,7 +1122,7 @@ async function prepPage(name, context) {
     ),
     h('label', {}, 'Leads for the next session'),
     listEditor(docName, p.log.hooks, { placeholder: 'Add a lead and press Enter' }),
-    h('h2', {}, 'Scenes'),
+    h('h2', { id: 'prep-scenes' }, 'Scenes'),
     scenesBox,
     h(
       'div',
@@ -1052,7 +1139,7 @@ async function prepPage(name, context) {
         '+ Add scene',
       ),
     ),
-    h('h2', {}, 'Handouts for this session'),
+    h('h2', { id: 'prep-handouts' }, 'Handouts for this session'),
     ...p.handouts.map((handout) =>
       h(
         'div',

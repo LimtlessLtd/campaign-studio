@@ -132,6 +132,38 @@ class BrowserSmoke(unittest.TestCase):
         ]
         self.assertEqual(found, [], label)
 
+    def test_prep_readiness_rechecks_saved_state_and_opens_the_map_fix(self):
+        slug, _ = self.studio.import_map()
+        prep = fixtures.shapes.PREP.new(
+            n=1,
+            title='Session 1',
+            scenes=[fixtures.shapes.SCENE.new(id='scene-1', title='The quay', map=slug)],
+        )
+        self.studio.seed('prep/s1', prep)
+        for viewport in (DESKTOP, NARROW):
+            self.page.set_viewport_size(viewport)
+            self.open('#/prep/s1')
+            board = self.page.get_by_role('region', name='Session readiness')
+            expect(board.get_by_text('Scenes outlined')).to_be_visible()
+            expect(board.get_by_text('Maps stocked')).to_be_visible()
+            self.assert_accessible('prep readiness at ' + str(viewport['width']))
+            self.assertLessEqual(
+                self.page.evaluate('document.documentElement.scrollWidth'), viewport['width']
+            )
+            row = board.locator('.readiness-row', has_text='Maps stocked')
+            row.get_by_role('link', name='Open map').click()
+            expect(self.page).to_have_url(re.compile('#/maps/' + slug + '$'))
+            expect(self.page.get_by_role('button', name='AI workflow')).to_have_class(
+                re.compile('on')
+            )
+
+        self.open('#/prep/s1')
+        prep['scenes'][0]['purpose'] = 'Ask why the party came.'
+        self.studio.seed('prep/s1', prep)
+        board = self.page.get_by_role('region', name='Session readiness')
+        board.get_by_role('button', name='Recheck').click()
+        expect(board.locator('.readiness-row', has_text='Scenes outlined')).to_contain_text('Ready')
+
     def test_memory_import_reviews_a_session_summary_on_phone_and_desktop(self):
         summary = self.studio.root / 's3.md'
         summary.write_text('# Third session\nThe party found the sealed gate.', encoding='utf-8')

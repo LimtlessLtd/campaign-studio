@@ -58,6 +58,7 @@ flowchart LR
 | `DM/item_review.py`                   | Item-by-item review: the `kind:id` keys a GM rejects and the rows that remain         |
 | `DM/redraft.py`                       | One row of a staged proposal written again alone: answer schema, prompt and check     |
 | `DM/content_redraft.py`               | The same for one row of a map's content draft: its outline prompt and splice          |
+| `DM/prep_readiness.py`                | Read-only checks and fixing actions for one saved session prep                        |
 | `DM/record_changes.py`                | Changes a proposal makes to existing records, applied and previewed by one function   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
@@ -298,6 +299,8 @@ is rendering that map.
 
 - `GET /api/state`, `/api/settings`, `/api/jobs`, `/api/doc/<name>` return local state; `/api/shapes`
   returns the stored record shapes.
+- `GET /api/prep/<id>/readiness` reads saved prep, map, codex, thread and art state for its board. It
+  returns check status, evidence and the editor link for each gap; it does not change a record.
 - `PUT /api/doc/<name>` uses `X-Rev` and refuses application-owned documents (`settings`, `workflows/*`,
   `jobs/*`) with 403; `PUT /api/plan/<slug>` checkpoints a valid plan.
 - `POST /api/maps/create`, `/api/maps/import` create maps; `/api/maps/<slug>/populate|revise` create workflows.

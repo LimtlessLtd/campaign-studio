@@ -697,6 +697,8 @@ def forge(plan_path, foundry_copy=True, jobs=None, here=None):
             da=rel(out('.da.json')),
             plan=rel(plan_path),
             in_foundry=copied,
+            exported_at=datetime.datetime.now(datetime.timezone.utc).timestamp() if copied else 0,
+            exported_world=(_target_world(here) or ({}, ''))[0].get('id', '') if copied else '',
             roofs_preview=rel(out('.roofs.jpg')) if roofs else '',
             key=rel(key) if key_data is not None else '',
             session=(key_data or {}).get('session', ''),
@@ -741,6 +743,11 @@ def key_only(plan_path, here=None):
                 if entry['slug'] == slug:
                     entry['session'] = key.get('session', '')
                     entry['stocked'] = bool(key.get('stocked'))
+                    if foundry_data and os.path.isdir(target):
+                        entry['exported_at'] = datetime.datetime.now(
+                            datetime.timezone.utc
+                        ).timestamp()
+                        entry['exported_world'] = (_target_world(here) or ({}, ''))[0].get('id', '')
 
         storage.update_json(index, {'items': []}, annotate)
     print(f'{slug}: key updated ({len((key or {}).get("areas", []))} areas)')

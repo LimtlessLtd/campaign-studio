@@ -261,6 +261,111 @@ class StudioIntegration(unittest.TestCase):
         )
         self.assertEqual(len(self.stored('codex')['entries']), 2)
 
+    def test_prep_readiness_uses_saved_gaps_and_export_freshness(self):
+        slug, _ = self.import_map()
+        prep = shapes.PREP.new(
+            n=1,
+            title='Session 1',
+            scenes=[
+                shapes.SCENE.new(
+                    id='scene-1',
+                    title='The quay',
+                    map=slug,
+                    npcs=['keeper'],
+                    encounter='A guard challenges the party.',
+                )
+            ],
+            handouts=[shapes.HANDOUT.new(id='handout-1', title='The letter')],
+        )
+        self.seed('prep/s1', prep)
+        self.seed(
+            'art',
+            {
+                'items': [
+                    shapes.ART_ITEM.new(
+                        id='art-keeper', prompt='A guard', title='Keeper', codex='keeper'
+                    )
+                ]
+            },
+        )
+        index = self.stored('maps/index')
+        entry = next(item for item in index['items'] if item['slug'] == slug)
+        scene_path = entry['scene']
+        entry['scene'] = ''  # a catalogue row without its rendered scene is not ready
+        self.seed('maps/index', index)
+        initial = self.request('/api/prep/s1/readiness')
+        self.assertEqual(initial['gaps'], 10)
+        checks = {row['id']: row for row in initial['checks']}
+        self.assertEqual({row['status'] for row in checks.values()}, {'needs-work'})
+        self.assertEqual(checks['npc_stats']['action']['section'], 'scenes')
+        self.assertEqual(checks['maps']['action']['tab'], 'foundry')
+        self.assertEqual(checks['art']['action']['href'], '#/art')
+
+        prep['scenes'][0].update(
+            purpose='The guard tests their story.',
+            encounter_detail={
+                'creatures': [{'name': 'Guard', 'count': 1}],
+                'difficulty': 'easy',
+                'terrain': '',
+                'tactics': '',
+                'resolution': '',
+            },
+        )
+        prep['handouts'][0]['player_text'] = 'The bridge opens at dawn.'
+        prep['threads'] = ['bridge']
+        self.seed('prep/s1', prep)
+        self.seed(
+            'codex',
+            {
+                'entries': [
+                    shapes.CODEX_ENTRY.new(
+                        id='keeper',
+                        type='npc',
+                        name='Keeper',
+                        notes='AC 12; HP 10.',
+                        image='DM/uploads/keeper.png',
+                    )
+                ]
+            },
+        )
+        self.seed('threads', {'threads': [shapes.THREAD.new(id='bridge', title='Bridge')]})
+        art = self.stored('art')
+        art['items'][0].update(status='ready', image='DM/uploads/keeper.png')
+        self.seed('art', art)
+        key = self.stored('mapkey/' + slug)
+        key['stocked'] = True
+        self.seed('mapkey/' + slug, key)
+        index = self.stored('maps/index')
+        next(item for item in index['items'] if item['slug'] == slug)['scene'] = scene_path
+        self.seed('maps/index', index)
+        self.request(f'/api/maps/{slug}/export', {})
+        ready = self.request('/api/prep/s1/readiness')
+        self.assertEqual(ready['gaps'], 0)
+        self.assertTrue(all(row['status'] == 'ready' for row in ready['checks']))
+
+        copied_scene = self.root / 'FoundryData' / 'wotg-maps' / (slug + '.json')
+        copied_scene.unlink()
+        missing_copy = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
+        self.assertEqual(missing_copy['export']['status'], 'needs-work')
+        self.request(f'/api/maps/{slug}/export', {})
+        self.assertEqual(self.request('/api/prep/s1/readiness')['gaps'], 0)
+
+        world = json.loads((self.world / 'world.json').read_text())
+        world['id'] = 'another-world'
+        (self.world / 'world.json').write_text(json.dumps(world))
+        wrong_world = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
+        self.assertEqual(wrong_world['export']['status'], 'needs-work')
+        self.request(f'/api/maps/{slug}/export', {})
+        self.assertEqual(self.request('/api/prep/s1/readiness')['gaps'], 0)
+
+        prep['notes'] = 'A later table change.'
+        self.seed('prep/s1', prep)
+        stale = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
+        self.assertEqual(stale['export']['status'], 'needs-work')
+        self.assertEqual(stale['export']['action']['href'], '#/maps/' + slug)
+        self.request('/api/prep/s999/readiness', expected=404)
+        self.request('/api/prep/abc/readiness', expected=400)
+
     def test_big_map_is_stocked_in_batches_with_one_retry(self):
         slug, brief = self.import_map()
         brief['content'].update(npcs=6, items=3, journals=0, events=0, threads=False)
