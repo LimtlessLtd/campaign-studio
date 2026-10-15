@@ -175,6 +175,13 @@ write just that row again, with an optional note on what to change: the rest of 
 reviewed it, and the new row starts ticked. A map's content proposal has the same button on each proposed
 NPC, item, journal entry, event and thread.
 
+Each prep scene's **Encounter plan** can list creatures, counts and challenge ratings (CR). When the
+imported Foundry party has character levels and every creature has a valid CR, Studio shows a 2014 D&D
+5e XP difficulty estimate using each character's level and the party-size multiplier. Missing CRs or
+party levels are shown as work to finish rather than as a difficulty; terrain, tactics and separate waves
+still need the GM's judgement. [The 2014 Basic Rules](https://www.dndbeyond.com/sources/dnd/basic-rules-2014/building-combat-encounters)
+describe the thresholds and multipliers used.
+
 After you play, **Wrap up this session** on that prep takes your notes from the table (or a recording
 summary pasted in) and drafts the session log, changes to threads and codex entries, new threads and leads
 for the next session. Untick any outcome, loot row, lead, new thread, thread change or codex change before

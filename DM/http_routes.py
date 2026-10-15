@@ -16,6 +16,7 @@ import arc_options
 import auto_run
 import config
 import context as prompt_context
+import encounter_budget
 import foundry_backup
 import foundry_library
 import foundry_upgrade
@@ -62,6 +63,7 @@ from campaign_core import (
     job_file,
     job_progress,
     campaign_info,
+    campaign_facts,
     party_level,
     list_docs,
     list_images,
@@ -179,6 +181,7 @@ ROUTES = {
         (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
         (lambda path: path == '/api/foundry/world/import', '_post_import_world'),
         (lambda path: path == '/api/foundry/world/remove', '_post_remove_world'),
+        (lambda path: path == '/api/encounter/rating', '_post_encounter_rating'),
         (lambda path: path == '/api/memory/preview', '_post_memory_preview'),
         (lambda path: path == '/api/memory/apply', '_post_memory_apply'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
@@ -634,6 +637,26 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _get_memory_lore_folders(self, path, query, p):
         return self.send_json({'folders': memory_import.lore_folders(self._memory_snapshot())})
+
+    def _post_encounter_rating(self, path, query, p):
+        creatures = p.get('creatures')
+        if (
+            not isinstance(creatures, list)
+            or len(creatures) > 12
+            or any(
+                not isinstance(row, dict)
+                or not isinstance(row.get('name'), str)
+                or not 1 <= len(row['name'].strip()) <= 100
+                or type(row.get('count')) is not int
+                or not 1 <= row['count'] <= 100
+                or not isinstance(row.get('cr', ''), str)
+                or len(row.get('cr', '')) > 8
+                for row in creatures
+            )
+        ):
+            raise Invalid('Use at most twelve named creatures with counts from 1 to 100.')
+        party = campaign_facts().get('party', {})
+        return self.send_json(encounter_budget.rate(creatures, party.get('members', [])))
 
     def _post_memory_preview(self, path, query, p):
         proposal = memory_import.proposal(
