@@ -218,6 +218,14 @@ later Foundry changes for an explicit refresh; it does not edit Foundry document
 world database. Scenes contain grid, generated walls/doors/lights and roof tiles where available. Journals
 and location pins are GM-only. Reimports update generated parts and preserve custom tokens and notes.
 
+From a session prep, **Export session bundle** copies all linked maps, NPCs, items and text handouts to that
+same folder. Run the current import macro as GM and choose the session: one run imports its maps, their GM
+journals, D&D 5e descriptive sheets and GM-only handout journals into session folders. Repeating the export
+and import updates Studio-tagged documents under stable IDs while keeping GM additions. A GM-only session
+overview lists its linked cast and items; imported Foundry actors and items are linked to their originals
+instead of copied. A failed export does not publish a partial
+new bundle. Player-visible handout pages, scene pages and token placement remain planned work.
+
 The macro also creates/updates D&D 5e NPC and loot item sheets by stable studio IDs. Stat blocks and item
 mechanics are notes: they need GM review and are not automatically converted into attacks or activities.
 Other game systems receive linked character/item information in the journal. The export uses a v12 scene

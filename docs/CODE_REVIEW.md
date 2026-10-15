@@ -169,8 +169,9 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
   macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
   rejected before import.
-- Foundry receives one map per macro run. Tokens are not placed, and session prep, scenes and handouts are
-  not exported (W38–W41).
+- A session bundle imports its linked maps, descriptive sheets, map journals and GM-only handouts in one
+  macro run, with fixture coverage but no live GM check. Scene pages, player-visible handouts and tokens
+  remain (W39–W40).
 - AI prompts select bounded codex and thread context. Map, request and session-plan drafts read the
   newest played-session logs as canon. World import can select folders, though duplicate folder names
   still need ID-based selection (W24).

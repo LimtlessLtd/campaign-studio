@@ -30,6 +30,7 @@ import remote_access
 import request_workflow
 import records
 import revisions
+import session_bundle
 import shapes
 import storage
 import transcript_classifier
@@ -241,6 +242,10 @@ ROUTES = {
             '_post_transcript_remove',
         ),
         (lambda path: path == '/api/maps/import', '_post_map_import'),
+        (
+            lambda path: path.startswith('/api/prep/') and path.endswith('/export'),
+            '_post_prep_export',
+        ),
         (lambda path: path == '/api/settings', '_post_settings'),
         (lambda path: path == '/api/art/generate', '_post_art_generate'),
         (lambda path: path == '/api/maps/create', '_post_map_create'),
@@ -1398,6 +1403,17 @@ class Handler(SimpleHTTPRequestHandler):
     def _post_map_import(self, path, query, p):
         with LOCK:
             return self.send_json(maps_io.import_image(p, write_doc, campaign.active()))
+
+    def _post_prep_export(self, path, query, p):
+        parts = path.split('/')
+        if len(parts) != 5 or not SLUG.fullmatch(parts[3]):
+            raise Invalid('Invalid session export route.')
+        with LOCK:
+            return self.send_json(
+                session_bundle.export(
+                    parts[3], request_read, write_doc, map_busy, campaign.active()
+                )
+            )
 
     def _post_settings(self, path, query, p):
         cfg = config.settings()

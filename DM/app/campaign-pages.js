@@ -955,6 +955,7 @@ async function prepPage(name, context) {
     );
   drawScenes();
   const others = activePreps().filter((n) => n !== name);
+  const bundleStatus = h('p', { class: 'muted', 'aria-live': 'polite' });
   render(
     main,
     h(
@@ -1002,6 +1003,45 @@ async function prepPage(name, context) {
           'This session is archived. Restore it to bring it back to the list.',
         )
       : null,
+    h(
+      'div',
+      { class: 'card' },
+      h('h2', {}, 'Publish this session to Foundry'),
+      h(
+        'p',
+        { class: 'muted' },
+        'Copy linked maps, NPCs, items and handouts to the selected Foundry world. Import the bundle once as GM with the current macro.',
+      ),
+      h(
+        'div',
+        { class: 'row' },
+        h(
+          'button',
+          {
+            onclick: async () => {
+              try {
+                await flush(docName);
+                render(bundleStatus, 'Exporting session bundle…');
+                const result = await post('/api/prep/' + name + '/export', {});
+                render(
+                  bundleStatus,
+                  `Ready in Foundry Data for ${result.world}: ${result.maps} maps, ${result.actors} actors, ${result.items} items, ${result.handouts} handouts. Run the macro as GM and choose this session.`,
+                );
+              } catch (error) {
+                render(bundleStatus, 'Session export failed: ' + error.message);
+              }
+            },
+          },
+          'Export session bundle',
+        ),
+        h(
+          'a',
+          { class: 'btn', href: '/forge-scripts/foundry-import-macro.js', download: true },
+          'Download import macro',
+        ),
+      ),
+      bundleStatus,
+    ),
     h(
       'div',
       { class: 'three' },

@@ -646,6 +646,40 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_text('Easy for 4 characters', exact=False)).to_be_visible()
         self.assert_accessible('encounter rating at phone width')
 
+    def test_prep_exports_a_session_bundle_on_desktop_and_phone(self):
+        map_slug, _ = self.studio.import_map()
+        self.studio.seed(
+            'prep/s1',
+            fixtures.shapes.PREP.new(
+                n=1,
+                title='The crossing',
+                scenes=[fixtures.shapes.SCENE.new(id='bridge', title='Bridge', map=map_slug)],
+                handouts=[
+                    fixtures.shapes.HANDOUT.new(
+                        id='letter', title='Letter', player_text='Meet at dusk.'
+                    )
+                ],
+            ),
+        )
+        self.open('#/prep/s1')
+        self.assert_accessible('session bundle desktop')
+        self.page.get_by_role('button', name='Export session bundle').click()
+        expect(
+            self.page.get_by_text('Ready in Foundry Data for fixture-world', exact=False)
+        ).to_be_visible()
+        manifest = json.loads(
+            (self.studio.root / 'FoundryData/wotg-maps/sessions/s1.json').read_text(
+                encoding='utf-8'
+            )
+        )
+        self.assertEqual([row['slug'] for row in manifest['maps']], [map_slug])
+        self.assertEqual(manifest['handouts'][0]['player_text'], 'Meet at dusk.')
+        self.page.set_viewport_size(NARROW)
+        self.page.reload()
+        expect(self.page.get_by_role('button', name='Export session bundle')).to_be_visible()
+        expect(self.page.get_by_role('link', name='Download import macro')).to_be_visible()
+        self.assert_accessible('session bundle phone')
+
     def test_session_pitch_review_and_linked_prep_at_phone_width(self):
         map_slug, _ = self.studio.import_map()
         self.studio.seed(

@@ -62,6 +62,7 @@ flowchart LR
 | `DM/record_changes.py`                | Changes a proposal makes to existing records, applied and previewed by one function   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
+| `DM/session_bundle.py`                | Versioned session manifest from prep links and one-action map export                  |
 | `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration            |
 | `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                              |
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                                 |
@@ -512,6 +513,20 @@ back to Foundry. Assets and JSON are copied to
 `Data/wotg-maps`; the user runs the macro as GM. No world database is written by Python. Imported documents
 carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
 and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
+
+`POST /api/prep/<id>/export` reads the saved prep, its scene map and NPC links, maps tagged for that session,
+and each linked map key's NPC and item IDs. `session_bundle` checks every link and preflights every map, then
+uses `maps_io.export` for the individual assets before atomically writing schema-1 JSON at
+`Data/wotg-maps/sessions/<id>.json` and its picker index. The manifest names the target world, map slugs,
+Studio entry snapshots and text handouts. The picker index includes the target world so the macro only lists
+its sessions. Its IDs and fields are stable and additive for a future companion
+module (W47). It contains GM secrets, so it stays in the local Foundry Data folder, never in source. The
+macro checks the world and format, imports the maps through the existing managed-document path, and upserts
+the linked descriptive sheets, a GM-only cast/item overview and handout journals under session-tagged sidebar
+folders. An entry
+whose UUID belongs to the selected Foundry world is linked without creating or moving the original. The
+macro never deletes a Foundry document; retries update its own tags and preserve GM pages and tokens. A
+failed macro run may have applied earlier maps, and can safely be retried after the problem is fixed.
 
 The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12 or v13
 scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while other systems get journal
