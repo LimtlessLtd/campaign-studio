@@ -560,6 +560,39 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(shapes.PREP.problems(self.read('data/prep/s2.json')), [])
         self.assertEqual(self.migrate()['status'], 'current')
 
+    def test_version_sixteen_encounters_gain_cr_without_changing_plans(self):
+        self.migrate()
+        schema.write_marker(self.data, 16, 'Synthetic version 16 campaign')
+        path = self.dm / 'data/prep/s2.json'
+        prep = shapes.PREP.new(n=2, title='Two')
+        prep['scenes'] = [
+            shapes.SCENE.new(
+                id='gate',
+                title='The gate',
+                encounter_detail={
+                    'creatures': [{'name': 'Guard', 'count': 2}],
+                    'difficulty': 'hard',
+                    'terrain': 'Narrow bridge',
+                    'tactics': 'Hold the bridge',
+                    'resolution': 'Retreat',
+                },
+            )
+        ]
+        path.write_text(json.dumps(prep), encoding='utf-8')
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (16, schema.CURRENT))
+        migrated = self.read('data/prep/s2.json')
+        encounter = migrated['scenes'][0]['encounter_detail']
+        self.assertEqual(encounter['creatures'], [{'name': 'Guard', 'count': 2, 'cr': ''}])
+        self.assertEqual(
+            (encounter['terrain'], encounter['tactics']), ('Narrow bridge', 'Hold the bridge')
+        )
+        self.assertEqual(shapes.PREP.problems(migrated), [])
+        self.assertEqual(self.migrate()['status'], 'current')
+        self.assertEqual(self.read('data/prep/s2.json'), migrated)
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

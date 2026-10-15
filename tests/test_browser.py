@@ -600,6 +600,52 @@ class BrowserSmoke(unittest.TestCase):
                 gap = section['y'] - (action['y'] + action['height'])
                 self.assertGreaterEqual(gap, 16, (viewport['width'], button, heading, gap))
 
+    def test_prep_encounter_rating_uses_party_and_saved_cr_at_phone_width(self):
+        self.studio.seed(
+            'foundry-library',
+            {
+                'format': 'campaign-studio-foundry-library',
+                'schema': 1,
+                'world': {'id': 'fixture-world', 'path': str(self.studio.world.resolve())},
+                'documents': {
+                    'actors': [
+                        {
+                            'id': f'hero-{i}',
+                            'name': f'Hero {i}',
+                            'type': 'character',
+                            'stats': {'level': 3, 'classes': [], 'ac': 15, 'hp': 20},
+                        }
+                        for i in range(4)
+                    ]
+                },
+            },
+        )
+        creature = fixtures.shapes.ENCOUNTER_CREATURE.new(name='Goblin', count=4)
+        scene = fixtures.shapes.SCENE.new(
+            id='gate',
+            title='The gate',
+            encounter_detail=fixtures.shapes.ENCOUNTER_DETAIL.new(creatures=[creature]),
+        )
+        self.studio.seed(
+            'prep/s1', fixtures.shapes.PREP.new(n=1, title='Session 1', scenes=[scene])
+        )
+
+        self.open('#/prep/s1')
+        self.page.get_by_text('Encounter plan').click()
+        expect(self.page.get_by_text('Enter a valid CR for: Goblin.')).to_be_visible()
+        self.page.get_by_label('Challenge rating (CR)').fill('1/4')
+        expect(self.page.get_by_text('Easy for 4 characters', exact=False)).to_be_visible()
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        self.assertEqual(
+            self.stored('prep/s1')['scenes'][0]['encounter_detail']['creatures'][0]['cr'], '1/4'
+        )
+
+        self.page.set_viewport_size(NARROW)
+        self.page.reload()
+        self.page.get_by_text('Encounter plan').click()
+        expect(self.page.get_by_text('Easy for 4 characters', exact=False)).to_be_visible()
+        self.assert_accessible('encounter rating at phone width')
+
     def test_session_pitch_review_and_linked_prep_at_phone_width(self):
         map_slug, _ = self.studio.import_map()
         self.studio.seed(

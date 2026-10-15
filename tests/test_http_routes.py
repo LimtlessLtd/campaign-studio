@@ -67,6 +67,28 @@ class RouteTests(unittest.TestCase):
             status, _, _ = self.request('/api/maps/fixture/export', 'POST')
         self.assertEqual(status, 409)
 
+    def test_encounter_rating_uses_imported_party_and_bounds_input(self):
+        goblins = [{'name': 'Goblin', 'count': 4, 'cr': '1/4'}]
+        status, result, _ = self.request('/api/encounter/rating', 'POST', {'creatures': goblins})
+        self.assertEqual((status, result['status']), (200, 'no_party'))
+        with patch.object(
+            http_routes,
+            'campaign_facts',
+            return_value={'party': {'members': [{'id': 'hero', 'name': 'Hero', 'level': 3}]}},
+        ):
+            status, result, _ = self.request(
+                '/api/encounter/rating', 'POST', {'creatures': goblins}
+            )
+        self.assertEqual((status, result['rating'], result['adjusted_xp']), (200, 'deadly', 500))
+        for bad in (
+            {},
+            {'creatures': [{'name': 'Goblin', 'count': 0, 'cr': '1/4'}]},
+            {'creatures': [{'name': '', 'count': 1, 'cr': '1/4'}]},
+            {'creatures': [{'name': 'Goblin', 'count': 1, 'cr': 0.25}]},
+            {'creatures': goblins * 13},
+        ):
+            self.assertEqual(self.request('/api/encounter/rating', 'POST', bad)[0], 400)
+
     def test_context_preview_search_and_pins_match_exported_packs(self):
         settings = http_routes.config.settings()
         settings['context_budget_chars'] = 16_000
