@@ -212,7 +212,8 @@ class SettingsAndRecordingTests(TranscriptionCase):
     def test_a_file_keeps_its_id_and_a_changed_file_gets_a_new_one(self):
         first = transcription.recording(str(self.recording))
         self.assertEqual(first['id'], transcription.recording(str(self.recording))['id'])
-        self.recording.write_bytes(b'longer than before' * 100)
+        self.recording.write_bytes(b'longer than before, with more content' * 100)
+        self.assertNotEqual(first['size'], self.recording.stat().st_size)
         self.assertNotEqual(first['id'], transcription.recording(str(self.recording))['id'])
         self.assertRegex(first['id'], transcription.ID)
 
