@@ -63,6 +63,9 @@ class AIProviderTests(unittest.TestCase):
             for row in module.REVIEWABLE:
                 with self.subTest(kind=proposal, row=row):
                     check_strict(draft_schemas.for_kind(f'{proposal}:{row}'))
+        for row in workflow.CONTENT_ROWS:
+            with self.subTest(kind='content', row=row):
+                check_strict(draft_schemas.for_kind(f'content:{row}'))
 
         layout = draft_schemas.for_kind('layout')
         self.assertEqual(layout, draft_schemas.for_kind('revision'))

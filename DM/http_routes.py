@@ -86,6 +86,7 @@ from campaign_core import (
     start_arcs,
     start_auto_run,
     start_classification,
+    start_content_redraft,
     start_redraft,
     start_request,
     start_ledger,
@@ -1725,6 +1726,10 @@ class Handler(SimpleHTTPRequestHandler):
                 if value['status'] in ('running', 'applied'):
                     raise Conflict('This workflow is already running or applied.')
                 return self.send_json(workflow.stage(value, p.get('draft')))
+        if action == 'redraft':
+            if not isinstance(p.get('key'), str):
+                raise Invalid('Choose the item to write again.')
+            return self.send_json(start_content_redraft(value['id'], p['key'], p.get('note')))
         if action == 'apply':
             slug = value['map']
             if map_busy(slug):

@@ -17,6 +17,7 @@ TOKEN_FIELDS = (
 DRAFT_KINDS = (
     'request-draft',
     'request-redraft',
+    'content-redraft',
     'ai-workflow',
     'classify',
     'thread-ledger',

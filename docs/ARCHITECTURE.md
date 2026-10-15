@@ -57,6 +57,7 @@ flowchart LR
 | `DM/wrapup_workflow.py`               | Played-session notes: reviewed log, thread and codex changes and one apply            |
 | `DM/item_review.py`                   | Item-by-item review: the `kind:id` keys a GM rejects and the rows that remain         |
 | `DM/redraft.py`                       | One row of a staged proposal written again alone: answer schema, prompt and check     |
+| `DM/content_redraft.py`               | The same for one row of a map's content draft: its outline prompt and splice          |
 | `DM/record_changes.py`                | Changes a proposal makes to existing records, applied and previewed by one function   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
@@ -248,6 +249,16 @@ runs) must pass first and again at the end, so a prep, thread or entry edited in
 rather than being masked by the new `draft_base`. A failed, cancelled or interrupted redraft returns the
 request to `review` with the same proposal (`SETTLERS` field `redraft`).
 
+A row of a map's content draft is written again the same way (`POST /api/workflow/<id>/redraft`), by
+`DM/content_redraft.py` over the shared `redraft` and `item_review` modules. A content draft covers a whole
+map, so the prompt carries an outline of it (`content_redraft.outline`: the summary, the description of the
+row's own location, and the ID, name and location of every other row) rather than every row's full text. The
+job (`content-redraft`, `campaign_core.start_content_redraft`) leaves the workflow `running` with its draft
+untouched, so apply, refine, run and stage are refused as for any draft in progress. `finish_content_redraft`
+splices the row in under its old ID and stages the whole draft again, which validates it and checks that the
+map's layout and locations have not changed since the draft was made. A failed, cancelled or interrupted
+redraft returns the workflow to `review` with the same draft (`SETTLERS` field `content_redraft`).
+
 A map's content proposal has the same item review: `workflow.CONTENT_ROWS` (npcs, items, journals, events and
 threads) are the rows a GM can reject, `POST /api/workflow/<id>/apply` accepts `rejected` for a content draft
 and `map_review_kinds` in `/api/state` tells the browser which rows carry a tick box. The whole draft is
@@ -278,7 +289,8 @@ API returns the last such line as `progress`. Cancelling stops the job's whole p
 own children (ffmpeg, a whisper.cpp program) end with it.
 A finished job's result is stored by `campaign_core.FINISHERS` (by job kind) and a failed, cancelled or
 interrupted job marks what it was producing through `SETTLERS` (by the field that names its record: `request`,
-`redraft`, `transcript`, `classify`, `ledger`, `arc`). A new draft kind adds a row to each instead of a branch.
+`redraft`, `content_redraft`, `transcript`, `classify`, `ledger`, `arc`). A new draft kind adds a row to each
+instead of a branch.
 Only one server instance should operate on a campaign. Direct CLI tools must not edit a map while the app
 is rendering that map.
 

@@ -39,6 +39,7 @@
   "DM/ai_provider.py",
   "DM/campaign.py",
   "DM/campaign_core.py",
+  "DM/content_redraft.py",
   "DM/commits.py",
   "DM/config.py",
   "DM/context.py",

@@ -27,8 +27,9 @@ Ranked by how much each holds back the goal.
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
-3. **Session workflow** (W33, W35–W37). Session Forge now turns a pitch into a linked prep and queued map briefs.
-   A wrap-up now folds played outcomes back into threads. Readiness and redrafting a map-content row remain.
+3. **Session workflow** (W35–W37). Session Forge turns a pitch into a linked prep and queued map briefs.
+   Request and map-content proposals are reviewed row by row: untick, redraft one row alone, or apply what
+   is ticked. A wrap-up folds played outcomes back into threads. Readiness and encounter budgets remain.
 4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
    description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
    actors come back duplicated.
@@ -51,8 +52,8 @@ into the threads.
 | Step                  | Today                                             | Rows          |
 | --------------------- | ------------------------------------------------- | ------------- |
 | 1. Start next session | Recap drafts read the latest earlier session logs | W35           |
-| 2. Pitch              | Session Forge drafts a linked prep                | W33           |
-| 3. Outline            | Accept or reject each scene, map, NPC and handout | W33           |
+| 2. Pitch              | Session Forge drafts a linked prep                | W35           |
+| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | W36, W37      |
 | 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style              | W42           |
@@ -64,7 +65,7 @@ into the threads.
 A synthetic campaign goes through the whole journey in Studio. A pitch becomes an outline the GM edits; two
 maps (one generated, one imported) are stocked; six NPCs get portraits, tokens and compendium bases; one
 bundle imports into the macro fixture; a wrap-up moves the threads; the next session's recap uses it. Rows
-W24–W26, W33, W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
+W24–W26, W35 and W38–W42 cover the remaining work. Then the owner repeats it on their own campaign with W43.
 
 ## Design notes
 
@@ -132,27 +133,6 @@ their row and finding say enough.
   that a cancelled draft leaves no Codex process and that the temp scratch folder is swept.
 - Turn each failure into a row. If a tool cannot be kept out, say so in the README and keep Claude Code the
   only automatic drafter.
-
-### W33 Item-level proposal review
-
-- Session Forge (W32) now accepts a pitch and settings, validates a bounded proposal, and applies its linked
-  prep, records, art briefs and map layout workflows in one recoverable change. Its review shows the whole
-  proposal, with an editable JSON import. A scene's map points to a stored slug, while the location number
-  stays zero until a new map has a keyed layout. Recent logs lead its context, and W34's touched-session
-  links rank active threads by staleness. W41 adds compendium bases for proposed NPCs.
-- General requests and Session Forge proposals offer item choices (Session Forge: maps, entries, threads,
-  thread changes, scenes and handouts; the shared `item_review` module holds the key format and the removal).
-  Applying writes only accepted items and drops what linked to a rejected one: a scene stays without a rejected
-  map, NPC or clue. A session's staleness check covers the whole proposal. A change to a thread or codex entry
-  that already exists, and the text an expand request adds to its entry, shows its before and after
-  (`record_changes`: the preview runs the update that apply runs, on a copy; `GET /api/requests/<id>/diff`).
-  A map's content proposal (npcs, items, journals, events and threads) has the same tick boxes
-  (`workflow.CONTENT_ROWS`, served as `map_review_kinds`); its location descriptions apply whole, and a
-  layout is accepted or refined as a whole. Any row of a general, session or wrap-up proposal can be written
-  again alone (`DM/redraft.py`, `POST /api/requests/<id>/redraft`): a row-only AI answer is swapped in under the
-  old ID and the whole proposal is validated and checked for staleness again. W33 still has to add the same for
-  a map's content proposal, whose rows are drafted by a different workflow record. An edited item is
-  validated again.
 
 ### W35 Threads and wrap-up
 
@@ -318,6 +298,13 @@ their row and finding say enough.
 - Rule: Studio never deletes anything from Foundry. It may remove links, nominations and detail it generated.
   Give every linked record (world map nomination, pin, scene or entry link) an unlink or remove action that
   states what stays in Foundry. Shipped so far: remove a world map (nomination and pins); remove an imported world (its codex entries, their links and the library snapshot).
+
+### W77 Before and after for arcs and ledgers
+
+- A request proposal shows what a change to a thread or codex entry does (`record_changes`: the preview
+  runs the update that apply runs, on a copy). Arc options (W71) and thread ledgers (W70) change threads
+  too, through their own apply, and show only the proposed text. Give each change the same before and
+  after, produced by the update their apply runs, so the preview cannot promise what apply does not do.
 
 ## Deprioritised
 

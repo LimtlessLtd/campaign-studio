@@ -191,7 +191,7 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   transcript is later re-transcribed or removed; a second ledger for that recording ID is not yet offered.
 - Arc proposals (W71) are tested with a fake model on synthetic threads, a stale-thread check, one-per-thread
   choices, an idempotent retry and a phone/desktop browser flow. No real Claude draft has judged option
-  quality, and the review shows each option's text rather than a before/after diff of the thread (W33). An
+  quality, and the review shows each option's text rather than a before/after diff of the thread (W77). An
   option plans a thread but never marks it resolved: the GM does that after the table plays it.
 - The automatic run (W72) is tested with fake Whisper and Claude programs on a synthetic session: the policy
   tables, a whole session from recording to applied draft, failures and a limit, one AI request at a time, a

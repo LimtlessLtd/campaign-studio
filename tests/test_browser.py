@@ -1197,6 +1197,61 @@ class BrowserSmoke(unittest.TestCase):
         expect(self.page.get_by_text('Left out')).to_have_count(2)
         self.assertEqual(self.page.get_by_role('checkbox', name=re.compile('Patrol')).count(), 0)
 
+    def test_one_row_of_a_map_content_draft_is_redrafted_on_phone_and_desktop(self):
+        slug, brief = self.studio.import_map()
+        wf = workflow.stage(workflow.create(slug, brief), self.studio.proposal())
+        queued = {}
+
+        def fake_job(lane, kind, label, cmd, prompt, **extra):
+            queued.update(prompt=prompt, **extra)
+            return {'id': 'job-redraft', **extra}
+
+        def open_review():
+            self.open('#/maps/' + slug)
+            # A map page learns of a finished job from the job list, which a fake job never joins.
+            self.page.reload()
+            expect(self.page.locator('#main h1').first).to_be_visible()
+            self.page.get_by_role('button', name='AI workflow').click()
+            self.page.locator('summary', has_text='Review proposed content').click()
+
+        with (
+            patch.object(campaign_core.ai_provider.shutil, 'which', return_value='claude'),
+            patch.object(campaign_core, 'new_job', side_effect=fake_job),
+        ):
+            current = 'The Watcher'
+            for viewport in (NARROW, DESKTOP):
+                width = str(viewport['width'])
+                self.page.set_viewport_size(viewport)
+                open_review()
+                self.page.get_by_role('checkbox', name=re.compile(current)).uncheck()
+                self.page.get_by_role(
+                    'button', name=re.compile('Redraft this one: ' + current)
+                ).click()
+                self.page.get_by_label('What should change?').fill('Make the guard older.')
+                self.assert_accessible('redraft dialog at ' + width)
+                self.page.get_by_role('button', name=re.compile('^Draft with')).click()
+                expect(self.page.get_by_text('The AI is writing one item again.')).to_be_visible()
+                self.assertEqual(workflow.get(wf['id'])['status'], 'running')
+                self.assertIn('Make the guard older.', queued['prompt'])
+                # Nothing can be applied while the AI writes the row.
+                self.assertEqual(
+                    self.page.get_by_role('button', name='Apply to campaign').count(), 0
+                )
+
+                job = {key: value for key, value in queued.items() if key != 'prompt'}
+                job['id'] = 'job-redraft'
+                row = workflow.get(wf['id'])['draft']['npcs'][0]
+                current = 'Quay Warden ' + width
+                self.studio.write_job_output(job, {'row': {**row, 'name': current}})
+                campaign_core.finish_content_redraft(job, 0, '')
+                open_review()
+                # The new row appears ticked, in place of the one the GM had unticked.
+                expect(self.page.get_by_role('checkbox', name=re.compile(current))).to_be_checked()
+                self.assert_accessible('redrafted content at ' + width)
+        self.page.get_by_role('button', name='Apply to campaign').click()
+        expect(self.page.get_by_text('Campaign content applied.')).to_be_visible()
+        self.assertIn('Quay Warden 1280', [e['name'] for e in self.stored('codex')['entries']])
+
     def test_request_context_preview_can_pin_a_codex_entry(self):
         self.studio.seed(
             'codex',
