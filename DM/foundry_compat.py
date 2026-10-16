@@ -5,7 +5,9 @@ import re
 INVENTORY_FORMAT = 'campaign-studio-foundry-upgrade-inventory'
 RELEASES_URL = 'https://foundryvtt.com/releases/'
 CORE_RE = re.compile(r'^(\d{1,2})(?:\.(\d{1,4}))?$')
-ID_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$')
+# Foundry library packages may start with an underscore (Custom CSS requires `_CodeMirror`).
+# No dots or slashes, so an ID never names another folder.
+ID_RE = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}$')
 
 
 def core(value):
