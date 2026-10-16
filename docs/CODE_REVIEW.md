@@ -169,6 +169,13 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
   macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
   rejected before import.
+- The W36 prep readiness board reads saved state and has synthetic gap, recovery and desktop/phone browser
+  checks. An older map entry without `exported_at` asks for one fresh export; subsequent prep, key, image or
+  scene changes make that copy stale, as does a missing copied scene/image or a changed selected world. It
+  checks AC/HP notes or an actor link from the selected Foundry world, and one portrait image,
+  not token art (W40). Encounter plans record creatures and target difficulty; party budget ratings are
+  shown on the prep page. The board also checks the complete session bundle manifest against the saved
+  prep, linked records, maps and selected world; it does not know whether the GM ran the Foundry macro.
 - A session bundle imports its linked maps, descriptive sheets, map journals and GM-only handouts in one
   macro run, with fixture coverage but no live GM check. Scene pages, player-visible handouts and tokens
   remain (W39–W40).

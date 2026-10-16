@@ -73,6 +73,7 @@
   "DM/record_changes.py",
   "DM/redraft.py",
   "DM/packaging_source.py",
+  "DM/prep_readiness.py",
   "DM/requirements.txt",
   "DM/arc_options.py",
   "DM/auto_run.py",

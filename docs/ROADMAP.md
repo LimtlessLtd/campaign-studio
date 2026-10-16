@@ -27,10 +27,10 @@ Ranked by how much each holds back the goal.
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
-3. **Session workflow** (W35–W36). Session Forge turns a pitch into a linked prep and queued map briefs.
+3. **Session workflow** (W35). Session Forge turns a pitch into a linked prep and queued map briefs.
    Request and map-content proposals are reviewed row by row: untick, redraft one row alone, or apply what
    is ticked. A wrap-up folds played outcomes back into threads. Encounter budgets now use the imported
-   party's levels and stored creature CRs; the readiness board remains.
+   party's levels and stored creature CRs, and each prep has a readiness board.
 4. **Foundry write side** (W25, W39–W41, W46, W47). One session bundle now imports linked maps,
    descriptive sheets and GM handouts in one run. Tokens, playable stats, scene journals and player-visible
    handout pages remain.
@@ -54,7 +54,7 @@ into the threads.
 | --------------------- | ------------------------------------------------- | ------------- |
 | 1. Start next session | Recap drafts read the latest earlier session logs | W35           |
 | 2. Pitch              | Session Forge drafts a linked prep                | W35           |
-| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | W36           |
+| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | —             |
 | 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style              | W42           |
@@ -150,12 +150,16 @@ their row and finding say enough.
   (`arcSeedsBox`), and start a wrap-up from a transcript's confirmed play, prefilled with the thread
   ledger's applied outcomes (W70), so a recording and the table notes meet in one proposal.
 
-### W36 Readiness
+### W36–W38 Session readiness, encounter budgets and bundles
 
-- **Readiness** checks stored state for one prep: maps rendered, stocked and exported; scene NPCs with stats
-  or a compendium base, a portrait and a token; art ready; handouts written; threads touched; encounters
-  within the party's budget; a Foundry export newer than the prep's last change. Each failed check links to
-  the action that fixes it.
+- The readiness board checks saved scene outlines, linked map files and content, map copy and session
+  bundle freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and encounter plans. Each gap opens the
+  relevant editor. An older map entry without an export stamp asks for a fresh export; a later prep or map
+  edit makes the copy stale. Token art remains W40.
+- The encounter plan rates creature CRs against the imported party's character levels using 2014 D&D 5e
+  XP thresholds. Missing CRs or levels leave the estimate unrated. Session Forge map briefs also use the
+  party level, and the party roster enters AI draft context.
+- One session bundle exports linked maps, NPCs, items and handouts to Foundry Data for a GM macro import.
 
 ### W38–W41, W46, W47 Publishing to Foundry
 
