@@ -82,6 +82,7 @@
   "DM/records.py",
   "DM/request_workflow.py",
   "DM/session_workflow.py",
+  "DM/session_bundle.py",
   "DM/server.py",
   "DM/shapes.py",
   "DM/storage.py",

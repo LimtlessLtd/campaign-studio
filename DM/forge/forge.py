@@ -46,43 +46,35 @@ def _target_world(here):
         return None
 
 
-def key_for_foundry(slug, key, copy_art=True, here=None):
-    """Snapshot linked codex entries and local art into the private GM journal export."""
-    if not key:
-        return None
+def art_for_foundry(path, folder, copy_art=True, here=None):
+    """Copy a local image into Foundry Data, keeping all source paths inside the campaign."""
+    if not path or not isinstance(path, str):
+        return ''
     here = here or campaign.active()
-    result = deepcopy(key)
-    linked_ids = {
-        ident
-        for area in result.get('areas', [])
-        for field in ('npcs', 'items')
-        for ident in area.get(field, [])
-    }
+    files = os.path.realpath(here.files)
+    source = os.path.realpath(os.path.join(files, path.replace('/', os.sep)))
+    if os.path.commonpath((files, source)) != files or not os.path.isfile(source):
+        return ''
+    if os.path.splitext(source)[1].lower() not in ('.png', '.jpg', '.jpeg', '.webp', '.gif'):
+        return ''
+    name = hashlib.sha256(path.encode('utf-8')).hexdigest()[:12] + '-' + os.path.basename(source)
+    foundry_data = config.foundry_data(here)
+    if copy_art and os.path.isdir(foundry_data):
+        art_dir = os.path.join(foundry_data, FOUNDRY_DIR, folder, 'art')
+        os.makedirs(art_dir, exist_ok=True)
+        shutil.copy2(source, os.path.join(art_dir, name))
+    return f'{FOUNDRY_DIR}/{folder}/art/{name}'
+
+
+def entries_for_foundry(ids, folder, copy_art=True, here=None):
+    """Snapshot linked codex entries once for map keys and session bundles."""
+    here = here or campaign.active()
     entries = {
         ident: entry
-        for ident in linked_ids
+        for ident in ids
         if (entry := records.read(here.data, 'codex', ident)) is not None
     }
-    files = os.path.realpath(here.files)
-    foundry_data = config.foundry_data(here)
-    art_dir = os.path.join(foundry_data, FOUNDRY_DIR, slug, 'art')
     target = _target_world(here)
-
-    def art_path(path):
-        if not path or not isinstance(path, str):
-            return ''
-        source = os.path.realpath(os.path.join(files, path.replace('/', os.sep)))
-        if os.path.commonpath((files, source)) != files or not os.path.isfile(source):
-            return ''
-        if os.path.splitext(source)[1].lower() not in ('.png', '.jpg', '.jpeg', '.webp', '.gif'):
-            return ''
-        name = (
-            hashlib.sha256(path.encode('utf-8')).hexdigest()[:12] + '-' + os.path.basename(source)
-        )
-        if copy_art and os.path.isdir(foundry_data):
-            os.makedirs(art_dir, exist_ok=True)
-            shutil.copy2(source, os.path.join(art_dir, name))
-        return f'{FOUNDRY_DIR}/{slug}/art/{name}'
 
     def linked(entry):
         """The entry's Foundry origin, when the export goes to the world it was imported from."""
@@ -101,33 +93,57 @@ def key_for_foundry(slug, key, copy_art=True, here=None):
                 return image
             except (OSError, ValueError):
                 return ''
-        return art_path(image)
+        return art_for_foundry(image, folder, copy_art, here)
 
-    result['images'] = [p for p in (art_path(path) for path in result.get('images', [])) if p]
+    snapshots = {}
+    for entry_id, entry in entries.items():
+        origin = linked(entry)
+        snapshots[entry_id] = {
+            k: v
+            for k, v in dict(
+                id=entry_id,
+                type=entry.get('type'),
+                name=entry.get('name', ''),
+                public=entry.get('public', ''),
+                secrets=entry.get('secrets', ''),
+                notes=entry.get('notes', ''),
+                image=entry_image(entry, origin),
+                uuid=origin['uuid'] if origin else '',
+            ).items()
+            if v
+        }
+    return snapshots
+
+
+def key_for_foundry(slug, key, copy_art=True, here=None):
+    """Snapshot linked codex entries and local art into the private GM journal export."""
+    if not key:
+        return None
+    here = here or campaign.active()
+    result = deepcopy(key)
+    linked_ids = {
+        ident
+        for area in result.get('areas', [])
+        for field in ('npcs', 'items')
+        for ident in area.get(field, [])
+    }
+    entries = entries_for_foundry(linked_ids, slug, copy_art, here)
+
+    result['images'] = [
+        p
+        for p in (art_for_foundry(path, slug, copy_art, here) for path in result.get('images', []))
+        if p
+    ]
     for area in result.get('areas', []):
-        area['images'] = [p for p in (art_path(path) for path in area.get('images', [])) if p]
+        area['images'] = [
+            p
+            for p in (
+                art_for_foundry(path, slug, copy_art, here) for path in area.get('images', [])
+            )
+            if p
+        ]
         for field, dest in (('npcs', 'npcs_detail'), ('items', 'items_detail')):
-            area[dest] = []
-            for entry_id in area.get(field, []):
-                entry = entries.get(entry_id)
-                if entry:
-                    origin = linked(entry)
-                    area[dest].append(
-                        {
-                            k: v
-                            for k, v in dict(
-                                id=entry_id,
-                                type=entry.get('type'),
-                                name=entry.get('name', ''),
-                                public=entry.get('public', ''),
-                                secrets=entry.get('secrets', ''),
-                                notes=entry.get('notes', ''),
-                                image=entry_image(entry, origin),
-                                uuid=origin['uuid'] if origin else '',
-                            ).items()
-                            if v
-                        }
-                    )
+            area[dest] = [entries[ident] for ident in area.get(field, []) if ident in entries]
     return result
 
 
