@@ -113,7 +113,9 @@ class BrowserSmoke(unittest.TestCase):
 
     def open(self, hash_path):
         self.page.goto(self.studio.url + '/' + hash_path)
-        expect(self.page.locator('#main h1').first).to_be_visible()
+        # On a cold Windows CI runner, requests can finish before the first
+        # asynchronous route commits its view to the page.
+        expect(self.page.locator('#main h1').first).to_be_visible(timeout=15000)
 
     def stored(self, name):
         return self.studio.stored(name)
