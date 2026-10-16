@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import config
+import foundry_library
 import records
 import storage
 
@@ -94,9 +95,13 @@ def _check(identity, title, problems, ready, action, applicable=True):
     }
 
 
-def _has_stats(entry):
+def _has_stats(entry, world_key):
     foundry = entry.get('foundry') if isinstance(entry.get('foundry'), dict) else {}
-    if str(foundry.get('uuid', '')).startswith(('Actor.', 'Compendium.')):
+    if (
+        world_key
+        and foundry.get('world_key') == world_key
+        and str(foundry.get('uuid', '')).startswith(('Actor.', 'Compendium.'))
+    ):
         return True
     stats = entry.get('stats') if isinstance(entry.get('stats'), dict) else {}
     if stats.get('ac') is not None and stats.get('hp') is not None:
@@ -188,12 +193,15 @@ def report(name, here):
     prep_modified = _mtime(path)
     settings = config.settings(here)
     try:
-        current_world = (
-            config.world_info(settings['world_path'])['id'] if settings.get('world_path') else ''
+        selected_world = (
+            config.world_info(settings['world_path']) if settings.get('world_path') else None
         )
+        current_world = selected_world['id'] if selected_world else ''
+        current_world_key = foundry_library.world_key(selected_world) if selected_world else ''
         foundry_data = config.foundry_data(here)
     except (OSError, ValueError, KeyError):
         current_world = None
+        current_world_key = ''
         foundry_data = ''
     stale = []
     for slug in slugs:
@@ -211,8 +219,8 @@ def report(name, here):
             exported = 0
         if (
             not math.isfinite(exported)
-            or current_world is None
-            or (current_world and entry.get('exported_world') != current_world)
+            or not current_world
+            or entry.get('exported_world') != current_world
             or not key_paths[slug]
             or not key_paths[slug].is_file()
             or not entry.get('in_foundry')
@@ -297,7 +305,7 @@ def report(name, here):
     no_stats = [
         codex[ident].get('name') or ident if ident in codex else ident
         for ident in npc_ids
-        if ident not in codex or not _has_stats(codex[ident])
+        if ident not in codex or not _has_stats(codex[ident], current_world_key)
     ]
     no_portrait = [
         codex[ident].get('name') or ident if ident in codex else ident
@@ -319,7 +327,7 @@ def report(name, here):
             'NPCs playable',
             no_stats,
             'Linked NPCs have Foundry actor data or AC and HP in their notes.',
-            npc_action(lambda entry: not _has_stats(entry)),
+            npc_action(lambda entry: not _has_stats(entry, current_world_key)),
             applicable=bool(npc_ids),
         )
     )

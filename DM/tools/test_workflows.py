@@ -26,6 +26,7 @@ import config
 import campaign
 import campaign_core
 import foundry_backup
+import foundry_library
 import foundry_upgrade
 import http_routes
 import workflow
@@ -382,6 +383,30 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(checks['maps']['status'], 'needs-work')
         self.assertIn(entry['name'], checks['maps']['detail'])
         self.assertEqual(checks['bundle']['status'], 'needs-work')
+
+    def test_prep_readiness_counts_only_actor_links_from_the_selected_world(self):
+        self.seed(
+            'prep/s1',
+            shapes.PREP.new(
+                n=1,
+                title='Session 1',
+                scenes=[shapes.SCENE.new(id='one', title='Gate', npcs=['keeper'])],
+            ),
+        )
+        keeper = shapes.CODEX_ENTRY.new(
+            id='keeper',
+            type='npc',
+            name='Keeper',
+            foundry={'uuid': 'Actor.keeper', 'world_key': 'another-world'},
+        )
+        self.seed('codex/keeper', keeper)
+        checks = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
+        self.assertEqual(checks['npc_stats']['status'], 'needs-work')
+
+        keeper['foundry']['world_key'] = foundry_library.world_key(config.world_info(self.world))
+        self.seed('codex/keeper', keeper)
+        checks = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
+        self.assertEqual(checks['npc_stats']['status'], 'ready')
 
     def test_session_bundle_exports_two_maps_six_actors_and_two_handouts(self):
         first, _ = self.import_map()

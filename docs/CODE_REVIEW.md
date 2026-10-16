@@ -172,7 +172,7 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
 - The W36 prep readiness board reads saved state and has synthetic gap, recovery and desktop/phone browser
   checks. An older map entry without `exported_at` asks for one fresh export; subsequent prep, key, image or
   scene changes make that copy stale, as does a missing copied scene/image or a changed selected world. It
-  checks AC/HP notes or a Foundry actor link and one portrait image,
+  checks AC/HP notes or an actor link from the selected Foundry world, and one portrait image,
   not token art (W40). Encounter plans record creatures and target difficulty; party budget ratings are
   shown on the prep page. The board also checks the complete session bundle manifest against the saved
   prep, linked records, maps and selected world; it does not know whether the GM ran the Foundry macro.

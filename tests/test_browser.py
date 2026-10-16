@@ -663,7 +663,7 @@ class BrowserSmoke(unittest.TestCase):
         )
 
         self.open('#/prep/s1')
-        self.page.get_by_text('Encounter plan').click()
+        self.page.get_by_text('Encounter plan', exact=True).click()
         expect(self.page.get_by_text('Enter a valid CR for: Goblin.')).to_be_visible()
         self.page.get_by_label('Challenge rating (CR)').fill('1/4')
         expect(self.page.get_by_text('Easy for 4 characters', exact=False)).to_be_visible()
@@ -674,7 +674,7 @@ class BrowserSmoke(unittest.TestCase):
 
         self.page.set_viewport_size(NARROW)
         self.page.reload()
-        self.page.get_by_text('Encounter plan').click()
+        self.page.get_by_text('Encounter plan', exact=True).click()
         expect(self.page.get_by_text('Easy for 4 characters', exact=False)).to_be_visible()
         self.assert_accessible('encounter rating at phone width')
 
