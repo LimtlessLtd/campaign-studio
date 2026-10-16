@@ -19,6 +19,14 @@ documents, including GM-owned documents and a same-named journal page on reimpor
 Foundry's document validation, rendering, permissions or an installed game system. No live Foundry version
 or D&D 5e system version has been checked for this change.
 
+Session prep export adds a schema-1 manifest at `Data/wotg-maps/sessions/<id>.json`, with a separate picker
+index scoped by Foundry world. The GM chooses a session in the same macro to import every linked map,
+descriptive actor/item sheet, GM cast/item overview and GM-only handout journal in one run. Studio-tagged
+sidebar folders group the new documents. The fixture
+checks two scenes, six NPCs, two handouts, stable IDs and preserved GM tokens/pages on reimport in v11,
+v12 and v13. Existing Foundry-origin actors/items are linked without moving or changing them. Handouts are
+GM-only until W39 adds reviewed player pages; token placement and mechanical sheets remain W40/W41.
+
 ## Live GM checks before campaign use
 
 Run these in a disposable world for each Foundry core and game-system version you intend to use. Record the
@@ -38,5 +46,9 @@ not use a production world for the first check.
    no duplicate Studio scenes/sheets, and generated area pins still open the right pages.
 4. Run the macro as a non-GM and in a world with a different ID; confirm both refuse the import. On an
    unsupported Foundry version, confirm the warning appears before a dialog or document write.
+5. Export a synthetic prep linking two maps, six NPCs and two handouts. Choose the session once in the GM
+   macro; check both maps, session folders, GM-only handouts and descriptive sheets. Add a GM token and
+   journal page, edit the prep and export/import again; check that Studio content updates under the same IDs
+   and both GM additions remain. Check that player access to the handouts is still denied.
 
 Do not call a version/system combination live-verified until this checklist passes for those exact versions.

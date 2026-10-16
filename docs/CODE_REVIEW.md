@@ -173,10 +173,11 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   checks. An older map entry without `exported_at` asks for one fresh export; subsequent prep, key, image or
   scene changes make that copy stale, as does a missing copied scene/image or a changed selected world. It
   checks AC/HP notes or a Foundry actor link and one portrait image,
-  not token art (W40). Encounter plans record creatures and target difficulty; party budget rating is W37.
-  Foundry still receives one map at a time until W38.
-- Foundry receives one map per macro run. Tokens are not placed, and session prep, scenes and handouts are
-  not exported (W38–W41).
+  not token art (W40). Encounter plans record creatures and target difficulty; party budget ratings are
+  shown on the prep page.
+- A session bundle imports its linked maps, descriptive sheets, map journals and GM-only handouts in one
+  macro run, with fixture coverage but no live GM check. Scene pages, player-visible handouts and tokens
+  remain (W39–W40).
 - AI prompts select bounded codex and thread context. Map, request and session-plan drafts read the
   newest played-session logs as canon. World import can select folders, though duplicate folder names
   still need ID-based selection (W24).

@@ -6,6 +6,7 @@ import time
 from copy import deepcopy
 
 import context as prompt_context
+import encounter_budget
 import item_review
 import record_changes
 import records
@@ -87,7 +88,13 @@ SCHEMA = workflow.obj(
                         'encounter': workflow.obj(
                             {
                                 'creatures': workflow.arr(
-                                    workflow.obj({'name': workflow.STR, 'count': workflow.INT}),
+                                    workflow.obj(
+                                        {
+                                            'name': workflow.STR,
+                                            'count': workflow.INT,
+                                            'cr': workflow.STR,
+                                        }
+                                    ),
                                     12,
                                 ),
                                 'difficulty': workflow.STR,
@@ -196,6 +203,8 @@ def prompt_pack(item, read_doc, campaign, budget_chars, prep_names, recent_logs)
         'has a keyed layout. Each clue names an existing or proposed thread ID. '
         'Thread changes concern existing threads; new threads go in threads. '
         'Size encounters for campaign.party (size and average level) when it is present. '
+        'Give each encounter creature its D&D 5e challenge rating as 0, 1/8, 1/4, 1/2 or 1 to 30; '
+        'use a blank CR when it is unknown. '
         'Do not claim to have generated maps, images or Foundry documents. '
     )
     built, preview = prompt_context.build(
@@ -223,6 +232,14 @@ def validate(item, draft, read_doc):
     prep, _ = options(item, read_doc)
     if not isinstance(draft, dict) or len(json.dumps(draft, ensure_ascii=False)) > 240000:
         raise ValueError('The session proposal must be a bounded JSON object.')
+    # Proposals staged before encounter CR existed remain reviewable and applicable.
+    draft = deepcopy(draft)
+    for scene in draft.get('scenes', []) if isinstance(draft.get('scenes'), list) else []:
+        if isinstance(scene, dict) and isinstance(scene.get('encounter'), dict):
+            creatures = scene['encounter'].get('creatures')
+            for creature in creatures if isinstance(creatures, list) else []:
+                if isinstance(creature, dict):
+                    creature.setdefault('cr', '')
     workflow.validate_schema(draft, SCHEMA)
     if not draft['summary'].strip() or not draft['goals']:
         raise ValueError('A session proposal needs a summary and at least one goal.')
@@ -282,6 +299,11 @@ def validate(item, draft, read_doc):
             for c in scene['encounter']['creatures']
         ):
             raise ValueError('Encounter creatures need a name and a count from 1 to 100.')
+        if any(
+            c['cr'].strip() and encounter_budget.parse_cr(c['cr']) is None
+            for c in scene['encounter']['creatures']
+        ):
+            raise ValueError('An encounter creature has an invalid D&D 5e challenge rating.')
     if any(not x.strip() for x in draft['goals'] + draft['checklist']):
         raise ValueError('Goals and checklist entries cannot be blank.')
     if any(not h['player_text'].strip() for h in draft['handouts']):

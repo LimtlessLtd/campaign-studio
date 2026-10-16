@@ -178,8 +178,14 @@ NPC, item, journal entry, event and thread.
 Each session prep has a **Session readiness** board. It checks saved scene outlines, linked map files,
 stocking and Foundry copy freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and
 encounter plans. Use a gap's action to open the relevant editor, then **Recheck** after saving. It checks
-the current map export only: a session bundle, token art and encounter ratings against the party are still
-planned.
+the current map export; token art is still planned.
+
+Each prep scene's **Encounter plan** can list creatures, counts and challenge ratings (CR). When the
+imported Foundry party has character levels and every creature has a valid CR, Studio shows a 2014 D&D
+5e XP difficulty estimate using each character's level and the party-size multiplier. Missing CRs or
+party levels are shown as work to finish rather than as a difficulty; terrain, tactics and separate waves
+still need the GM's judgement. [The 2014 Basic Rules](https://www.dndbeyond.com/sources/dnd/basic-rules-2014/building-combat-encounters)
+describe the thresholds and multipliers used.
 
 After you play, **Wrap up this session** on that prep takes your notes from the table (or a recording
 summary pasted in) and drafts the session log, changes to threads and codex entries, new threads and leads
@@ -216,6 +222,15 @@ later Foundry changes for an explicit refresh; it does not edit Foundry document
 `Data/wotg-maps` folder. Download the Script macro and run it as GM in Foundry. The server does not write the
 world database. Scenes contain grid, generated walls/doors/lights and roof tiles where available. Journals
 and location pins are GM-only. Reimports update generated parts and preserve custom tokens and notes.
+
+From a session prep, **Export session bundle** copies all linked maps, NPCs, items and text handouts to that
+same folder. Run the current import macro as GM and choose the session: one run imports its maps, their GM
+journals, D&D 5e descriptive sheets and GM-only handout journals into session folders. Repeating the export
+and import updates Studio-tagged documents under stable IDs while keeping GM additions. A GM-only session
+overview lists its linked cast and items; imported Foundry actors and items are linked to their originals
+instead of copied. A failed export keeps the previous manifest but may have copied some maps; fix the
+error and export again before importing. Player-visible handout pages, scene pages and token placement
+remain planned work.
 
 The macro also creates/updates D&D 5e NPC and loot item sheets by stable studio IDs. Stat blocks and item
 mechanics are notes: they need GM review and are not automatically converted into attacks or activities.

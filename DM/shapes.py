@@ -124,6 +124,13 @@ ART_ITEM = Shape(
     'art_item', ['id', 'prompt'], dict(title='', codex='', image='', status='queued', created=0)
 )
 SCENE_CLUE = Shape('scene_clue', [], dict(thread='', text=''))
+ENCOUNTER_CREATURE = Shape('encounter_creature', [], dict(name='', count=1, cr=''))
+ENCOUNTER_DETAIL = Shape(
+    'encounter_detail',
+    [],
+    dict(creatures=[], difficulty='', terrain='', tactics='', resolution=''),
+    {'creatures': ENCOUNTER_CREATURE},
+)
 SCENE = Shape(
     'scene',
     ['id'],
@@ -135,13 +142,14 @@ SCENE = Shape(
         area=0,
         npcs=[],
         encounter='',
-        encounter_detail=dict(creatures=[], difficulty='', terrain='', tactics='', resolution=''),
+        encounter_detail=ENCOUNTER_DETAIL.new(),
         clues=[],
         read_aloud='',
         notes='',
         done=False,
     ),
     {'clues': SCENE_CLUE},
+    {'encounter_detail': ENCOUNTER_DETAIL},
 )
 HANDOUT = Shape('handout', ['id'], dict(title='', player_text='', secrets='', image_prompt=''))
 CHECKLIST_ITEM = Shape('checklist_item', [], dict(text='', done=False))
@@ -328,6 +336,8 @@ SHAPES = {
         THREAD_CLUE,
         ART_ITEM,
         SCENE_CLUE,
+        ENCOUNTER_CREATURE,
+        ENCOUNTER_DETAIL,
         SCENE,
         HANDOUT,
         CHECKLIST_ITEM,

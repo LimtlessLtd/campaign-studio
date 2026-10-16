@@ -12,6 +12,7 @@ const macro = new AsyncFunction(
   'JournalEntry',
   'Actor',
   'Item',
+  'Folder',
   'CONST',
   'fromUuidSync',
   fs.readFileSync('DM/forge/foundry-import-macro.js', 'utf8'),
@@ -67,13 +68,42 @@ const fixture = () => ({
   },
 });
 
-function world(generation, systemId) {
+function world(generation, systemId, bundleMode = false) {
   const scenes = [];
   const journal = [];
   const actors = [{ id: 'hero', name: 'Hero', flags: {} }]; // imported from Foundry, not by the macro
   const items = [];
+  const folders = [];
   const notices = [];
   const data = fixture();
+  const secondData = fixture();
+  secondData.name = 'Second map';
+  secondData.background.src = 'wotg-maps/second-map.webp';
+  secondData.flags.world.wotgForge.plan = 'second-map';
+  const bundle = {
+    format: 'campaign-studio-session-bundle',
+    schema: 1,
+    session: 's1',
+    title: 'The crossing',
+    targetWorld: 'fixture-world',
+    maps: [
+      { slug: 'fixture-map', name: 'Fixture map' },
+      { slug: 'second-map', name: 'Second map' },
+    ],
+    actors: [
+      { id: 'npc-1', name: 'Keeper', public: 'Welcome.' },
+      ...Array.from({ length: 5 }, (_, n) => ({
+        id: `npc-${n + 2}`,
+        name: `Guard ${n + 2}`,
+        public: 'On duty.',
+      })),
+    ],
+    items: [{ id: 'item-1', name: 'Key', public: 'Iron key.' }],
+    handouts: [
+      { id: 'letter', title: 'Letter', player_text: 'Meet at dusk.', secrets: 'A trap.' },
+      { id: 'sketch', title: 'Sketch', player_text: 'A bridge.', secrets: '' },
+    ],
+  };
   let nextId = 0;
   const id = () => String(++nextId);
   const kinds = { Wall: 'walls', AmbientLight: 'lights', Tile: 'tiles', Note: 'notes' };
@@ -151,6 +181,7 @@ function world(generation, systemId) {
     journal,
     actors,
     items,
+    folders,
   };
   const run = () =>
     macro(
@@ -167,23 +198,103 @@ function world(generation, systemId) {
         },
       },
       async (path) => ({
-        json: async () =>
-          clone(
-            path.endsWith('index.json') ? [{ slug: 'fixture-map', name: 'Fixture map' }] : data,
-          ),
+        json: async () => {
+          if (path === 'wotg-maps/index.json')
+            return clone(bundleMode ? bundle.maps : bundle.maps.slice(0, 1));
+          if (path === 'wotg-maps/sessions/index.json')
+            return clone(
+              bundleMode ? [{ id: 's1', title: bundle.title, targetWorld: 'fixture-world' }] : [],
+            );
+          if (path === 'wotg-maps/sessions/s1.json') return clone(bundle);
+          return clone(path === 'wotg-maps/second-map.json' ? secondData : data);
+        },
       }),
       {
-        prompt: async () => ({ slug: 'fixture-map', roofs: true, journal: true, entities: true }),
+        prompt: async () => ({
+          selection: bundleMode ? 'session:s1' : 'map:fixture-map',
+          roofs: true,
+          journal: true,
+          entities: true,
+        }),
         confirm: async () => true,
       },
       { create: makeScene },
       { create: makeJournal },
       { create: makeEntity(actors) },
       { create: makeEntity(items) },
+      {
+        create: async (item) => {
+          const folder = {
+            ...clone(item),
+            id: id(),
+            async update(changes) {
+              Object.assign(this, clone(changes));
+            },
+          };
+          folders.push(folder);
+          return folder;
+        },
+      },
       { OCCLUSION_MODES: { FADE: 3 }, DOCUMENT_OWNERSHIP_LEVELS: { NONE: 0 } },
       (uuid) => actors.find((actor) => `Actor.${actor.id}` === uuid) ?? null,
     );
-  return { game, data, notices, run };
+  return { game, data, bundle, notices, run };
+}
+
+async function checkBundle(generation) {
+  const state = world(generation, 'dnd5e', true);
+  await state.run();
+  const { game, bundle, notices } = state;
+  assert.deepEqual(notices, []);
+  assert.equal(game.scenes.length, 2);
+  assert.equal(game.actors.length, 7); // six managed actors and the existing Foundry hero
+  assert.equal(game.items.length, 1);
+  assert.equal(game.journal.length, 5); // two map keys, a GM overview and two GM handouts
+  assert.equal(game.folders.length, 4);
+  const overview = game.journal.find((row) => tag(row)?.journal === 'overview');
+  assert.match(overview.pages[0].text.content, /Cast/);
+  assert.match(overview.pages[0].text.content, /Items/);
+  const letter = game.journal.find((row) => tag(row)?.handout === 'letter');
+  assert.equal(letter.ownership.default, 0);
+  assert.match(letter.pages[0].text.content, /GM secrets/);
+  const old = {
+    scene: game.scenes[0].id,
+    actor: game.actors.find((row) => tag(row)?.entry === 'npc-2').id,
+    letter: letter.id,
+    folders: game.folders.map((folder) => folder.id),
+  };
+  game.scenes[0].tokens.push({ id: 'gm-token', flags: {} });
+  letter.pages.push({ id: 'gm-page', flags: {}, text: { content: 'Keep me.' } });
+  bundle.actors[1].name = 'Guard captain';
+  bundle.handouts[0].player_text = 'Meet at sunrise.';
+  bundle.title = 'The return crossing';
+  await state.run();
+  assert.deepEqual(notices, []);
+  assert.equal(game.scenes.length, 2);
+  assert.equal(game.actors.length, 7);
+  assert.equal(game.journal.length, 5);
+  assert.equal(game.scenes[0].id, old.scene);
+  assert.equal(game.scenes[0].tokens[0].id, 'gm-token');
+  assert.equal(game.actors.find((row) => tag(row)?.entry === 'npc-2').id, old.actor);
+  assert.equal(game.actors.find((row) => tag(row)?.entry === 'npc-2').name, 'Guard captain');
+  assert.equal(letter.id, old.letter);
+  assert.match(letter.pages.find((page) => tag(page)?.page === 'handout').text.content, /sunrise/);
+  assert.equal(letter.pages.find((page) => page.id === 'gm-page').text.content, 'Keep me.');
+  assert.deepEqual(game.folders.map((folder) => folder.id), old.folders);
+  assert.ok(game.folders.every((folder) => folder.name === bundle.title));
+}
+
+async function checkJournalOnlyBundle() {
+  const { game, notices, run } = world(12, 'other', true);
+  await run();
+  assert.deepEqual(notices, []);
+  assert.equal(game.scenes.length, 2);
+  assert.equal(game.actors.length, 1);
+  assert.equal(game.items.length, 0);
+  const overview = game.journal.find((row) => tag(row)?.journal === 'overview');
+  assert.match(overview.pages[0].text.content, /Guard 2/);
+  assert.match(overview.pages[0].text.content, /Iron key/);
+  assert.equal(overview.ownership.default, 0);
 }
 
 async function check(generation, systemId) {
@@ -296,6 +407,8 @@ async function check(generation, systemId) {
 }
 
 async function main() {
+  for (const generation of [11, 12, 13]) await checkBundle(generation);
+  await checkJournalOnlyBundle();
   for (const generation of [11, 12, 13]) {
     for (const system of ['dnd5e', 'other']) await check(generation, system);
   }

@@ -28,6 +28,83 @@ const KINDS = {
   expand: 'Expand an entry',
 };
 
+function encounterCreatures(docName, creatures, redraw) {
+  const estimate = h('p', { class: 'muted', 'aria-live': 'polite' }, 'Checking encounter…');
+  let latest = 0;
+  let timer;
+  const refresh = () => {
+    const asked = ++latest;
+    clearTimeout(timer);
+    if (creatures.some((row) => !row.name.trim())) {
+      render(estimate, 'Name each creature to rate this encounter.');
+      return;
+    }
+    timer = setTimeout(async () => {
+      try {
+        const result = await post('/api/encounter/rating', { creatures });
+        if (asked !== latest) return;
+        if (result.status === 'no_party')
+          render(estimate, 'Import a party with character levels to rate this encounter.');
+        else if (result.status === 'no_creatures')
+          render(estimate, 'Add creatures to rate this encounter.');
+        else if (result.status === 'missing_cr')
+          render(estimate, 'Enter a valid CR for: ' + result.unrated.join(', ') + '.');
+        else
+          render(
+            estimate,
+            `${result.rating[0].toUpperCase() + result.rating.slice(1)} for ${result.party_size} characters: ${result.adjusted_xp} adjusted XP (deadly from ${result.thresholds.deadly}). 2014 5e estimate; terrain and tactics may change the difficulty.`,
+          );
+      } catch (error) {
+        if (asked === latest) render(estimate, 'Encounter rating unavailable: ' + error.message);
+      }
+    }, 250);
+  };
+  setTimeout(refresh, 0);
+  return [
+    ...creatures.map((creature) =>
+      h(
+        'div',
+        { class: 'row' },
+        field(docName, creature, 'name', { label: 'Creature', onchange: refresh }),
+        field(docName, creature, 'cr', {
+          label: 'Challenge rating (CR)',
+          placeholder: 'e.g. 1/4',
+          onchange: refresh,
+        }),
+        h(
+          'label',
+          {},
+          'Count',
+          h('input', {
+            type: 'number',
+            min: 1,
+            max: 100,
+            value: creature.count,
+            oninput: (e) => {
+              creature.count = Math.max(1, Math.min(100, Number(e.target.value) || 1));
+              save(docName);
+              refresh();
+            },
+          }),
+        ),
+        h(
+          'button',
+          {
+            class: 'danger',
+            onclick: () => {
+              creatures.splice(creatures.indexOf(creature), 1);
+              save(docName);
+              redraw();
+            },
+          },
+          'Remove creature',
+        ),
+      ),
+    ),
+    estimate,
+  ];
+}
+
 async function queueArt({
   map = '',
   area = null,
@@ -881,48 +958,12 @@ async function prepPage(name, context) {
                   type: 'textarea',
                   rows: 2,
                 }),
-                ...sc.encounter_detail.creatures.map((creature) =>
-                  h(
-                    'div',
-                    { class: 'row' },
-                    field(docName, creature, 'name', { label: 'Creature' }),
-                    h(
-                      'label',
-                      {},
-                      'Count',
-                      h('input', {
-                        type: 'number',
-                        min: 1,
-                        max: 100,
-                        value: creature.count,
-                        oninput: (e) => {
-                          creature.count = Math.max(1, Number(e.target.value) || 1);
-                          save(docName);
-                        },
-                      }),
-                    ),
-                    h(
-                      'button',
-                      {
-                        class: 'danger',
-                        onclick: () => {
-                          sc.encounter_detail.creatures.splice(
-                            sc.encounter_detail.creatures.indexOf(creature),
-                            1,
-                          );
-                          save(docName);
-                          drawScenes();
-                        },
-                      },
-                      'Remove creature',
-                    ),
-                  ),
-                ),
+                ...encounterCreatures(docName, sc.encounter_detail.creatures, drawScenes),
                 h(
                   'button',
                   {
                     onclick: () => {
-                      sc.encounter_detail.creatures.push({ name: '', count: 1 });
+                      sc.encounter_detail.creatures.push(blank('encounter_creature'));
                       save(docName);
                       drawScenes();
                     },
@@ -1000,6 +1041,7 @@ async function prepPage(name, context) {
     );
   drawScenes();
   const others = activePreps().filter((n) => n !== name);
+  const bundleStatus = h('p', { class: 'muted', 'aria-live': 'polite' });
   render(
     main,
     h(
@@ -1048,6 +1090,45 @@ async function prepPage(name, context) {
         )
       : null,
     readinessBox,
+    h(
+      'div',
+      { class: 'card' },
+      h('h2', {}, 'Publish this session to Foundry'),
+      h(
+        'p',
+        { class: 'muted' },
+        'Copy linked maps, NPCs, items and handouts to the selected Foundry world. Import the bundle once as GM with the current macro.',
+      ),
+      h(
+        'div',
+        { class: 'row' },
+        h(
+          'button',
+          {
+            onclick: async () => {
+              try {
+                await flush(docName);
+                render(bundleStatus, 'Exporting session bundle…');
+                const result = await post('/api/prep/' + name + '/export', {});
+                render(
+                  bundleStatus,
+                  `Ready in Foundry Data for ${result.world}: ${result.maps} maps, ${result.actors} actors, ${result.items} items, ${result.handouts} handouts. Run the macro as GM and choose this session.`,
+                );
+              } catch (error) {
+                render(bundleStatus, 'Session export failed: ' + error.message);
+              }
+            },
+          },
+          'Export session bundle',
+        ),
+        h(
+          'a',
+          { class: 'btn', href: '/forge-scripts/foundry-import-macro.js', download: true },
+          'Download import macro',
+        ),
+      ),
+      bundleStatus,
+    ),
     h(
       'div',
       { class: 'three' },

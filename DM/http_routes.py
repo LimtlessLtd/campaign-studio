@@ -16,6 +16,7 @@ import arc_options
 import auto_run
 import config
 import context as prompt_context
+import encounter_budget
 import foundry_backup
 import foundry_library
 import foundry_upgrade
@@ -30,6 +31,7 @@ import remote_access
 import request_workflow
 import records
 import revisions
+import session_bundle
 import shapes
 import storage
 import transcript_classifier
@@ -63,6 +65,7 @@ from campaign_core import (
     job_file,
     job_progress,
     campaign_info,
+    campaign_facts,
     party_level,
     list_docs,
     list_images,
@@ -184,6 +187,7 @@ ROUTES = {
         (lambda path: path == '/api/foundry/library/read', '_post_read_library'),
         (lambda path: path == '/api/foundry/world/import', '_post_import_world'),
         (lambda path: path == '/api/foundry/world/remove', '_post_remove_world'),
+        (lambda path: path == '/api/encounter/rating', '_post_encounter_rating'),
         (lambda path: path == '/api/memory/preview', '_post_memory_preview'),
         (lambda path: path == '/api/memory/apply', '_post_memory_apply'),
         (lambda path: path == '/api/foundry/backup/create', '_post_backup_create'),
@@ -243,6 +247,10 @@ ROUTES = {
             '_post_transcript_remove',
         ),
         (lambda path: path == '/api/maps/import', '_post_map_import'),
+        (
+            lambda path: path.startswith('/api/prep/') and path.endswith('/export'),
+            '_post_prep_export',
+        ),
         (lambda path: path == '/api/settings', '_post_settings'),
         (lambda path: path == '/api/art/generate', '_post_art_generate'),
         (lambda path: path == '/api/maps/create', '_post_map_create'),
@@ -648,6 +656,26 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _get_memory_lore_folders(self, path, query, p):
         return self.send_json({'folders': memory_import.lore_folders(self._memory_snapshot())})
+
+    def _post_encounter_rating(self, path, query, p):
+        creatures = p.get('creatures')
+        if (
+            not isinstance(creatures, list)
+            or len(creatures) > 12
+            or any(
+                not isinstance(row, dict)
+                or not isinstance(row.get('name'), str)
+                or not 1 <= len(row['name'].strip()) <= 100
+                or type(row.get('count')) is not int
+                or not 1 <= row['count'] <= 100
+                or not isinstance(row.get('cr', ''), str)
+                or len(row.get('cr', '')) > 8
+                for row in creatures
+            )
+        ):
+            raise Invalid('Use at most twelve named creatures with counts from 1 to 100.')
+        party = campaign_facts().get('party', {})
+        return self.send_json(encounter_budget.rate(creatures, party.get('members', [])))
 
     def _post_memory_preview(self, path, query, p):
         proposal = memory_import.proposal(
@@ -1389,6 +1417,17 @@ class Handler(SimpleHTTPRequestHandler):
     def _post_map_import(self, path, query, p):
         with LOCK:
             return self.send_json(maps_io.import_image(p, write_doc, campaign.active()))
+
+    def _post_prep_export(self, path, query, p):
+        parts = path.split('/')
+        if len(parts) != 5 or not SLUG.fullmatch(parts[3]):
+            raise Invalid('Invalid session export route.')
+        with LOCK:
+            return self.send_json(
+                session_bundle.export(
+                    parts[3], request_read, write_doc, map_busy, campaign.active()
+                )
+            )
 
     def _post_settings(self, path, query, p):
         cfg = config.settings()

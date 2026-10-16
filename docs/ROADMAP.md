@@ -27,13 +27,13 @@ Ranked by how much each holds back the goal.
    takes chosen folders. Existing campaign records, session summaries and selected Foundry journals enter through
    a reviewed memory import; recent session logs reach AI drafts. Every AI feature depends on richer thread
    history and context.
-3. **Session workflow** (W35–W37). Session Forge turns a pitch into a linked prep and queued map briefs.
+3. **Session workflow** (W35). Session Forge turns a pitch into a linked prep and queued map briefs.
    Request and map-content proposals are reviewed row by row: untick, redraft one row alone, or apply what
-   is ticked. A wrap-up folds played outcomes back into threads. Each prep now has a readiness board;
-   encounter budget ratings remain.
-4. **Foundry write side** (W25, W38–W41, W46, W47). The import macro handles one map per run with
-   description-only sheets. Tokens, playable stats, session journals and handouts are missing, and imported
-   actors come back duplicated.
+   is ticked. A wrap-up folds played outcomes back into threads. Encounter budgets now use the imported
+   party's levels and stored creature CRs, and each prep has a readiness board.
+4. **Foundry write side** (W25, W39–W41, W46, W47). One session bundle now imports linked maps,
+   descriptive sheets and GM handouts in one run. Tokens, playable stats, scene journals and player-visible
+   handout pages remain.
 5. **Data at scale** (W29, W54). Codex entries and threads now save separately; deletion, retained history
    and other whole documents still need work at real campaign sizes.
 6. **Map breadth** (W26, W48–W50). One procedural generator. Other environments rely on the model drawing a
@@ -54,11 +54,11 @@ into the threads.
 | --------------------- | ------------------------------------------------- | ------------- |
 | 1. Start next session | Recap drafts read the latest earlier session logs | W35           |
 | 2. Pitch              | Session Forge drafts a linked prep                | W35           |
-| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | W37           |
+| 3. Outline            | Accept, reject or redraft each scene, map or NPC  | —             |
 | 4. Maps               | Session map briefs queue layout workflows         | W26, W48      |
 | 5. Cast               | Free-text stats and one image per entry           | W25, W41, W46 |
 | 6. Art                | One image per click, no shared style              | W42           |
-| 7. Publish to Foundry | One map per macro run                             | W38–W40, W47  |
+| 7. Publish to Foundry | A session bundle imports in one macro run         | W39–W40, W47  |
 | 8. Play and wrap up   | Notes in; reviewed log, thread and codex changes  | W35           |
 
 ## Milestone
@@ -150,31 +150,28 @@ their row and finding say enough.
   (`arcSeedsBox`), and start a wrap-up from a transcript's confirmed play, prefilled with the thread
   ledger's applied outcomes (W70), so a recording and the table notes meet in one proposal.
 
-### W37 Party encounter budgets
+### W36–W38 Session readiness, encounter budgets and bundles
 
-- W36 is complete: the board on each prep checks saved scene outlines, linked map files, content and
-  export freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and encounter plans.
-  Each gap opens the map, NPC, art queue or exact prep section that can fix it. A map copy is current only
-  when its export follows the prep and map files' latest edits; older map entries without a stamp ask for
-  a fresh export. The board rates neither encounter difficulty against the party nor token art yet: those
-  belong to W37 and W40. The existing Foundry export copies maps only; W38 adds a session bundle.
-- W37 needs character levels and classes. In dnd5e they come from class items embedded in each actor (keys
-  `!actors.items!<actor>.<item>` in the world database), which the World Library reader now reads into `stats` (`foundry_party`). Every AI draft's `campaign.party` carries the roster's size and average level, and Session Forge map briefs take that level. Encounter budget checks do not use it yet.
+- The readiness board checks saved scene outlines, linked map files and content, map copy freshness, NPC
+  mechanics and portraits, queued art, handouts, chosen threads and encounter plans. Each gap opens the
+  relevant editor. An older map entry without an export stamp asks for a fresh export; a later prep or map
+  edit makes the copy stale. Token art remains W40.
+- The encounter plan rates creature CRs against the imported party's character levels using 2014 D&D 5e
+  XP thresholds. Missing CRs or levels leave the estimate unrated. Session Forge map briefs also use the
+  party level, and the party roster enters AI draft context.
+- One session bundle exports linked maps, NPCs, items and handouts to Foundry Data for a GM macro import.
 
 ### W38–W41, W46, W47 Publishing to Foundry
 
-- Decide the transport before W38, and record the decision in `docs/ARCHITECTURE.md`:
+- The W38 transport decision is recorded in `docs/ARCHITECTURE.md`:
   - (a) extend the import macro to read a session manifest in `Data/wotg-maps`;
   - (b) a companion module (W47) that reads the same manifest;
   - (c) an Adventure compendium written with the official Foundry CLI. The owner suggested the CLI, and
     Foundry's own Adventure import shows what will change. It writes database files, so it needs the
     owner's decision and a change to the Foundry rule in `AGENTS.md`.
 
-  Start with (a) and keep the manifest format stable so (b) can reuse it.
+  W38 uses (a): a versioned manifest under `Data/wotg-maps/sessions`; W47 can reuse it.
 
-- W38: a **bundle** holds every map, actor, item, journal and handout a prep links, placed in sidebar
-  folders named for the session. Reruns update managed documents in place and keep GM-made ones, as map
-  imports do today.
 - W39: a GM journal with an overview page, one page per scene (read-aloud, secrets, encounter, `@UUID` links
   to scenes, actors and items) and loot. Handouts go in a separate journal whose ownership the GM sets per
   handout.

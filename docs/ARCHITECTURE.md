@@ -43,6 +43,7 @@ flowchart LR
 | `DM/foundry_solver.py`                | Compatible build and dependency selection                                             |
 | `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion          |
 | `DM/foundry_party.py`                 | Character level, classes, AC and HP from actors and their class items; party totals   |
+| `DM/encounter_budget.py`              | Pure 2014 D&D 5e encounter XP estimate from stored creature CRs and party levels      |
 | `DM/memory_import.py`                 | Bounded legacy, summary and Foundry lore parsing into reviewed import candidates      |
 | `DM/foundry_leveldb.py`               | Read-only, standard-library reader for the active LevelDB files of a v11+ world       |
 | `DM/storage.py`                       | Atomic JSON replacement and cooperating thread/process locks                          |
@@ -62,6 +63,7 @@ flowchart LR
 | `DM/record_changes.py`                | Changes a proposal makes to existing records, applied and previewed by one function   |
 | `DM/revisions.py`                     | Map plan/key/brief checkpoints, preview and restore                                   |
 | `DM/maps_io.py`                       | Image-map import and complete exports to the selected Foundry Data directory          |
+| `DM/session_bundle.py`                | Versioned session manifest from prep links and one-action map export                  |
 | `DM/forge/forge.py`                   | Plan parser, wall/light geometry, scene exports and catalogue registration            |
 | `DM/forge/generate.py`, `gen_city.py` | Procedural generator registry and city layout generation                              |
 | `DM/forge/render2d.py`, `roofs.py`    | Deterministic tiled raster painting and roof geometry                                 |
@@ -181,7 +183,7 @@ Links and provenance such as `map`, `area`, `workflow` or `request` are optional
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, schema 15 adds thread map, pin and clue links, and schema 16 adds loot given, who appeared and leads to each session log. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, schema 15 adds thread map, pin and clue links, schema 16 adds loot given, who appeared and leads to each session log, and schema 17 adds CR to prep encounter creatures. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -514,6 +516,22 @@ back to Foundry. Assets and JSON are copied to
 `Data/wotg-maps`; the user runs the macro as GM. No world database is written by Python. Imported documents
 carry stable studio IDs and generated ownership flags. Reimports preserve custom tokens/notes/journal pages
 and unmanaged walls/lights for modern managed imports; older untagged scenes may need explicit wall replacement.
+
+`POST /api/prep/<id>/export` reads the saved prep, its scene map and NPC links, maps tagged for that session,
+and each linked map key's NPC and item IDs. `session_bundle` checks every link and preflights every map, then
+uses `maps_io.export` for the individual assets before atomically writing schema-1 JSON at
+`Data/wotg-maps/sessions/<id>.json` and its picker index. The manifest names the target world, map slugs,
+Studio entry snapshots and text handouts. The picker index includes the target world so the macro only lists
+its sessions. Its IDs and fields are stable and additive for a future companion
+module (W47). It contains GM secrets, so it stays in the local Foundry Data folder, never in source. The
+macro checks the world and format, imports the maps through the existing managed-document path, and upserts
+the linked descriptive sheets, a GM-only cast/item overview and handout journals under session-tagged sidebar
+folders. An entry
+whose UUID belongs to the selected Foundry world is linked without creating or moving the original. The
+macro never deletes a Foundry document; retries update its own tags and preserve GM pages and tokens. A
+failed macro run may have applied earlier maps, and can safely be retried after the problem is fixed.
+Likewise, a failed export keeps the previous manifest but may have refreshed earlier map files; export again
+after fixing the error before importing.
 
 The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12 or v13
 scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while other systems get journal

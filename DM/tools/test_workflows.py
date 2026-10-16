@@ -365,6 +365,72 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(stale['export']['action']['href'], '#/maps/' + slug)
         self.request('/api/prep/s999/readiness', expected=404)
         self.request('/api/prep/abc/readiness', expected=400)
+    def test_session_bundle_exports_two_maps_six_actors_and_two_handouts(self):
+        first, _ = self.import_map()
+        second, _ = self.import_map()
+        for number in range(6):
+            self.seed(
+                f'codex/actor-{number}',
+                shapes.CODEX_ENTRY.new(
+                    id=f'actor-{number}', type='npc', name=f'Actor {number}', public='A guard.'
+                ),
+            )
+        self.seed('codex/item-one', shapes.CODEX_ENTRY.new(id='item-one', type='item', name='Key'))
+        key = self.stored('mapkey/' + first)
+        key['areas'][0]['npcs'] = ['actor-0', 'actor-1']
+        key['areas'][0]['items'] = ['item-one']
+        self.seed('mapkey/' + first, key)
+        prep = shapes.PREP.new(
+            n=1,
+            title='The crossing',
+            scenes=[
+                shapes.SCENE.new(id='one', map=first, npcs=['actor-2', 'actor-3']),
+                shapes.SCENE.new(id='two', map=second, npcs=['actor-4', 'actor-5']),
+            ],
+            handouts=[
+                shapes.HANDOUT.new(id='letter', title='Letter', player_text='Meet at dusk.'),
+                shapes.HANDOUT.new(id='map', title='Map', player_text='A sketch.'),
+            ],
+        )
+        self.seed('prep/s1', prep)
+
+        result = self.request('/api/prep/s1/export', {})
+        self.assertEqual(
+            (result['maps'], result['actors'], result['items'], result['handouts']),
+            (2, 6, 1, 2),
+        )
+        exported = self.root / 'FoundryData/wotg-maps'
+        manifest_path = exported / 'sessions/s1.json'
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        self.assertEqual((manifest['schema'], manifest['targetWorld']), (1, 'fixture-world'))
+        self.assertEqual({row['slug'] for row in manifest['maps']}, {first, second})
+        self.assertEqual(len(manifest['actors']), 6)
+        self.assertEqual({row['id'] for row in manifest['handouts']}, {'letter', 'map'})
+        self.assertEqual([row['id'] for row in manifest['items']], ['item-one'])
+        self.assertTrue((exported / f'{first}.json').is_file())
+        self.assertTrue((exported / f'{second}.json').is_file())
+        self.assertEqual(
+            json.loads((exported / 'sessions/index.json').read_text()),
+            [{'id': 's1', 'title': 'The crossing', 'targetWorld': 'fixture-world'}],
+        )
+
+        prep['handouts'][0]['player_text'] = 'Meet at sunrise.'
+        self.seed('prep/s1', prep)
+        self.request('/api/prep/s1/export', {})
+        self.assertEqual(
+            json.loads(manifest_path.read_text())['handouts'][0]['player_text'], 'Meet at sunrise.'
+        )
+        self.seed('codex/actor-0', shapes.CODEX_ENTRY.new(id='actor-0', type='item', name='Key'))
+        self.request('/api/prep/s1/export', {}, expected=400)
+        self.assertEqual(
+            json.loads(manifest_path.read_text())['handouts'][0]['player_text'], 'Meet at sunrise.'
+        )
+        prep['scenes'][1]['map'] = 'missing-map'
+        self.seed('prep/s1', prep)
+        self.request('/api/prep/s1/export', {}, expected=400)
+        self.assertEqual(
+            json.loads(manifest_path.read_text())['handouts'][0]['player_text'], 'Meet at sunrise.'
+        )
 
     def test_big_map_is_stocked_in_batches_with_one_retry(self):
         slug, brief = self.import_map()
