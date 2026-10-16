@@ -11,9 +11,9 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
+import config
 import records
 import storage
-import config
 
 PREP_ID = re.compile(r's\d{1,6}\Z')
 MAP_ID = re.compile(r'[a-z0-9][a-z0-9-]{0,63}\Z')
@@ -144,7 +144,8 @@ def report(name, here):
 
     slugs = list(
         dict.fromkeys(
-            s.get('map') for s in scenes if isinstance(s.get('map'), str) and s.get('map')
+            [s.get('map') for s in scenes if isinstance(s.get('map'), str) and s.get('map')]
+            + [slug for slug, entry in maps.items() if entry.get('session') == name]
         )
     )
     map_action = lambda slug, tab: _action('Open map', '#/maps/' + quote(slug, safe=''), tab=tab)
@@ -230,6 +231,68 @@ def report(name, here):
         )
     )
 
+    actor_ids = {ident for scene in scenes for ident in scene.get('npcs', [])}
+    item_ids = set()
+    for key in keys.values():
+        for area in key.get('areas', []):
+            actor_ids.update(area.get('npcs', []))
+            item_ids.update(area.get('items', []))
+    handouts = prep.get('handouts') or []
+    bundle_path = (
+        Path(foundry_data) / 'wotg-maps' / 'sessions' / (name + '.json') if foundry_data else None
+    )
+    try:
+        bundle = json.loads(bundle_path.read_text(encoding='utf-8')) if bundle_path else {}
+    except (OSError, ValueError):
+        bundle = {}
+    source_times = [prep_modified]
+    for slug in slugs:
+        if slug in key_paths and key_paths[slug]:
+            source_times.append(_mtime(key_paths[slug]))
+        if slug in maps:
+            source_times.extend(
+                _mtime(path)
+                for field in ('image', 'scene')
+                if (path := _artifact(here, maps[slug].get(field)))
+            )
+    for ident in actor_ids | item_ids:
+        if ident in codex:
+            source_times.append(_mtime(records.record_path(here.data, 'codex', ident)))
+    bundle_current = (
+        isinstance(bundle, dict)
+        and bundle.get('format') == 'campaign-studio-session-bundle'
+        and bundle.get('schema') == 1
+        and bundle.get('session') == name
+        and bool(current_world)
+        and bundle.get('targetWorld') == current_world
+        and bundle.get('title') == prep.get('title')
+        and all(
+            isinstance(bundle.get(field), list) for field in ('maps', 'actors', 'items', 'handouts')
+        )
+        and all(ident in codex for ident in actor_ids | item_ids)
+        and {row.get('slug') for row in bundle.get('maps', []) if isinstance(row, dict)}
+        == set(slugs)
+        and {row.get('id') for row in bundle.get('actors', []) if isinstance(row, dict)}
+        == actor_ids
+        and {row.get('id') for row in bundle.get('items', []) if isinstance(row, dict)} == item_ids
+        and bundle.get('handouts')
+        == [
+            {field: handout.get(field) for field in ('id', 'title', 'player_text', 'secrets')}
+            for handout in handouts
+        ]
+        and _mtime(bundle_path) >= max(source_times)
+    )
+    checks.append(
+        _check(
+            'bundle',
+            'Session bundle current',
+            [] if bundle_current else ['Export the saved session bundle'],
+            'The complete bundle matches the selected world and saved session.',
+            prep_action('Go to session export', 'publish'),
+            applicable=bool(slugs or actor_ids or item_ids or handouts),
+        )
+    )
+
     npc_ids = list(dict.fromkeys(ident for scene in scenes for ident in (scene.get('npcs') or [])))
     no_stats = [
         codex[ident].get('name') or ident if ident in codex else ident
@@ -294,7 +357,6 @@ def report(name, here):
         )
     )
 
-    handouts = prep.get('handouts') or []
     unwritten = [
         h.get('title') or 'Untitled handout'
         for h in handouts

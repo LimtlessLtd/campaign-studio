@@ -294,7 +294,7 @@ class StudioIntegration(unittest.TestCase):
         entry['scene'] = ''  # a catalogue row without its rendered scene is not ready
         self.seed('maps/index', index)
         initial = self.request('/api/prep/s1/readiness')
-        self.assertEqual(initial['gaps'], 10)
+        self.assertEqual(initial['gaps'], 11)
         checks = {row['id']: row for row in initial['checks']}
         self.assertEqual({row['status'] for row in checks.values()}, {'needs-work'})
         self.assertEqual(checks['npc_stats']['action']['section'], 'scenes')
@@ -304,7 +304,7 @@ class StudioIntegration(unittest.TestCase):
         prep['scenes'][0].update(
             purpose='The guard tests their story.',
             encounter_detail={
-                'creatures': [{'name': 'Guard', 'count': 1}],
+                'creatures': [{'name': 'Guard', 'count': 1, 'cr': '1/4'}],
                 'difficulty': 'easy',
                 'terrain': '',
                 'tactics': '',
@@ -338,7 +338,7 @@ class StudioIntegration(unittest.TestCase):
         index = self.stored('maps/index')
         next(item for item in index['items'] if item['slug'] == slug)['scene'] = scene_path
         self.seed('maps/index', index)
-        self.request(f'/api/maps/{slug}/export', {})
+        self.request('/api/prep/s1/export', {})
         ready = self.request('/api/prep/s1/readiness')
         self.assertEqual(ready['gaps'], 0)
         self.assertTrue(all(row['status'] == 'ready' for row in ready['checks']))
@@ -347,7 +347,7 @@ class StudioIntegration(unittest.TestCase):
         copied_scene.unlink()
         missing_copy = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
         self.assertEqual(missing_copy['export']['status'], 'needs-work')
-        self.request(f'/api/maps/{slug}/export', {})
+        self.request('/api/prep/s1/export', {})
         self.assertEqual(self.request('/api/prep/s1/readiness')['gaps'], 0)
 
         world = json.loads((self.world / 'world.json').read_text())
@@ -355,7 +355,8 @@ class StudioIntegration(unittest.TestCase):
         (self.world / 'world.json').write_text(json.dumps(world))
         wrong_world = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
         self.assertEqual(wrong_world['export']['status'], 'needs-work')
-        self.request(f'/api/maps/{slug}/export', {})
+        self.assertEqual(wrong_world['bundle']['status'], 'needs-work')
+        self.request('/api/prep/s1/export', {})
         self.assertEqual(self.request('/api/prep/s1/readiness')['gaps'], 0)
 
         prep['notes'] = 'A later table change.'
@@ -363,8 +364,25 @@ class StudioIntegration(unittest.TestCase):
         stale = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
         self.assertEqual(stale['export']['status'], 'needs-work')
         self.assertEqual(stale['export']['action']['href'], '#/maps/' + slug)
+        self.assertEqual(stale['bundle']['status'], 'needs-work')
+        self.assertEqual(stale['bundle']['action']['section'], 'publish')
         self.request('/api/prep/s999/readiness', expected=404)
         self.request('/api/prep/abc/readiness', expected=400)
+
+    def test_prep_readiness_includes_maps_tagged_for_the_session(self):
+        slug, _ = self.import_map()
+        self.seed('prep/s1', shapes.PREP.new(n=1, title='Session 1'))
+        index = self.stored('maps/index')
+        entry = next(item for item in index['items'] if item['slug'] == slug)
+        entry['session'] = 's1'
+        entry['scene'] = ''
+        self.seed('maps/index', index)
+
+        checks = {row['id']: row for row in self.request('/api/prep/s1/readiness')['checks']}
+        self.assertEqual(checks['maps']['status'], 'needs-work')
+        self.assertIn(entry['name'], checks['maps']['detail'])
+        self.assertEqual(checks['bundle']['status'], 'needs-work')
+
     def test_session_bundle_exports_two_maps_six_actors_and_two_handouts(self):
         first, _ = self.import_map()
         second, _ = self.import_map()

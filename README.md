@@ -177,8 +177,8 @@ NPC, item, journal entry, event and thread.
 
 Each session prep has a **Session readiness** board. It checks saved scene outlines, linked map files,
 stocking and Foundry copy freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and
-encounter plans. Use a gap's action to open the relevant editor, then **Recheck** after saving. It checks
-the current map export; token art is still planned.
+encounter plans and the complete session bundle. Use a gap's action to open the relevant editor, then
+**Recheck** after saving. It checks the current export files; token art is still planned.
 
 Each prep scene's **Encounter plan** can list creatures, counts and challenge ratings (CR). When the
 imported Foundry party has character levels and every creature has a valid CR, Studio shows a 2014 D&D

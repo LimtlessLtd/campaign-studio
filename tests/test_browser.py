@@ -695,10 +695,14 @@ class BrowserSmoke(unittest.TestCase):
         )
         self.open('#/prep/s1')
         self.assert_accessible('session bundle desktop')
+        board = self.page.get_by_role('region', name='Session readiness')
+        bundle_row = board.locator('.readiness-row', has_text='Session bundle current')
+        expect(bundle_row).to_contain_text('Needs work')
         self.page.get_by_role('button', name='Export session bundle').click()
         expect(
             self.page.get_by_text('Ready in Foundry Data for fixture-world', exact=False)
         ).to_be_visible()
+        expect(bundle_row).to_contain_text('Ready')
         manifest = json.loads(
             (self.studio.root / 'FoundryData/wotg-maps/sessions/s1.json').read_text(
                 encoding='utf-8'

@@ -1092,7 +1092,7 @@ async function prepPage(name, context) {
     readinessBox,
     h(
       'div',
-      { class: 'card' },
+      { class: 'card', id: 'prep-publish' },
       h('h2', {}, 'Publish this session to Foundry'),
       h(
         'p',
@@ -1114,6 +1114,10 @@ async function prepPage(name, context) {
                   bundleStatus,
                   `Ready in Foundry Data for ${result.world}: ${result.maps} maps, ${result.actors} actors, ${result.items} items, ${result.handouts} handouts. Run the macro as GM and choose this session.`,
                 );
+                context
+                  .api('/api/prep/' + name + '/readiness')
+                  .then(drawReadiness)
+                  .catch(() => {});
               } catch (error) {
                 render(bundleStatus, 'Session export failed: ' + error.message);
               }

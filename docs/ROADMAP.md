@@ -152,8 +152,8 @@ their row and finding say enough.
 
 ### W36–W38 Session readiness, encounter budgets and bundles
 
-- The readiness board checks saved scene outlines, linked map files and content, map copy freshness, NPC
-  mechanics and portraits, queued art, handouts, chosen threads and encounter plans. Each gap opens the
+- The readiness board checks saved scene outlines, linked map files and content, map copy and session
+  bundle freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and encounter plans. Each gap opens the
   relevant editor. An older map entry without an export stamp asks for a fresh export; a later prep or map
   edit makes the copy stale. Token art remains W40.
 - The encounter plan rates creature CRs against the imported party's character levels using 2014 D&D 5e

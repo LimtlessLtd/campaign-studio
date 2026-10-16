@@ -301,8 +301,9 @@ is rendering that map.
 
 - `GET /api/state`, `/api/settings`, `/api/jobs`, `/api/doc/<name>` return local state; `/api/shapes`
   returns the stored record shapes.
-- `GET /api/prep/<id>/readiness` reads saved prep, map, codex, thread and art state for its board. It
-  returns check status, evidence and the editor link for each gap; it does not change a record.
+- `GET /api/prep/<id>/readiness` reads saved prep, map, codex, thread and art state, plus map copies and
+  the session bundle manifest. It returns check status, evidence and the editor link for each gap; it does
+  not change a record.
 - `PUT /api/doc/<name>` uses `X-Rev` and refuses application-owned documents (`settings`, `workflows/*`,
   `jobs/*`) with 403; `PUT /api/plan/<slug>` checkpoints a valid plan.
 - `POST /api/maps/create`, `/api/maps/import` create maps; `/api/maps/<slug>/populate|revise` create workflows.
