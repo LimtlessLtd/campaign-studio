@@ -1,5 +1,6 @@
 """Synthetic inventory, directory and dependency checks for the upgrade report."""
 
+import contextlib
 import json
 import sys
 import tempfile
@@ -99,6 +100,22 @@ def catalog():
             'unlisted': {'status': 'unlisted', 'releases': []},
         },
     }
+
+
+@contextlib.contextmanager
+def selected_backup(backup):
+    """Select the synthetic world and accept `backup` as its verified backup."""
+    world = {'id': 'fixture-world', 'system': 'dnd5e', 'foundry_version': '12.331'}
+    verified = {
+        'path': str(backup),
+        'world': {'id': 'fixture-world', 'system': 'dnd5e', 'core_version': '12.331'},
+    }
+    with (
+        patch.object(upgrade.config, 'settings', return_value={'world_path': str(backup)}),
+        patch.object(upgrade.config, 'world_info', return_value=world),
+        patch.object(foundry_backup, 'verify', return_value=verified) as verify,
+    ):
+        yield verify
 
 
 class UpgradeTests(unittest.TestCase):
@@ -218,20 +235,7 @@ class UpgradeTests(unittest.TestCase):
     def test_report_requires_matching_inventory_and_verified_backup(self):
         with tempfile.TemporaryDirectory(prefix='upgrade-fixture-') as folder:
             backup = Path(folder)
-            world = {
-                'id': 'fixture-world',
-                'system': 'dnd5e',
-                'foundry_version': '12.331',
-            }
-            verified = {
-                'path': str(backup),
-                'world': {'id': 'fixture-world', 'system': 'dnd5e', 'core_version': '12.331'},
-            }
-            with (
-                patch.object(upgrade.config, 'settings', return_value={'world_path': str(backup)}),
-                patch.object(upgrade.config, 'world_info', return_value=world),
-                patch.object(foundry_backup, 'verify', return_value=verified) as verify,
-            ):
+            with selected_backup(backup) as verify:
                 result = upgrade.report(inventory(), str(backup), catalog=catalog())
                 verify.assert_called_once_with(str(backup))
                 self.assertFalse(result['migration_ready'])
@@ -246,6 +250,36 @@ class UpgradeTests(unittest.TestCase):
                 wrong['world']['id'] = 'another-world'
                 with self.assertRaises(ValueError):
                     upgrade.report(wrong, str(backup), catalog=catalog())
+
+    def test_report_accepts_disabled_module_requiring_underscore_library(self):
+        # Foundry library modules may start with an underscore: Custom CSS requires `_CodeMirror`.
+        data = inventory()
+        data['modules'].append(
+            {
+                'id': 'custom-css',
+                'version': '2.0.0',
+                'enabled': False,
+                'relationships': {'requires': [dependency('_CodeMirror')]},
+            }
+        )
+        with tempfile.TemporaryDirectory(prefix='upgrade-fixture-') as folder:
+            backup = Path(folder)
+            # The library is installed in the backup but absent from the GM export.
+            library = backup / 'User Data' / 'Data' / 'modules' / '_CodeMirror'
+            library.mkdir(parents=True)
+            (library / 'module.json').write_text(
+                json.dumps({'id': '_CodeMirror', 'version': '5.65.0'}), encoding='utf-8'
+            )
+            with selected_backup(backup):
+                result = upgrade.report(data, str(backup), catalog=catalog())
+        modules = {item['id']: item for item in result['modules']}
+        self.assertEqual(modules['custom-css']['original_requires'][0]['id'], '_CodeMirror')
+        self.assertFalse(modules['custom-css']['proposed_enabled'])
+        self.assertFalse(modules['_CodeMirror']['proposed_enabled'])
+        self.assertEqual(result['recommended_build'], '12.343')
+        for unsafe in ('', '.', '..', '_.x', '_/x', '_\\x'):
+            with self.subTest(unsafe=unsafe), self.assertRaises(ValueError):
+                foundry_compat.relationships({'relationships': {'requires': [{'id': unsafe}]}})
 
     def test_prepare_clone_uses_v12_restore_receipt_and_keeps_live_world_unchanged(self):
         with tempfile.TemporaryDirectory(prefix='upgrade-clone-fixture-') as folder:
