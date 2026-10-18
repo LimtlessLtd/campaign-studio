@@ -32,8 +32,8 @@ Ranked by how much each holds back the goal.
    is ticked. A wrap-up folds played outcomes back into threads. Encounter budgets now use the imported
    party's levels and stored creature CRs, and each prep has a readiness board.
 4. **Foundry write side** (W25, W39–W41, W46, W47). One session bundle now imports linked maps,
-   descriptive sheets and GM handouts in one run. Tokens, playable stats, scene journals and player-visible
-   handout pages remain.
+   descriptive sheets and GM handouts in one run, on Foundry v11 to v14 (each map one Scene Level on v14).
+   Tokens, playable stats, scene journals and player-visible handout pages remain.
 5. **Data at scale** (W29, W54). Codex entries and threads now save separately; deletion, retained history
    and other whole documents still need work at real campaign sizes.
 6. **Map breadth** (W26, W48–W50). One procedural generator. Other environments rely on the model drawing a
@@ -184,7 +184,7 @@ their row and finding say enough.
 - W46: structured stat blocks mapped to dnd5e actor data, for NPCs without a base. It comes after W41
   because dnd5e activities make hand-built attacks fragile.
 - W47: the module replaces pasted macros, shows what an import will create, update and keep, and moves
-  dialogs to DialogV2 ahead of the V1 dialog removal.
+  dialogs to DialogV2 ahead of the V1 dialog removal in v16 (v13 and v14 log a deprecation warning).
 
 ### W42 Art
 
@@ -198,7 +198,8 @@ their row and finding say enough.
 ### W43, W44, W51 Verification and cost
 
 - W43: every Foundry write path has fixture coverage only. Run the `docs/FOUNDRY_IMPORT.md` checklist with
-  the owner on a disposable copy of a v12 dnd5e world, and on v13 if the owner upgrades. Agents prepare the
+  the owner on a disposable copy of their dnd5e world on the Foundry generation it runs: v14 with dnd5e
+  5.x once the owner's October 2026 upgrade is done, including the Scene Levels step. Agents prepare the
   synthetic map and checklist; the owner runs Foundry. Record exact versions, and turn failures into rows.
 - W44: record tokens, cost and time per AI job from the provider's output (the Claude CLI's JSON result
   reports usage and cost). Show totals per session and month, and ask before running a prompt above a
@@ -217,7 +218,9 @@ their row and finding say enough.
   than drawing a whole environment in up to 200 grid operations.
 - W49: the plan editor paints legend characters with brush, fill and rectangle tools, shows `forge.lint`
   warnings as you paint and checkpoints before saving.
-- W50: the floors of one place share a key. Stairs link them as Foundry Regions or as separate linked scenes.
+- W50: the floors of one place share a key. On v14 the floors can be Scene Levels of one scene, joined by
+  Change Level regions on the stairs. The import tags a map's one Level today (`level: true`), so W50 gives
+  the tag a floor key. Before v14, stairs link Foundry Regions or separate linked scenes.
 
 ### W57 Phone-first editing
 

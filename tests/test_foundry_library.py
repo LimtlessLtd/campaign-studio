@@ -408,6 +408,40 @@ class FoundryLibraryTests(unittest.TestCase):
         self.assertEqual(documents['items'][0]['summary'], 'Brass')
         self.assertEqual(snapshot['omitted'], {})
 
+    def test_reads_v14_scene_backgrounds_from_their_levels(self):
+        # Foundry v14 keeps a scene's background on its Levels, stored as the scene's sublevel.
+        self.database(
+            'scenes',
+            {
+                'tower': {
+                    '_id': 'tower',
+                    'name': 'Tower',
+                    'levels': ['cellar', 'hall'],
+                    'initialLevel': 'hall',
+                    'thumb': 'tower-thumb.webp',
+                },
+                'vault': {'_id': 'vault', 'name': 'Vault', 'levels': ['deep', 'gone']},
+                'empty': {
+                    '_id': 'empty',
+                    'name': 'Empty',
+                    'levels': ['blank'],
+                    'thumb': 'empty-thumb.webp',
+                },
+            },
+            [
+                ('levels', 'tower', 'cellar', {'name': 'Cellar', 'background': {'src': 'c.webp'}}),
+                ('levels', 'tower', 'hall', {'name': 'Hall', 'background': {'src': 'h.webp'}}),
+                ('levels', 'vault', 'deep', {'name': 'Deep', 'background': {'src': 'd.webp'}}),
+                ('levels', 'empty', 'blank', {'name': 'Blank', 'background': {'src': None}}),
+            ],
+        )
+        scenes = foundry_library.read_world(foundry_library.selected_world())['documents']['scenes']
+        self.assertEqual(
+            {scene['name']: scene['image'] for scene in scenes},
+            # The initial Level, else the first; a Level without a background shows the thumbnail.
+            {'Tower': 'h.webp', 'Vault': 'd.webp', 'Empty': 'empty-thumb.webp'},
+        )
+
     def test_world_folder_snapshot_goes_stale_only_when_files_change(self):
         self.world_folder()
         world = foundry_library.selected_world()

@@ -121,7 +121,7 @@ try:
 
     fixture_catalog = {
         'source': 'synthetic-preview',
-        # A v14 full match shows how the report keeps to the generation Studio can import.
+        # v14 is the newest generation Studio can import, so the report recommends its full match.
         'builds': ['14.369', '13.351', '12.343', '12.331'],
         'packages': {
             'dnd5e': {

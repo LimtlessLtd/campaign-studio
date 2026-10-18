@@ -235,7 +235,8 @@ remain planned work.
 The macro also creates/updates D&D 5e NPC and loot item sheets by stable studio IDs. Stat blocks and item
 mechanics are notes: they need GM review and are not automatically converted into attacks or activities.
 Other game systems receive linked character/item information in the journal. The export uses a v12 scene
-shape; the GM macro adapts it to Foundry v11, v12 or v13 and stops before making changes on other versions.
+shape; the GM macro adapts it to Foundry v11, v12, v13 or v14 (one Scene Level per map) and stops before
+making changes on other versions.
 These combinations have synthetic fixture coverage, but still need live GM verification before use in a
 campaign. See [Foundry import compatibility](docs/FOUNDRY_IMPORT.md) for the version/system matrix and
 the import/reimport checks. D&D 5e sheet mechanics remain descriptive notes.
@@ -248,7 +249,7 @@ See [Foundry backup and restore test](docs/FOUNDRY_BACKUP.md).
 **Foundry upgrade compatibility report** in Settings accepts an inventory exported by a GM Script macro in
 the original v12 world and a verified backup of that world. It checks Foundry's stable release and package
 directory pages, release manifests, the game system, enabled modules and required dependencies. It shows the
-newest full match up to the target Foundry generation (by default the newest Studio's import supports, v13
+newest full match up to the target Foundry generation (by default the newest Studio's import supports, v14
 today; the GM may choose another), newer full matches with why they are not recommended, any unverified
 packages, exclusions including Plutonium, and blockers. The inventory and
 report are saved beside the backup. After a verified restore test copy is opened and inspected in v12, Studio
