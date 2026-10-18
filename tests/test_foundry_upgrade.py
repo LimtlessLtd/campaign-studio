@@ -991,7 +991,7 @@ class UpgradeTests(unittest.TestCase):
             return root / name, modules
 
         with tempfile.TemporaryDirectory(prefix='upgrade-clone-scan-') as folder:
-            root = Path(folder)
+            root = Path(folder).resolve()  # callers resolve the clone path (8.3 temp on CI)
             outside = root / 'outside' / 'beta'
             package(outside, 'beta')
             clone, _ = clone_with_readme('clean')
