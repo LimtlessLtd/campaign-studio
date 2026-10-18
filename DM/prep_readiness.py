@@ -14,6 +14,7 @@ from urllib.parse import quote
 import config
 import foundry_library
 import records
+import session_bundle
 import storage
 
 PREP_ID = re.compile(r's\d{1,6}\Z')
@@ -147,12 +148,16 @@ def report(name, here):
         )
     )
 
-    slugs = list(
-        dict.fromkeys(
-            [s.get('map') for s in scenes if isinstance(s.get('map'), str) and s.get('map')]
-            + [slug for slug, entry in maps.items() if entry.get('session') == name]
-        )
-    )
+    key_paths, keys = {}, {}
+
+    def key_for(slug):
+        if slug in maps:
+            key_paths[slug] = _map_key_path(here, slug)
+            keys[slug] = _read(key_paths[slug], {}) if key_paths[slug] else {}
+        return keys.get(slug, {})
+
+    # The bundle's own rule decides what this prep links, so the bundle check cannot drift from it.
+    slugs, actor_ids, item_ids = session_bundle.bundle_links(name, scenes, maps.values(), key_for)
     map_action = lambda slug, tab: _action('Open map', '#/maps/' + quote(slug, safe=''), tab=tab)
     missing_maps = [slug for slug in slugs if slug not in maps]
     unrendered = [
@@ -174,8 +179,6 @@ def report(name, here):
         )
     )
 
-    key_paths = {slug: _map_key_path(here, slug) for slug in slugs if slug in maps}
-    keys = {slug: _read(path, {}) if path else {} for slug, path in key_paths.items()}
     unstocked = [slug for slug in slugs if slug in maps and not keys[slug].get('stocked')]
     checks.append(
         _check(
@@ -239,12 +242,6 @@ def report(name, here):
         )
     )
 
-    actor_ids = {ident for scene in scenes for ident in scene.get('npcs', [])}
-    item_ids = set()
-    for key in keys.values():
-        for area in key.get('areas', []):
-            actor_ids.update(area.get('npcs', []))
-            item_ids.update(area.get('items', []))
     handouts = prep.get('handouts') or []
     bundle_path = (
         Path(foundry_data) / 'wotg-maps' / 'sessions' / (name + '.json') if foundry_data else None
