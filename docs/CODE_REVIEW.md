@@ -167,8 +167,9 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
   edit existing Foundry documents or provide two-way synchronization. The live tab has synthetic tests but
   no version-specific GM verification yet.
 - NPC/item mechanics are notes, not complete mechanical D&D 5e sheets. Scene export targets v12; the GM
-  macro adapts v11/v12/v13 fields with fixture coverage but no live GM compatibility certification. v14 is
-  rejected before import.
+  macro adapts v11/v12/v13/v14 fields (v14 Scene Levels included) with fixture coverage but no live GM
+  compatibility certification. v15 and later are rejected before import. The macro's V1 `Dialog` logs a
+  deprecation warning in v13 and v14 and is removed in v16 (W47).
 - The W36 prep readiness board reads saved state and has synthetic gap, recovery and desktop/phone browser
   checks. An older map entry without `exported_at` asks for one fresh export; subsequent prep, key, image or
   scene changes make that copy stale, as does a missing copied scene/image or a changed selected world. It

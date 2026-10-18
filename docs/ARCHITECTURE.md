@@ -506,7 +506,7 @@ ends it.
 The world picker reads `world.json` for identity and system information. The World Library reads selected
 local media under `Data` and the world's scenes, journals, actors and items, read from its database files
 (`foundry_leveldb` for v11+ worlds, following `CURRENT` and `MANIFEST` to exclude retired files; one JSON
-document per line for v10 and earlier) or from a GM-exported
+document per line for v10 and earlier; a v14 scene's image from its initial Level) or from a GM-exported
 snapshot. A GM-run Script macro can instead send a fresh snapshot from the running Foundry client to a
 paired Studio tab on request, without direct cross-origin API access. All three paths pass
 `normalize_snapshot`, which validates the chosen world and stores only bounded
@@ -534,11 +534,17 @@ failed macro run may have applied earlier maps, and can safely be retried after 
 Likewise, a failed export keeps the previous manifest but may have refreshed earlier map files; export again
 after fixing the error before importing.
 
-The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12 or v13
+The exported scene schema targets v12. The standalone GM macro selects an adapter for v11, v12, v13 or v14
 scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while other systems get journal
-content. Fixture contracts cover these combinations and tagged reimport ownership. The live GM checks in
-`docs/FOUNDRY_IMPORT.md` remain necessary. Foundry write-back, mechanical stat block
-adapters and v14 support are future work.
+content. An adapter turns the export into a new scene's fields, updates an imported scene's generated
+fields, places the generated walls, lights, roofs and pins, and sets a roof's elevation; the import workflow
+around it only manages ownership tags and stable IDs. The v14 adapter puts the background on one tagged
+Studio Scene Level, places generated documents on that Level only and lifts roofs to its top; a scene
+imported before the world moved to v14 adopts its migrated initial Level (`docs/FOUNDRY_IMPORT.md`).
+`foundry_compat.IMPORT_GENERATION` names the newest adapter, and a test keeps it equal to `CORE_ADAPTERS`.
+Fixture contracts cover these combinations and tagged reimport ownership. The live GM checks in
+`docs/FOUNDRY_IMPORT.md` remain necessary. Foundry write-back and mechanical stat block adapters are
+future work.
 
 The Foundry backup service reads the selected world manifest to locate its User Data folder. It copies that
 whole folder only while Foundry is closed, records and verifies every file checksum, and can materialize a

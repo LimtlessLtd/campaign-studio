@@ -106,8 +106,25 @@ function world(generation, systemId, bundleMode = false) {
   };
   let nextId = 0;
   const id = () => String(++nextId);
-  const kinds = { Wall: 'walls', AmbientLight: 'lights', Tile: 'tiles', Note: 'notes' };
+  const levels = generation >= 14;
+  const kinds = {
+    Wall: 'walls',
+    AmbientLight: 'lights',
+    Tile: 'tiles',
+    Note: 'notes',
+    Level: 'levels',
+  };
   const makeEmbedded = (item) => ({ ...clone(item), id: id() });
+  // Foundry v14 sets a Level's top to four times the grid distance when none is given.
+  const makeLevel = (grid) => (item) => ({
+    ...clone(item),
+    id: item.id ?? id(),
+    elevation: { ...item.elevation, top: item.elevation?.top ?? (grid.distance ?? 5) * 4 },
+  });
+  // v14 has no scene background; writing one would rely on Foundry's deprecated shims.
+  const native = (changes) => {
+    if (levels) assert.equal(changes.background, undefined, 'v14 keeps the background on a Level');
+  };
   const makeScene = (item) => {
     const scene = {
       ...clone(item),
@@ -115,9 +132,14 @@ function world(generation, systemId, bundleMode = false) {
       tokens: [],
       tiles: [],
       notes: [],
-      walls: item.walls.map(makeEmbedded),
-      lights: item.lights.map(makeEmbedded),
+      walls: (item.walls ?? []).map(makeEmbedded),
+      lights: (item.lights ?? []).map(makeEmbedded),
+      ...(levels ? { levels: (item.levels ?? []).map(makeLevel(item.grid)) } : {}),
+      get initialLevel() {
+        return this.levels?.[0];
+      },
       async update(changes) {
+        native(changes);
         Object.assign(this, clone(changes));
       },
       async createThumbnail() {
@@ -127,7 +149,15 @@ function world(generation, systemId, bundleMode = false) {
         this[kinds[kind]] = this[kinds[kind]].filter((entry) => !ids.includes(entry.id));
       },
       async createEmbeddedDocuments(kind, entries) {
-        this[kinds[kind]].push(...entries.map(makeEmbedded));
+        const make = kind === 'Level' ? makeLevel(this.grid) : makeEmbedded;
+        this[kinds[kind]].push(...entries.map(make));
+      },
+      async updateEmbeddedDocuments(kind, entries) {
+        for (const change of entries) {
+          const old = this[kinds[kind]].find((entry) => entry.id === change._id);
+          assert.ok(old, kind);
+          Object.assign(old, clone(change));
+        }
       },
     };
     scenes.push(scene);
@@ -218,7 +248,12 @@ function world(generation, systemId, bundleMode = false) {
         }),
         confirm: async () => true,
       },
-      { create: makeScene },
+      {
+        create: async (item) => {
+          native(item);
+          return makeScene(item);
+        },
+      },
       { create: makeJournal },
       { create: makeEntity(actors) },
       { create: makeEntity(items) },
@@ -235,10 +270,16 @@ function world(generation, systemId, bundleMode = false) {
           return folder;
         },
       },
-      { OCCLUSION_MODES: { FADE: 3 }, DOCUMENT_OWNERSHIP_LEVELS: { NONE: 0 } },
+      levels
+        ? {
+            OCCLUSION_MODES: { NONE: 0, FADE: 1, SURFACE: 2, RADIAL: 4, VISION: 8 },
+            FOG_EXPLORATION_MODES: { DISABLED: 0, INDIVIDUAL: 1, SHARED: 2 },
+            DOCUMENT_OWNERSHIP_LEVELS: { NONE: 0 },
+          }
+        : { OCCLUSION_MODES: { FADE: 3 }, DOCUMENT_OWNERSHIP_LEVELS: { NONE: 0 } },
       (uuid) => actors.find((actor) => `Actor.${actor.id}` === uuid) ?? null,
     );
-  return { game, data, bundle, notices, run };
+  return { game, data, bundle, notices, run, makeScene };
 }
 
 async function checkBundle(generation) {
@@ -280,7 +321,10 @@ async function checkBundle(generation) {
   assert.equal(letter.id, old.letter);
   assert.match(letter.pages.find((page) => tag(page)?.page === 'handout').text.content, /sunrise/);
   assert.equal(letter.pages.find((page) => page.id === 'gm-page').text.content, 'Keep me.');
-  assert.deepEqual(game.folders.map((folder) => folder.id), old.folders);
+  assert.deepEqual(
+    game.folders.map((folder) => folder.id),
+    old.folders,
+  );
   assert.ok(game.folders.every((folder) => folder.name === bundle.title));
 }
 
@@ -317,9 +361,22 @@ async function check(generation, systemId) {
     assert.equal(scene.tiles[0].roof, true);
   } else {
     assert.equal(scene.environment.darknessLevel, 0.4);
-    assert.equal(scene.fog.exploration, true);
     assert.equal(scene.tiles[0].elevation, 20);
     assert.equal(scene.tiles[0].restrictions.weather, true);
+  }
+  if (generation >= 14) {
+    // One Studio Level holds the background; the roof sits at its top and fades for tokens below.
+    assert.equal(scene.background, undefined);
+    assert.equal(scene.levels.length, 1);
+    assert.equal(scene.levels[0].name, 'Fixture map');
+    assert.equal(scene.levels[0].background.src, 'wotg-maps/fixture-map.webp');
+    assert.deepEqual(scene.fog, { mode: 1 });
+    assert.deepEqual(scene.tiles[0].occlusion, { modes: [1], alpha: 0 });
+    for (const kind of ['walls', 'lights', 'tiles', 'notes'])
+      assert.deepEqual(scene[kind][0].levels, [scene.levels[0].id], kind);
+  } else if (generation > 11) {
+    assert.equal(scene.fog.exploration, true);
+    assert.equal(scene.background.src, 'wotg-maps/fixture-map.webp');
   }
   assert.equal(game.actors.length, systemId === 'dnd5e' ? 2 : 1);
   assert.equal(game.items.length, systemId === 'dnd5e' ? 1 : 0);
@@ -336,6 +393,7 @@ async function check(generation, systemId) {
     journal: game.journal[0].id,
     actor: game.actors[1]?.id,
     item: game.items[0]?.id,
+    level: scene.levels?.[0].id,
   };
   const custom = { id: 'custom', flags: {}, name: 'GM content' };
   scene.walls.push(clone(custom));
@@ -361,6 +419,17 @@ async function check(generation, systemId) {
   data.flags.world.wotgForge.key.areas.push({ n: 2, name: 'Gallery', kind: 'shop', at: [1, 1] });
   data.flags.world.wotgForge.key.areas[0].name = 'Landing revised';
   data.environment.darknessLevel = 0.6;
+  data.background.src = 'wotg-maps/fixture-map-v2.webp';
+  if (generation >= 14) {
+    // The GM raises the Studio Level's ceiling and puts a Level of their own first.
+    scene.levels[0].elevation.top = 30;
+    scene.levels.unshift({
+      id: 'gm-level',
+      name: 'Rooftops',
+      elevation: { bottom: 30, top: 40 },
+      flags: {},
+    });
+  }
   await state.run();
 
   assert.equal(game.scenes.length, 1);
@@ -368,6 +437,17 @@ async function check(generation, systemId) {
   assert.equal(game.journal.length, 1);
   assert.equal(game.journal[0].id, old.journal);
   assert.equal(generation === 11 ? scene.darkness : scene.environment.darknessLevel, 0.6);
+  if (generation >= 14) {
+    const studio = scene.levels.find((level) => tag(level)?.level);
+    assert.equal(studio.id, old.level);
+    assert.equal(studio.background.src, 'wotg-maps/fixture-map-v2.webp');
+    assert.deepEqual(scene.levels.find((level) => level.id === 'gm-level').flags, {});
+    assert.equal(scene.levels.length, 2);
+    assert.equal(scene.tiles.find((tile) => tag(tile)?.roof).elevation, 30);
+    for (const kind of ['walls', 'lights', 'tiles', 'notes'])
+      for (const entry of scene[kind].filter(tag))
+        assert.deepEqual(entry.levels, [studio.id], kind);
+  } else assert.equal(scene.background.src, 'wotg-maps/fixture-map-v2.webp');
   for (const kind of ['walls', 'lights', 'tiles', 'notes', 'tokens']) {
     assert.equal(scene[kind].filter((entry) => entry.id === 'custom').length, 1, kind);
   }
@@ -406,16 +486,83 @@ async function check(generation, systemId) {
   assert.match(areaPage.text.content, /@UUID\[Actor\.hero\]\{Hero\}/);
 }
 
+// A scene this macro imported before the world moved to v14, as Foundry's migration leaves it: one
+// untagged Level holds the background and overhead elevation, and generated walls, lights and roofs
+// have no Levels.
+async function checkSceneImportedBeforeV14() {
+  const state = world(14, 'dnd5e');
+  const generated = { world: { wotgForge: { generated: true } } };
+  const before = fixture();
+  const scene = state.makeScene({
+    name: before.name,
+    width: before.width,
+    height: before.height,
+    grid: before.grid,
+    environment: before.environment,
+    fog: { mode: 1 },
+    flags: { world: { wotgForge: { plan: 'fixture-map', managed: true } } },
+    levels: [
+      {
+        id: 'defaultLevel0000',
+        name: '',
+        background: { src: 'wotg-maps/fixture-map-v12.webp' },
+        elevation: { bottom: 0, top: 25 },
+        flags: {},
+      },
+    ],
+    walls: [
+      { c: [0, 0, 50, 0], flags: generated },
+      { c: [9, 9, 90, 9], flags: {} },
+    ],
+    lights: [{ x: 1, y: 1, flags: generated }],
+  });
+  scene.tiles.push({
+    id: 'old-roof',
+    elevation: 25,
+    flags: { world: { wotgForge: { roof: true } } },
+  });
+  scene.tiles.push({ id: 'gm-tile', elevation: 0, flags: {} });
+  await state.run();
+  assert.deepEqual(state.notices, []);
+  assert.equal(state.game.scenes.length, 1);
+  assert.equal(scene.levels.length, 1);
+  const [level] = scene.levels;
+  assert.equal(level.id, 'defaultLevel0000');
+  assert.equal(level.background.src, 'wotg-maps/fixture-map.webp');
+  assert.equal(tag(level).level, true);
+  assert.deepEqual(
+    scene.walls.filter((wall) => !tag(wall)).map((wall) => [wall.c, wall.levels]),
+    [[[9, 9, 90, 9], undefined]],
+  );
+  assert.deepEqual(
+    scene.walls.filter(tag).map((wall) => wall.levels),
+    [['defaultLevel0000']],
+  );
+  assert.deepEqual(
+    scene.lights.map((light) => light.levels),
+    [['defaultLevel0000']],
+  );
+  assert.deepEqual(
+    scene.tiles.map((tile) => [tile.id === 'gm-tile' ? 'gm-tile' : 'roof', tile.elevation]),
+    [
+      ['gm-tile', 0],
+      ['roof', 25],
+    ],
+  );
+  assert.deepEqual(scene.tiles[1].levels, ['defaultLevel0000']);
+}
+
 async function main() {
-  for (const generation of [11, 12, 13]) await checkBundle(generation);
+  for (const generation of [11, 12, 13, 14]) await checkBundle(generation);
   await checkJournalOnlyBundle();
-  for (const generation of [11, 12, 13]) {
+  for (const generation of [11, 12, 13, 14]) {
     for (const system of ['dnd5e', 'other']) await check(generation, system);
   }
-  const unsupported = world(14, 'dnd5e');
+  await checkSceneImportedBeforeV14();
+  const unsupported = world(15, 'dnd5e');
   await unsupported.run();
   assert.equal(unsupported.game.scenes.length, 0);
-  assert.match(unsupported.notices[0], /supports Foundry v11–v13/);
+  assert.match(unsupported.notices[0], /supports Foundry v11–v14/);
   const nonGM = world(12, 'dnd5e');
   nonGM.game.user.isGM = false;
   await nonGM.run();
@@ -426,7 +573,10 @@ async function main() {
   await otherWorld.run();
   assert.equal(otherWorld.game.scenes.length, 0);
   assert.match(otherWorld.notices[0], /another world/);
-  console.log('Foundry v11/v12/v13 and dnd5e/journal-only import/reimport fixtures passed.');
+  console.log(
+    'Foundry v11/v12/v13/v14 and dnd5e/journal-only import/reimport fixtures passed, ' +
+      'including a scene imported before v14.',
+  );
 }
 main().catch((error) => {
   console.error(error);

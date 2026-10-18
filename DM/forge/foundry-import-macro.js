@@ -1,4 +1,4 @@
-// Map Forge importer for Foundry VTT (v11, v12, v13).
+// Map Forge importer for Foundry VTT (v11, v12, v13, v14).
 // Paste into a new macro (type: Script) and run it as the GM. It lists maps and session bundles copied into
 // Data/wotg-maps/ and imports the chosen one in one go:
 //   - the scene: background, grid, walls, doors, windows, lights
@@ -20,23 +20,34 @@ const original = (e) => {
 if (!game.user.isGM) return ui.notifications.warn('Run Campaign Studio imports as the GM.');
 
 // The exported scene uses the v12 shape. Keep version and system differences here so the import
-// workflow below only manages document ownership and stable Studio IDs.
+// workflow below only manages document ownership and stable Studio IDs. An adapter turns the export into
+// a new scene's fields, updates an imported scene's generated fields, places the generated walls, lights,
+// roofs and pins, and lifts a roof to the elevation of the scene's overhead tiles.
+const sceneChanges = (source) => ({
+  width: source.width,
+  height: source.height,
+  grid: source.grid,
+  flags: source.flags,
+  ...(source.environment ? { environment: source.environment } : {}),
+});
 const modernCore = {
   scene: (source) => source,
-  changes: (source) => ({
-    background: source.background,
-    width: source.width,
-    height: source.height,
-    grid: source.grid,
-    flags: source.flags,
-    ...(source.environment ? { environment: source.environment } : {}),
-  }),
-  roof: (base, above) => ({
+  update: (scene, source) =>
+    scene.update({ background: source.background, ...sceneChanges(source) }),
+  placed: (scene, entries) => entries,
+  roof: (base, scene) => ({
     ...base,
-    elevation: above,
+    elevation: scene.foregroundElevation ?? (scene.grid.distance ?? 5) * 4,
     restrictions: { light: false, weather: true },
   }),
 };
+// v14 keeps a scene's background, foreground and overhead elevation on its Levels. A Studio map is one
+// Level, tagged so a reimport finds it; a scene imported before the world moved to v14 uses its initial
+// Level. Generated walls, lights, roofs and pins belong to that Level only, so Levels the GM adds stay
+// clear of them.
+const LEVEL_FLAGS = { world: { [TAG]: { level: true } } };
+const studioLevel = (scene) =>
+  scene.levels.find((level) => level.flags?.world?.[TAG]?.level) ?? scene.initialLevel;
 const CORE_ADAPTERS = {
   11: {
     scene: (source) => {
@@ -48,25 +59,60 @@ const CORE_ADAPTERS = {
         fogExploration: fog?.exploration ?? true,
       };
     },
-    changes: (source) => ({
-      background: source.background,
-      width: source.width,
-      height: source.height,
-      grid: source.grid,
-      flags: source.flags,
-      darkness: source.darkness,
-      globalLight: source.globalLight,
-      fogExploration: source.fogExploration,
-    }),
+    update: (scene, source) =>
+      scene.update({
+        background: source.background,
+        ...sceneChanges(source),
+        darkness: source.darkness,
+        globalLight: source.globalLight,
+        fogExploration: source.fogExploration,
+      }),
+    placed: (scene, entries) => entries,
     roof: (base) => ({ ...base, overhead: true, roof: true }),
   },
   12: modernCore,
   13: modernCore,
+  14: {
+    scene: ({ background, fog, ...source }) => ({
+      ...source,
+      fog: {
+        mode:
+          fog?.exploration === false
+            ? CONST.FOG_EXPLORATION_MODES.DISABLED
+            : CONST.FOG_EXPLORATION_MODES.INDIVIDUAL,
+      },
+      levels: [{ name: source.name, background: { src: background.src }, flags: LEVEL_FLAGS }],
+    }),
+    update: async (scene, source) => {
+      await scene.update(sceneChanges(source));
+      const [studio] = source.levels;
+      const level = studioLevel(scene);
+      if (level)
+        await scene.updateEmbeddedDocuments('Level', [
+          { _id: level.id, background: studio.background, flags: LEVEL_FLAGS },
+        ]);
+      else await scene.createEmbeddedDocuments('Level', [studio]);
+    },
+    placed: (scene, entries) => {
+      const level = studioLevel(scene).id;
+      return entries.map((entry) => ({ ...entry, levels: [level] }));
+    },
+    roof: (base, scene) => {
+      const top = studioLevel(scene).elevation?.top;
+      return {
+        ...base,
+        // Overhead tiles sit at the top of their Level, where its foreground image is drawn.
+        elevation: Number.isFinite(top) ? top : (scene.grid.distance ?? 5) * 4,
+        occlusion: { modes: [CONST.OCCLUSION_MODES.FADE], alpha: 0 },
+        restrictions: { light: false, weather: true },
+      };
+    },
+  },
 };
 const core = CORE_ADAPTERS[game.release?.generation];
 if (!core)
   return ui.notifications.warn(
-    `Campaign Studio import supports Foundry v11–v13; this world runs v${game.release?.generation ?? '?'}.`,
+    `Campaign Studio import supports Foundry v11–v14; this world runs v${game.release?.generation ?? '?'}.`,
   );
 
 const paragraph = (text) => `<p>${esc(text).replace(/\n/g, '<br>')}</p>`;
@@ -184,6 +230,8 @@ async function importMap(slug, choice, quiet = false) {
     flags: { world: { [TAG]: { generated: true } } },
   }));
   const sceneData = core.scene(data);
+  // Walls and lights are added once the scene exists, so an adapter can place them on its Level.
+  const { walls, lights, ...sceneFields } = sceneData;
 
   let scene = game.scenes.find((s) => s.flags?.world?.[TAG]?.plan === slug);
   if (scene) {
@@ -212,19 +260,18 @@ async function importMap(slug, choice, quiet = false) {
       'Note',
       scene.notes.filter(mine).map((n) => n.id),
     );
-    await scene.update(core.changes(sceneData));
-    await scene.createEmbeddedDocuments('Wall', sceneData.walls);
-    await scene.createEmbeddedDocuments('AmbientLight', sceneData.lights);
+    await core.update(scene, sceneData);
   } else {
-    scene = await Scene.create(sceneData);
+    scene = await Scene.create(sceneFields);
     const thumb = await scene.createThumbnail().catch(() => null);
     if (thumb) await scene.update({ thumb: thumb.thumb });
   }
+  await scene.createEmbeddedDocuments('Wall', core.placed(scene, walls));
+  await scene.createEmbeddedDocuments('AmbientLight', core.placed(scene, lights));
 
   // Roofs: overhead tiles that fade when a token is underneath.
   if (choice.roofs && roofs.length) {
     const FADE = (CONST.OCCLUSION_MODES ?? CONST.TILE_OCCLUSION_MODES).FADE;
-    const above = scene.foregroundElevation ?? (scene.grid.distance ?? 5) * 4;
     const tiles = roofs.map((r) => {
       const base = {
         texture: { src: r.src },
@@ -235,9 +282,9 @@ async function importMap(slug, choice, quiet = false) {
         occlusion: { mode: FADE, alpha: 0 },
         flags: { world: { [TAG]: { roof: true } } },
       };
-      return core.roof(base, above);
+      return core.roof(base, scene);
     });
-    await scene.createEmbeddedDocuments('Tile', tiles);
+    await scene.createEmbeddedDocuments('Tile', core.placed(scene, tiles));
   }
 
   // The DM key: a journal only the GM can see, and a pin for every area worth a pin.
@@ -376,7 +423,7 @@ async function importMap(slug, choice, quiet = false) {
         texture: { src: `icons/svg/${icons[a.kind] ?? 'book'}.svg` },
         flags: { world: { [TAG]: { area: a.n } } },
       }));
-    await scene.createEmbeddedDocuments('Note', notes);
+    await scene.createEmbeddedDocuments('Note', core.placed(scene, notes));
     pins = notes.length;
   }
 

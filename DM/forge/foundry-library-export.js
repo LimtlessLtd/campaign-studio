@@ -52,7 +52,8 @@ const snapshotOf = () => ({
   documents: {
     scenes: game.scenes.contents.filter(readable).map((scene) => ({
       ...common(scene),
-      image: scene.background?.src ?? scene.thumb ?? '',
+      // v14 keeps the background on the scene's initial Level; earlier versions on the scene.
+      image: (scene.initialLevel ?? scene).background?.src || scene.thumb || '',
       summary: textOf(scene.description ?? '').slice(0, 20000),
     })),
     journals: game.journal.contents.filter(readable).map((journal) => ({

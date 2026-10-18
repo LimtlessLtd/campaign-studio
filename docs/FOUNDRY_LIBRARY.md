@@ -18,8 +18,10 @@ collection in a LevelDB folder, which Studio reads with its own standard-library
 (`DM/foundry_leveldb.py`). It follows LevelDB's `CURRENT` and `MANIFEST` files to read only active tables
 and logs; files retired by compaction are ignored even if they are still on disk. Foundry 10 and earlier
 keep one JSON document per line in `<collection>.db`,
-which is also supported. The reader only opens files for reading: it does not open the database, take
-Foundry's lock or write anything, so it cannot corrupt the world.
+which is also supported. Foundry 14 keeps a scene's background on its Levels, stored with the scene; the
+reader shows the image of the scene's initial Level (else its first). The reader only opens files for
+reading: it does not open the database, take Foundry's lock or write anything, so it cannot corrupt the
+world.
 
 The page refreshes a saved folder snapshot when the files have changed since the last read (Studio compares
 a fingerprint of the database and manifest file names, sizes and modification times). When no snapshot is
@@ -78,7 +80,7 @@ a fresh snapshot. Studio records `live` as its source and scopes imported entrie
 their Foundry UUIDs. If a value was edited in Studio, refresh keeps that entry rather than overwriting it;
 deleted Foundry documents remain in Studio for the GM to review. Switching worlds cannot display the old
 snapshot. This is one-way reading, not a write-back path. The macro and tab pairing have synthetic tests;
-live Foundry v11/v12/v13 behavior still needs GM verification.
+live Foundry v11/v12/v13/v14 behavior still needs GM verification.
 
 ## What is stored
 

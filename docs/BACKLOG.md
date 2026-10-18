@@ -10,7 +10,7 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W79
+Next ID: W80
 
 | ID  | Priority | Work                                                                                                                       | Acceptance criteria                                                                                 |
 | --- | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -21,7 +21,7 @@ Next ID: W79
 | W40 | 2        | Tokens: token art, prototype settings and hidden tokens placed at location positions                                       | Linked creatures appear as hidden tokens; GM tokens survive reimport                                |
 | W41 | 2        | Playable NPCs based on a compendium monster: duplicated, renamed, re-imaged and annotated                                  | The NPC imports with its attacks; reimport changes name, art and notes only                         |
 | W42 | 2        | Art pipeline: style guide, templates per kind, batch per prep, token cut-outs, adapters                                    | One action fills every missing image for a prep; fake-provider tests                                |
-| W43 | 2        | Live Foundry check with the owner on their v12 dnd5e versions (owner-assisted)                                             | Exact versions and results recorded; failures become backlog rows                                   |
+| W43 | 2        | Live Foundry check with the owner on their v14 dnd5e 5.x world, Scene Levels included (owner-assisted)                     | Exact versions and results recorded; failures become backlog rows                                   |
 | W44 | 2        | AI usage ledger, remainder: totals per session; ask before prompts over a set size (per-job and per-run done)              | A large prompt asks first; totals per session                                                       |
 | W57 | 2        | Phone-first editing of codex, threads, preps and proposal review                                                           | Touch-emulated flow edits an entry, thread and scene, then applies a proposal                       |
 | W58 | 2        | One-click journal entry: text, links to entries and an image prompt                                                        | One click yields reviewed linked text and a ready image prompt                                      |
@@ -36,10 +36,10 @@ Next ID: W79
 | W10 | 3        | Installer and performance budgets for very large maps                                                                      | Clean-machine install test and measured time/memory at documented map sizes                         |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped)                | Services receive their `Campaign` explicitly (no process-wide active campaign)                      |
 | W46 | 3        | Structured stat blocks mapped to D&D 5e actor data for NPCs without a compendium base                                      | A fixture actor matches its stat block; malformed blocks are rejected                               |
-| W47 | 3        | Companion Foundry module: install once, preview changes before applying, DialogV2 for v13                                  | No macro paste needed; v12 and v13 fixtures pass                                                    |
+| W47 | 3        | Companion Foundry module: install once, preview changes before applying, DialogV2 before v16 drops V1 dialogs              | No macro paste needed; v12, v13 and v14 fixtures pass                                               |
 | W48 | 3        | Generators for dungeons, caverns, wilderness, interiors and ships, each with keyed areas                                   | Each lints clean across 20 seeds at three sizes                                                     |
 | W49 | 3        | Visual plan editor: paint, fill and rectangle tools with live warnings and undo                                            | A door moves and saves without opening the text plan                                                |
-| W50 | 3        | Multi-level maps: floors linked by stairs, as Regions or linked scenes                                                     | A token moves between linked floors in a fixture                                                    |
+| W50 | 3        | Multi-level maps: floors linked by stairs, as v14 Scene Levels, Regions or linked scenes                                   | A token moves between linked floors in a fixture                                                    |
 | W51 | 3        | Opt-in draft evaluation on synthetic campaigns, run by the owner and never in CI                                           | The script reports pass rates for map, request and session drafts                                   |
 | W52 | 3        | Campaign backup and restore from Settings: data, maps and uploads with checksums                                           | Round trip restores to a new folder; a newer schema is refused                                      |
 | W53 | 3        | Global search and quick capture across codex, threads, maps, locations and sessions                                        | Each record type is found; a note can be added from any page                                        |
