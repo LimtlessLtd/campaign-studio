@@ -161,7 +161,7 @@ function foundryBackupCard(hasWorld, context) {
 }
 
 function foundryUpgradeCard(hasWorld) {
-  const form = { backup: '', disabled: '', approved: '' };
+  const form = { backup: '', disabled: '', approved: '', generation: '' };
   const cloneForm = { report: '', receipt: '', destination: '', inspected: false, reviewed: false };
   const reviewForm = { plan: '', confirmed: false };
   const auditForm = {
@@ -246,7 +246,12 @@ function foundryUpgradeCard(hasWorld) {
               backup_path: form.backup,
               disabled_modules: ids(form.disabled),
               approved_dependencies: ids(form.approved),
+              // A blank number field reads as 0: the newest generation Studio can import.
+              target_generation: form.generation || null,
             });
+            const beyond = report.candidates.filter(
+              (candidate) => candidate.full_match && candidate.excluded_reason,
+            );
             cloneForm.report = report.report_path;
             reportInput.querySelector('input').value = cloneForm.report;
             if (!cloneForm.destination) {
@@ -267,6 +272,14 @@ function foundryUpgradeCard(hasWorld) {
                   ? `${report.needs_clone_testing ? 'Needs clone testing. ' : ''}System ${report.system.id}: ${report.system.original_version} → ${report.system.selected_version}.`
                   : 'Stay on v12 or explicitly choose modules to disable, then run the report again.',
               ),
+              h('p', {}, report.target_reason),
+              beyond.length
+                ? h(
+                    'p',
+                    {},
+                    `Also full matches, not recommended: ${beyond.map((candidate) => candidate.build).join(', ')}. ${beyond[0].excluded_reason}`,
+                  )
+                : null,
               report.newest_all_verified_build
                 ? h(
                     'p',
@@ -353,7 +366,7 @@ function foundryUpgradeCard(hasWorld) {
                     h(
                       'li',
                       {},
-                      `${candidate.build}: ${candidate.full_match ? (candidate.all_verified ? 'full match, verified' : 'full match, needs clone testing') : candidate.blockers.join(' ')}`,
+                      `${candidate.build}: ${candidate.full_match ? (candidate.all_verified ? 'full match, verified' : 'full match, needs clone testing') : candidate.blockers.join(' ')}${candidate.excluded_reason ? ` · ${candidate.excluded_reason}` : ''}`,
                     ),
                   ),
                 ),
@@ -669,6 +682,13 @@ function foundryUpgradeCard(hasWorld) {
       }),
       formInput(form, 'approved', 'Required dependency IDs to enable in the clone', {
         help: 'Comma-separated IDs. Only approve dependencies you intend to activate in the isolated clone.',
+      }),
+      formInput(form, 'generation', 'Target Foundry generation', {
+        type: 'number',
+        min: 1,
+        step: 1,
+        placeholder: 'Newest Studio can import',
+        help: "The newest generation to recommend a build from. Leave blank for the newest one Studio's Foundry import supports; Studio cannot import a world migrated past it.",
       }),
     ),
     run,

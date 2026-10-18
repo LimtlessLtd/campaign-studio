@@ -1343,6 +1343,7 @@ class Handler(SimpleHTTPRequestHandler):
                 p.get('backup_path'),
                 p.get('disabled_modules') or [],
                 p.get('approved_dependencies') or [],
+                p.get('target_generation'),
             )
         )
 

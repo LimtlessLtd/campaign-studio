@@ -1186,6 +1186,83 @@ class BrowserSmoke(unittest.TestCase):
             requests, [{'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}]
         )
 
+    def test_upgrade_report_targets_a_generation_and_lists_newer_full_matches(self):
+        requests = []
+        excluded = (
+            "Newer than v13, the newest generation Studio's Foundry import supports; "
+            'choose target generation 14 to recommend it.'
+        )
+
+        def candidate(build, reason=''):
+            return {
+                'build': build,
+                'full_match': True,
+                'all_verified': False,
+                'blockers': [],
+                'excluded_reason': reason,
+            }
+
+        def report_response(route):
+            requests.append(route.request.post_data_json)
+            route.fulfill(
+                status=200,
+                content_type='application/json',
+                body=json.dumps(
+                    {
+                        'recommended_build': '13.351',
+                        'target_generation': 13,
+                        'target_reason': (
+                            "Target Foundry v13, the newest generation Studio's import supports."
+                        ),
+                        'candidates': [candidate('14.369', excluded), candidate('13.351')],
+                        'needs_clone_testing': True,
+                        'newest_all_verified_build': None,
+                        'system': {
+                            'id': 'dnd5e',
+                            'original_version': '4.4.4',
+                            'selected_version': '5.0.4',
+                        },
+                        'locked_changes': [],
+                        'requires_gm_choice': False,
+                        'activation_discrepancies': [],
+                        'modules': [],
+                        'dependencies': [],
+                        'backup_path': '/synthetic/backup',
+                        'report_path': '/synthetic/backup/upgrade-report.json',
+                    }
+                ),
+            )
+
+        self.page.route('**/api/foundry/upgrade/report', report_response)
+        self.open('#/settings')
+        inventory = {
+            'format': 'campaign-studio-foundry-upgrade-inventory',
+            'world': {'title': 'Fixture', 'coreVersion': '12.343'},
+            'modules': [],
+        }
+        self.page.get_by_label('Import GM inventory JSON').set_input_files(
+            {
+                'name': 'inventory.json',
+                'mimeType': 'application/json',
+                'buffer': json.dumps(inventory).encode(),
+            }
+        )
+        self.page.get_by_label('Verified backup folder').fill('/synthetic/backup')
+        build = self.page.get_by_role('button', name='Build compatibility report')
+        build.click()
+        expect(self.page.get_by_role('heading', name='Foundry 13.351')).to_be_visible()
+        expect(self.page.get_by_text('Target Foundry v13, the newest generation')).to_be_visible()
+        expect(
+            self.page.get_by_text(f'Also full matches, not recommended: 14.369. {excluded}')
+        ).to_be_visible()
+        self.page.get_by_text('Explicit GM choices').click()
+        self.page.get_by_label('Target Foundry generation').fill('14')
+        self.page.set_viewport_size(NARROW)
+        self.assert_accessible('upgrade report with a target generation on phone')
+        with self.page.expect_response('**/api/foundry/upgrade/report'):
+            build.click()
+        self.assertEqual([body['target_generation'] for body in requests], [None, 14])
+
     def test_handouts_keep_nested_folder_names(self):
         for folder in ('set-a', 'set-b'):
             target = self.studio.dm / 'uploads' / folder

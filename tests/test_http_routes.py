@@ -171,6 +171,23 @@ class RouteTests(unittest.TestCase):
                 urllib.request.urlopen(self.url + '/forge-scripts/' + bad)
             self.assertEqual(caught.exception.code, 404)
 
+    def test_upgrade_report_passes_the_gm_target_generation(self):
+        body = {'inventory': {}, 'backup_path': '/synthetic/backup', 'target_generation': 14}
+        with patch.object(
+            http_routes.foundry_upgrade, 'report', return_value={'target_generation': 14}
+        ) as report:
+            status, result, _ = self.request('/api/foundry/upgrade/report', 'POST', body)
+        self.assertEqual((status, result['target_generation']), (200, 14))
+        report.assert_called_once_with({}, '/synthetic/backup', [], [], 14)
+        # A bad choice is refused before the backup is verified or any package page is read.
+        with patch.object(http_routes.foundry_upgrade.foundry_backup, 'verify') as verify:
+            for bad in ('14', 13.5, True):
+                body['target_generation'] = bad
+                status, result, _ = self.request('/api/foundry/upgrade/report', 'POST', body)
+                self.assertEqual(status, 400)
+                self.assertIn('whole number', result['error'])
+        verify.assert_not_called()
+
     def test_ai_settings_only_store_the_environment_variable_name(self):
         settings = {
             'ai': {
