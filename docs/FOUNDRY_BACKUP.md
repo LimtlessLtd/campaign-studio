@@ -81,7 +81,7 @@ originally enabled, within the **target generation**. Record the exact target bu
 and module releases.
 
 The target generation is the newest Foundry generation the report recommends a build from. By default it is
-the newest generation Studio's Foundry import macro supports (v13 today; `foundry_compat.IMPORT_GENERATION`,
+the newest generation Studio's Foundry import macro supports (v14 today; `foundry_compat.IMPORT_GENERATION`,
 kept equal to the macro's `CORE_ADAPTERS` by a test), because Studio cannot import a world migrated past it.
 Newer builds are still checked: a newer full match is listed with the reason it is not recommended. The GM
 can choose another generation under **Explicit GM choices** (`target_generation` in the HTTP route and in

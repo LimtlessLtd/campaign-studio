@@ -18,7 +18,12 @@ const game = {
   version: '13.351',
   world: { id: 'fixture-world', title: 'Fixture' },
   system: { id: 'dnd5e', version: '4.0' },
-  scenes: { contents: [] }, journal: { contents: [
+  // A v14 scene's background is on its initial Level; a v12/v13 scene's on the scene itself.
+  scenes: { contents: [
+    { ...doc('levels', true), initialLevel: { background: { src: 'level.webp' } }, thumb: 'level-thumb.webp' },
+    { ...doc('legacy', true), background: { src: 'legacy.webp' }, thumb: 'legacy-thumb.webp' },
+    { ...doc('blank', true), initialLevel: { background: { src: '' } }, thumb: 'blank-thumb.webp' },
+  ] }, journal: { contents: [
     { ...doc('journal', true), pages: { contents: [doc('readable-page', true), doc('hidden-page', false)] } },
   ] },
   actors: { contents: [
@@ -68,6 +73,10 @@ class DOMParser {
   assert.deepEqual(sent[1].data.snapshot.documents.actors.map((actor) => actor.id), ['visible', 'old-compendium']);
   assert.equal(sent[1].data.snapshot.documents.actors[1].compendium, true);
   assert.deepEqual(sent[1].data.snapshot.documents.journals[0].pages.map((page) => page.id), ['readable-page']);
+  assert.deepEqual(
+    sent[1].data.snapshot.documents.scenes.map((scene) => scene.image),
+    ['level.webp', 'legacy.webp', 'blank-thumb.webp'],
+  );
   hooks.get('updateActor')();
   assert.equal(sent[2].data.type, 'changed');
   game.user.isGM = false;

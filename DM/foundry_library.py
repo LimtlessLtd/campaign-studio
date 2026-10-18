@@ -28,7 +28,8 @@ COLLECTIONS = {
     'actors': ('actors', 'Actor'),
     'items': ('items', 'Item'),
 }
-EMBEDDED = {'journal': ('pages',), 'actors': ('items',)}
+# Foundry v14 keeps a scene's background on its Levels, embedded documents of the scene.
+EMBEDDED = {'journal': ('pages',), 'actors': ('items',), 'scenes': ('levels',)}
 # Embedded documents worth keeping: an actor's class items give a character's level, its other items do not.
 EMBEDDED_KEPT = {'actors': lambda child: child.get('type') == 'class'}
 MAX_DOCUMENTS = 5000
@@ -403,12 +404,24 @@ def _documents(world, name):
     return documents, children
 
 
+def _embedded(document, field, children):
+    """A document's embedded documents in stored order, whether listed by ID or kept inline."""
+    listed = document.get(field)
+    if not isinstance(listed, list):
+        listed = []
+    found = [children.get(item) if isinstance(item, str) else item for item in listed]
+    return [item for item in found if isinstance(item, dict)]
+
+
+def _initial_level(document, children):
+    """A v14 scene's initial Level (its own choice, else its first), or None before v14."""
+    levels = _embedded(document, 'levels', children)
+    chosen = [level for level in levels if level.get('_id') == document.get('initialLevel')]
+    return (chosen or levels or [None])[0]
+
+
 def _journal_pages(document, children):
-    pages = document.get('pages')
-    if not isinstance(pages, list):
-        pages = []
-    found = [children.get(page) if isinstance(page, str) else page for page in pages]
-    found = [page for page in found if isinstance(page, dict)]
+    found = _embedded(document, 'pages', children)
     found.sort(key=lambda page: page.get('sort') if isinstance(page.get('sort'), int) else 0)
     result = []
     for page in found:
@@ -461,7 +474,8 @@ def _record(kind, document, children, folders, paths=None):
         ),
     }
     if kind == 'scenes':
-        record['image'] = _dig(document, ('background', 'src'), ('thumb',)) or ''
+        shown = _initial_level(document, children.get(identity, {})) or document
+        record['image'] = _dig(shown, ('background', 'src')) or document.get('thumb') or ''
         record['summary'] = _plain_text(document.get('description'), 20000)
     elif kind == 'journals':
         record['pages'] = _journal_pages(document, children.get(identity, {}))
