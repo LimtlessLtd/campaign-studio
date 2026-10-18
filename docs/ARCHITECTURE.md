@@ -39,8 +39,8 @@ flowchart LR
 | `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts           |
 | `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review       |
 | `DM/foundry_compat.py`                | Shared build, version and package relationship rules                                  |
-| `DM/foundry_catalog.py`               | Official Foundry release and package metadata collection                              |
-| `DM/foundry_solver.py`                | Compatible build and dependency selection                                             |
+| `DM/foundry_catalog.py`               | Official Foundry releases, directory pages and manifests, read as the solver needs    |
+| `DM/foundry_solver.py`                | Compatible build and dependency selection (newest first, conflict-directed backjumps) |
 | `DM/foundry_library.py`               | Local world discovery, media browsing, snapshots and codex import conversion          |
 | `DM/foundry_party.py`                 | Character level, classes, AC and HP from actors and their class items; party totals   |
 | `DM/encounter_budget.py`              | Pure 2014 D&D 5e encounter XP estimate from stored creature CRs and party levels      |
