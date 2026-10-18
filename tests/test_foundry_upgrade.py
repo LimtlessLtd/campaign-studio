@@ -755,6 +755,8 @@ class UpgradeTests(unittest.TestCase):
             (extra / 'module.json').write_text(
                 json.dumps({'id': 'inactive-extra', 'version': '0.1.0'}), encoding='utf-8'
             )
+            for kind in ('systems', 'modules'):  # Foundry ships a README.txt in each
+                (user_data / 'Data' / kind / 'README.txt').write_text('Foundry', encoding='utf-8')
             with (
                 patch.object(
                     upgrade.config, 'settings', return_value={'world_path': str(world_path)}
@@ -996,6 +998,52 @@ class UpgradeTests(unittest.TestCase):
                         True,
                     )
                 self.assertFalse((root / 'another-clone').exists())
+
+    def test_clone_package_scan_skips_loose_files_but_refuses_links_and_invalid_folders(self):
+        def package(path, package_id):
+            path.mkdir(parents=True)
+            (path / 'module.json').write_text(
+                json.dumps({'id': package_id, 'version': '1.0.0'}), encoding='utf-8'
+            )
+
+        def clone_with_readme(name):
+            modules = root / name / 'Data' / 'modules'
+            package(modules / 'alpha', 'alpha')
+            (modules / 'README.txt').write_text('Foundry', encoding='utf-8')
+            return root / name, modules
+
+        with tempfile.TemporaryDirectory(prefix='upgrade-clone-scan-') as folder:
+            root = Path(folder).resolve()  # callers resolve the clone path (8.3 temp on CI)
+            outside = root / 'outside' / 'beta'
+            package(outside, 'beta')
+            clone, _ = clone_with_readme('clean')
+            self.assertEqual(
+                upgrade._installed_clone_packages(clone, 'modules'), {'alpha': '1.0.0'}
+            )
+            unsafe = {
+                'invalid package ID': lambda modules: package(modules / 'bad.name', 'bad.name'),
+                'linked folder': lambda modules: (modules / 'beta').symlink_to(
+                    outside, target_is_directory=True
+                ),
+                'linked file': lambda modules: (modules / 'linked.txt').symlink_to(
+                    outside / 'module.json'
+                ),
+            }
+            if sys.platform == 'win32':
+                import _winapi
+
+                unsafe['junction'] = lambda modules: _winapi.CreateJunction(
+                    str(outside), str(modules / 'beta')
+                )
+            for case, add in unsafe.items():
+                with self.subTest(case=case):
+                    clone, modules = clone_with_readme(case.replace(' ', '-'))
+                    try:
+                        add(modules)
+                    except OSError:
+                        self.skipTest('This platform does not allow symbolic links here.')
+                    with self.assertRaisesRegex(ValueError, 'Invalid or linked package folder'):
+                        upgrade._installed_clone_packages(clone, 'modules')
 
     def test_parse_official_page_shapes_and_core_bounds(self):
         self.assertEqual(
