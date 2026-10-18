@@ -11,6 +11,19 @@ LEGACY_CORE_RE = re.compile(r'^0\.(\d{1,2})\.\d{1,4}$')
 # Foundry library packages may start with an underscore (Custom CSS requires `_CodeMirror`).
 # No dots or slashes, so an ID never names another folder.
 ID_RE = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}$')
+# The newest Foundry generation Studio's import macro adapts to (`CORE_ADAPTERS` in
+# DM/forge/foundry-import-macro.js; a test keeps the two equal). An upgrade targets it unless the GM
+# chooses another generation, so a migration does not leave a world Studio cannot import.
+IMPORT_GENERATION = 13
+
+
+def upgrade_target(value):
+    """The Foundry generation an upgrade targets: the GM's choice, else IMPORT_GENERATION."""
+    if value is None:
+        return IMPORT_GENERATION
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 99:
+        raise ValueError('The target Foundry generation must be a whole number, such as 13.')
+    return value
 
 
 def core(value):

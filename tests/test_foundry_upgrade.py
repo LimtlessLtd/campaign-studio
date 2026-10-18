@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -101,6 +102,14 @@ def catalog():
             'unlisted': {'status': 'unlisted', 'releases': []},
         },
     }
+
+
+def two_generations():
+    """The synthetic catalogue with full matches on v13 and v14 once the GM approves beta."""
+    data = catalog()
+    data['packages']['beta']['releases'].insert(0, release('beta', '3.0.0', '14', '14', '14'))
+    data['packages']['gamma']['releases'].insert(0, release('gamma', '3.0.0', '14', '14', '14'))
+    return data
 
 
 def system_range(maximum, minimum='4.0'):
@@ -286,7 +295,7 @@ class UpgradeTests(unittest.TestCase):
         releases['packages']['dnd5e']['releases'].append(
             release('dnd5e', '5.1.0', '14', '14', '14')
         )
-        result = foundry_solver.analyze(data, releases)
+        result = foundry_solver.analyze(data, releases, target_generation=14)
         self.assertEqual(result['recommended_build'], '14.368')
         self.assertEqual(result['system']['selected_version'], '5.1.0')
 
@@ -301,6 +310,54 @@ class UpgradeTests(unittest.TestCase):
         self.assertTrue(beta['proposed_enabled'])
         self.assertIn('GM approved', beta['activation_reason'])
 
+    def test_target_is_the_newest_generation_studio_imports_unless_the_gm_chooses(self):
+        approved = ['beta']
+        result = foundry_solver.analyze(
+            inventory(), two_generations(), approved_dependencies=approved
+        )
+        candidates = {item['build']: item for item in result['candidates']}
+        self.assertTrue(candidates['14.368']['full_match'])
+        self.assertTrue(candidates['13.351']['full_match'])
+        # A v14 migration would leave a world Studio's import macro cannot read.
+        self.assertEqual(result['recommended_build'], '13.351')
+        self.assertEqual(result['system']['selected_version'], '4.0.0')
+        self.assertEqual((result['target_generation'], result['import_generation']), (13, 13))
+        self.assertFalse(result['target_generation_chosen'])
+        self.assertIn('newest generation', result['target_reason'])
+        self.assertIn('choose target generation 14', candidates['14.368']['excluded_reason'])
+        self.assertEqual(candidates['13.351']['excluded_reason'], '')
+        self.assertEqual(candidates['12.343']['excluded_reason'], '')
+
+        newer = foundry_solver.analyze(
+            inventory(), two_generations(), approved_dependencies=approved, target_generation=14
+        )
+        self.assertEqual(newer['recommended_build'], '14.368')
+        self.assertEqual(newer['system']['selected_version'], '5.0.0')
+        self.assertTrue(newer['target_generation_chosen'])
+        self.assertIn('cannot import this world', newer['target_reason'])
+        self.assertTrue(all(not item['excluded_reason'] for item in newer['candidates']))
+
+        stay = foundry_solver.analyze(inventory(), two_generations(), target_generation=12)
+        self.assertEqual(stay['recommended_build'], '12.343')
+        self.assertTrue(stay['requires_gm_choice'])
+        self.assertEqual(
+            stay['candidates'][1]['excluded_reason'],
+            'Newer than the chosen target generation v12.',
+        )
+        with self.assertRaisesRegex(ValueError, 'no stable v15 build.*v12, v13, v14'):
+            foundry_solver.analyze(inventory(), two_generations(), target_generation=15)
+        for bad in (True, '13', 13.0, 0):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'whole number'):
+                foundry_solver.analyze(inventory(), two_generations(), target_generation=bad)
+
+    def test_import_generation_is_the_newest_the_import_macro_adapts_to(self):
+        macro = Path(__file__).resolve().parents[1] / 'DM/forge/foundry-import-macro.js'
+        adapters = re.search(
+            r'^const CORE_ADAPTERS = \{\n(.*?)^\};', macro.read_text(encoding='utf-8'), re.M | re.S
+        )
+        generations = [int(value) for value in re.findall(r'^  (\d+):', adapters[1], re.M)]
+        self.assertEqual(max(generations), foundry_compat.IMPORT_GENERATION)
+
     def test_excluded_dependency_blocks_full_match_until_gm_disables_dependent(self):
         data = inventory()
         data['modules'] = [data['modules'][0], data['modules'][3]]
@@ -313,7 +370,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertIsNone(result['modules'][0]['proposed_enabled'])
         self.assertIn('requires excluded Plutonium', ' '.join(result['candidates'][0]['blockers']))
         chosen = foundry_solver.analyze(data, releases, disabled_modules=['alpha'])
-        self.assertEqual(chosen['recommended_build'], '14.368')
+        self.assertEqual(chosen['recommended_build'], '13.351')
         self.assertIn('GM explicitly', chosen['modules'][0]['disabled_reason'])
 
     def test_system_relationship_and_package_lock_are_reported(self):
@@ -690,14 +747,36 @@ class UpgradeTests(unittest.TestCase):
                 self.assertEqual(warning['activation_discrepancies'], ['inactive-extra'])
                 self.assertTrue(warning['needs_clone_testing'])
                 self.assertTrue(warning['requires_gm_choice'])
+                # v13 and v14 are both full matches; the report and plan target v13.
                 data = upgrade.report(
-                    inventory(), backup['path'], approved_dependencies=['beta'], catalog=catalog()
+                    inventory(),
+                    backup['path'],
+                    approved_dependencies=['beta'],
+                    catalog=two_generations(),
                 )
                 self.assertEqual(data['recommended_build'], '13.351')
+                self.assertTrue(data['candidates'][0]['full_match'])
+                self.assertEqual(data['target_generation'], 13)
                 extra_decision = next(
                     item for item in data['modules'] if item['id'] == 'inactive-extra'
                 )
                 self.assertFalse(extra_decision['original_enabled'])
+                # A report from before the target was recorded cannot prepare a clone.
+                report_file = Path(data['report_path'])
+                saved_report = report_file.read_text(encoding='utf-8')
+                untargeted = json.loads(saved_report)
+                del untargeted['target_generation']
+                report_file.write_text(json.dumps(untargeted), encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'target Foundry generation'):
+                    upgrade.prepare_clone(
+                        data['report_path'],
+                        restored['receipt_path'],
+                        str(root / 'clone'),
+                        True,
+                        True,
+                    )
+                report_file.write_text(saved_report, encoding='utf-8')
+                self.assertFalse((root / 'clone').exists())
                 with self.assertRaisesRegex(ValueError, 'Confirm'):
                     upgrade.prepare_clone(
                         data['report_path'], restored['receipt_path'], str(root / 'clone')
@@ -715,7 +794,20 @@ class UpgradeTests(unittest.TestCase):
                 )
                 self.assertEqual(plan['status'], 'awaiting_v12_module_review')
                 self.assertFalse(plan['migration_ready'])
-                self.assertEqual(plan['target_build'], '13.351')
+                self.assertEqual((plan['target_build'], plan['target_generation']), ('13.351', 13))
+                chosen = upgrade.report(
+                    inventory(),
+                    backup['path'],
+                    approved_dependencies=['beta'],
+                    target_generation=14,
+                    catalog=two_generations(),
+                )
+                newer_plan = upgrade.prepare_clone(
+                    chosen['report_path'], restored['receipt_path'], str(root / 'v14'), True, True
+                )
+                self.assertEqual(
+                    (newer_plan['target_build'], newer_plan['target_generation']), ('14.368', 14)
+                )
                 self.assertEqual(
                     {item['id'] for item in plan['disable_in_v12']}, {'Plutonium', 'unlisted'}
                 )
@@ -745,6 +837,7 @@ class UpgradeTests(unittest.TestCase):
                 reviewed = upgrade.review_clone(plan['plan_path'], clone_inventory, True)
                 self.assertEqual(reviewed['status'], 'v12_modules_reviewed')
                 self.assertEqual(reviewed['expected_enabled'], ['alpha', 'gamma'])
+                self.assertEqual(reviewed['target_generation'], 13)
                 self.assertFalse(reviewed['migration_ready'])
                 self.assertEqual(
                     json.loads(Path(reviewed['review_path']).read_text())['plan_sha256'],
@@ -764,11 +857,15 @@ class UpgradeTests(unittest.TestCase):
                 self.assertTrue(any('GM module version' in issue for issue in mismatch['blockers']))
                 plan_file = Path(plan['plan_path'])
                 original_plan = plan_file.read_text(encoding='utf-8')
-                changed_plan = json.loads(original_plan)
-                changed_plan['selected_modules'] = []
-                plan_file.write_text(json.dumps(changed_plan), encoding='utf-8')
-                with self.assertRaisesRegex(ValueError, 'do not match'):
-                    upgrade.review_clone(plan['plan_path'], clone_inventory, True)
+                for change in ({'selected_modules': []}, {'target_generation': 14}):
+                    plan_file.write_text(
+                        json.dumps({**json.loads(original_plan), **change}), encoding='utf-8'
+                    )
+                    with (
+                        self.subTest(change=change),
+                        self.assertRaisesRegex(ValueError, 'do not match'),
+                    ):
+                        upgrade.review_clone(plan['plan_path'], clone_inventory, True)
                 plan_file.write_text(original_plan, encoding='utf-8')
                 migrated_world_path = (
                     Path(plan['clone_path']) / 'Data/worlds/fixture-world/world.json'
@@ -808,6 +905,7 @@ class UpgradeTests(unittest.TestCase):
                     reviewed['review_path'], migrated_inventory, True, checks
                 )
                 self.assertEqual(audited['status'], 'reviewed')
+                self.assertEqual(audited['target_generation'], 13)
                 self.assertFalse(audited['cutover_ready'])
                 self.assertTrue(Path(audited['audit_path']).is_file())
                 with self.assertRaisesRegex(ValueError, 'Close both'):
@@ -816,6 +914,9 @@ class UpgradeTests(unittest.TestCase):
                     upgrade.review_cutover(pending['audit_path'], True)
                 cutover = upgrade.review_cutover(audited['audit_path'], True)
                 self.assertTrue(cutover['cutover_ready'])
+                self.assertEqual(
+                    (cutover['target_build'], cutover['target_generation']), ('13.351', 13)
+                )
                 self.assertEqual(cutover['clone_path'], plan['clone_path'])
                 self.assertTrue(Path(cutover['original_user_data']).samefile(user_data))
                 self.assertEqual(

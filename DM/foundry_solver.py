@@ -3,11 +3,13 @@
 from foundry_catalog import Catalog
 from foundry_compat import (
     ID_RE,
+    IMPORT_GENERATION,
     compatible,
     core,
     core_covers,
     relationships,
     is_verified,
+    upgrade_target,
     version_covers,
     version_key,
 )
@@ -268,13 +270,55 @@ def _solve(build, roots, catalog, system_id, approved_dependencies, floors):
     return solution, sorted(problems)
 
 
-def analyze(inventory, catalog, disabled_modules=(), approved_dependencies=()):
-    """Choose newest full match without silently dropping an eligible enabled module.
+def _target(chosen, builds):
+    """The target generation, why it is the target, and why a build beyond it is not recommended.
+
+    The last is a function of the build's generation that returns '' for one within the target.
+    """
+    target = upgrade_target(chosen)
+    generations = sorted({core(build)[0] for build in builds})
+    if chosen is not None and target not in generations:
+        raise ValueError(
+            f'Foundry has no stable v{target} build for this upgrade; choose '
+            + ', '.join(f'v{value}' for value in generations)
+            + '.'
+        )
+    if chosen is None:
+        reason = f"Target Foundry v{target}, the newest generation Studio's import supports."
+    else:
+        reason = f'Target Foundry v{target}, chosen by the GM.'
+        if target > IMPORT_GENERATION:
+            reason += (
+                f" Studio's Foundry import supports up to v{IMPORT_GENERATION}, so Studio cannot "
+                'import this world after the migration.'
+            )
+
+    def excluded(generation):
+        if generation <= target:
+            return ''
+        if chosen is not None:
+            return f'Newer than the chosen target generation v{target}.'
+        return (
+            f"Newer than v{target}, the newest generation Studio's Foundry import supports; "
+            f'choose target generation {generation} to recommend it.'
+        )
+
+    return target, reason, excluded
+
+
+def analyze(
+    inventory, catalog, disabled_modules=(), approved_dependencies=(), target_generation=None
+):
+    """Choose the newest full match up to the target generation, dropping no eligible module.
 
     `catalog` is a foundry_catalog.Catalog, or saved catalogue data that is complete as given.
+    `target_generation` is the GM's choice of the newest Foundry generation to migrate to; by default
+    it is the newest one Studio's import supports. Newer builds are still checked and listed, each
+    with the reason it is not recommended.
     """
     if not isinstance(catalog, Catalog):
         catalog = Catalog(catalog)
+    target, target_reason, excluded = _target(target_generation, catalog.builds)
     if not isinstance(disabled_modules, (list, tuple)) or not isinstance(
         approved_dependencies, (list, tuple)
     ):
@@ -353,14 +397,18 @@ def analyze(inventory, catalog, disabled_modules=(), approved_dependencies=()):
             )
             for release in solution.values()
         )
+        reason = excluded(core(build)[0])
         candidates.append(
             {
                 'build': build,
                 'full_match': bool(solution),
                 'all_verified': verified,
                 'blockers': [] if solution else blockers,
+                'excluded_reason': reason,
             }
         )
+        if reason:
+            continue
         if solution and best is None:
             best = (build, solution)
         if verified and verified_best is None:
@@ -424,10 +472,15 @@ def analyze(inventory, catalog, disabled_modules=(), approved_dependencies=()):
             if key not in roots
         ],
         'candidates': candidates,
+        'target_generation': target,
+        'target_generation_chosen': target_generation is not None,
+        'target_reason': target_reason,
+        'import_generation': IMPORT_GENERATION,
         'recommended_build': best[0] if best else None,
         'newest_all_verified_build': verified_best,
         'needs_clone_testing': bool(best) and verified_best != best[0],
         'requires_gm_choice': bool(disabled or approved)
+        or target != IMPORT_GENERATION
         or bool(locked_changes)
         or any(item['original_enabled'] and item['disabled_reason'] for item in decisions),
         'locked_changes': locked_changes,

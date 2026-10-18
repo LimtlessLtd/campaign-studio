@@ -10,7 +10,7 @@ import config
 import foundry_backup
 import storage
 from foundry_catalog import MAX_MANIFEST, collect_catalog
-from foundry_compat import ID_RE, INVENTORY_FORMAT, core, relationships
+from foundry_compat import ID_RE, INVENTORY_FORMAT, core, relationships, upgrade_target
 from foundry_solver import analyze
 
 
@@ -134,8 +134,15 @@ def report(
     backup_path,
     disabled_modules=(),
     approved_dependencies=(),
+    target_generation=None,
     catalog=None,
 ):
+    """Save a compatibility report beside the verified backup.
+
+    `target_generation` is the newest Foundry generation to recommend a build from; None targets the
+    newest one Studio's import supports. The report records it for the clone plan and later checks.
+    """
+    upgrade_target(target_generation)  # A bad choice fails before the backup and network reads.
     backup = foundry_backup.verify(backup_path)
     completed_inventory = complete_inventory(inventory, backup['path'])
     selected_world = _inventory(completed_inventory)
@@ -146,7 +153,9 @@ def report(
     ):
         raise ValueError('The verified backup does not match the inventory world.')
     catalog = catalog if catalog is not None else collect_catalog(completed_inventory)
-    result = analyze(completed_inventory, catalog, disabled_modules, approved_dependencies)
+    result = analyze(
+        completed_inventory, catalog, disabled_modules, approved_dependencies, target_generation
+    )
     result['backup_path'] = backup['path']
     result['activation_discrepancies'] = completed_inventory['activation_discrepancies']
     if result['activation_discrepancies']:
@@ -171,6 +180,25 @@ def report(
     with report_path.open('x', encoding='utf-8') as stream:
         json.dump(result, stream, indent=2, ensure_ascii=False)
     return result
+
+
+def _target_generation(report_data):
+    """The target generation a saved report recorded, refusing one its recommendation exceeds.
+
+    The clone plan, v12 clone review and migration audit each compare their own copy with it.
+    """
+    generation = report_data.get('target_generation')
+    build = report_data.get('recommended_build')
+    if (
+        isinstance(generation, bool)
+        or not isinstance(generation, int)
+        or (build is not None and core(build)[0] > generation)
+    ):
+        raise ValueError(
+            'The compatibility report records no valid target Foundry generation for its '
+            'recommendation. Run the report again.'
+        )
+    return generation
 
 
 def _sidecar(path, backup, prefix, limit):
@@ -224,6 +252,7 @@ def prepare_clone(
         or world.get('coreVersion') != backup['world']['core_version']
     ):
         raise ValueError('The compatibility report is for a different backup world.')
+    generation = _target_generation(report_data)
     build = report_data.get('recommended_build')
     if not build or core(build) <= core(world['coreVersion']):
         raise ValueError('The report has no newer full-match Foundry build to prepare.')
@@ -299,6 +328,7 @@ def prepare_clone(
         'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
         'world': world,
         'target_build': build,
+        'target_generation': generation,
         'backup_path': str(backup_path),
         'report_path': str(report_file),
         'report_sha256': storage.sha256_file(report_file),
@@ -429,6 +459,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         or plan.get('backup_path') != str(backup_path)
         or plan.get('report_sha256') != storage.sha256_file(report_file)
         or plan.get('target_build') != report_data.get('recommended_build')
+        or plan.get('target_generation') != _target_generation(report_data)
         or not isinstance(plan_world, dict)
         or plan_world != report_data.get('world')
         or plan_world.get('id') != backup['world']['id']
@@ -541,6 +572,7 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         'report_path': str(report_file),
         'clone_receipt_path': str(receipt_file),
         'target_build': plan['target_build'],
+        'target_generation': plan['target_generation'],
         'expected_enabled': sorted(expected),
         'configured_enabled': sorted(configured),
         'runtime_active': sorted(active),
@@ -635,6 +667,7 @@ def audit_migration(
         or review.get('runtime_active') != v12_enabled
         or review.get('clone_path') != str(clone)
         or review.get('target_build') != plan.get('target_build')
+        or review.get('target_generation') != plan.get('target_generation')
         or review.get('confirmed_clone_export') is not True
         or review.get('migration_ready') is not False
         or plan.get('format') != 'campaign-studio-foundry-clone-plan'
@@ -642,6 +675,7 @@ def audit_migration(
         or plan.get('migration_ready') is not False
         or plan.get('report_sha256') != storage.sha256_file(report_file)
         or plan.get('target_build') != report_data.get('recommended_build')
+        or plan.get('target_generation') != _target_generation(report_data)
         or plan.get('world') != report_data.get('world')
         or plan_modules != selected_from_report
         or clone_receipt.get('format') != 'campaign-studio-foundry-restore-test'
@@ -767,6 +801,7 @@ def audit_migration(
         'v12_review_sha256': storage.sha256_file(review_file),
         'plan_path': str(plan_file),
         'target_build': plan['target_build'],
+        'target_generation': plan['target_generation'],
         'reported_build': world.get('coreVersion'),
         'selected_system': {'id': world['system'], 'version': selected_system['selected_version']},
         'selected_modules': expected_versions,
@@ -833,6 +868,7 @@ def review_cutover(audit_path, confirmed_closed=False):
         'v12_review_sha256',
         'plan_path',
         'target_build',
+        'target_generation',
         'reported_build',
         'selected_system',
         'selected_modules',
@@ -872,6 +908,7 @@ def review_cutover(audit_path, confirmed_closed=False):
         'original_user_data': source['path'],
         'clone_path': current['clone_path'],
         'target_build': current['target_build'],
+        'target_generation': current['target_generation'],
         'world_id': inventory['world']['id'],
     }
     receipt = backup_path / f'cutover-review-{result["audit_sha256"][:24]}.json'

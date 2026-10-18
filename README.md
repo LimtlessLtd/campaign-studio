@@ -248,7 +248,9 @@ See [Foundry backup and restore test](docs/FOUNDRY_BACKUP.md).
 **Foundry upgrade compatibility report** in Settings accepts an inventory exported by a GM Script macro in
 the original v12 world and a verified backup of that world. It checks Foundry's stable release and package
 directory pages, release manifests, the game system, enabled modules and required dependencies. It shows the
-newest full match, any unverified packages, exclusions including Plutonium, and blockers. The inventory and
+newest full match up to the target Foundry generation (by default the newest Studio's import supports, v13
+today; the GM may choose another), newer full matches with why they are not recommended, any unverified
+packages, exclusions including Plutonium, and blockers. The inventory and
 report are saved beside the backup. After a verified restore test copy is opened and inspected in v12, Studio
 can make a separate v12 clone with a saved plan of modules to disable and package releases to install. The GM
 must disable excluded modules such as Plutonium in the clone before its first launch in newer Foundry. Studio

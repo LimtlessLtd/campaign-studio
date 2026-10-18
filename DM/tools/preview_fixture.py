@@ -121,11 +121,13 @@ try:
 
     fixture_catalog = {
         'source': 'synthetic-preview',
-        'builds': ['13.351', '12.343', '12.331'],
+        # A v14 full match shows how the report keeps to the generation Studio can import.
+        'builds': ['14.369', '13.351', '12.343', '12.331'],
         'packages': {
             'dnd5e': {
                 'status': 'listed',
                 'releases': [
+                    fixture_release('dnd5e', '5.0.0', '14', '14', '14'),
                     fixture_release('dnd5e', '4.0.0', '13', '13', '13'),
                     fixture_release('dnd5e', '3.0.0', '12', '12', '12'),
                 ],
@@ -133,6 +135,7 @@ try:
             'fixture-module': {
                 'status': 'listed',
                 'releases': [
+                    fixture_release('fixture-module', '3.0.0', '14', '14', '14'),
                     fixture_release('fixture-module', '2.0.0', '13', '13', '12'),
                     fixture_release('fixture-module', '1.0.0', '12', '12', '12'),
                 ],

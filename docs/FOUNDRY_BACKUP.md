@@ -77,7 +77,18 @@ each report beside the backup so the original inventory and choices remain revie
 The upgrade wizard must treat the game system as a prerequisite and produce a decision for **every module
 enabled in the original world**. It must search stable Foundry builds from newest down to the world's current
 v12 build, then recommend the newest build that can retain the world system and every eligible module
-originally enabled. Record the exact target build and the selected system and module releases. Updating the
+originally enabled, within the **target generation**. Record the exact target build and the selected system
+and module releases.
+
+The target generation is the newest Foundry generation the report recommends a build from. By default it is
+the newest generation Studio's Foundry import macro supports (v13 today; `foundry_compat.IMPORT_GENERATION`,
+kept equal to the macro's `CORE_ADAPTERS` by a test), because Studio cannot import a world migrated past it.
+Newer builds are still checked: a newer full match is listed with the reason it is not recommended. The GM
+can choose another generation under **Explicit GM choices** (`target_generation` in the HTTP route and in
+`foundry_upgrade.report`); a generation with no stable build is refused, and choosing one other than the
+default counts as a GM choice. The report records `target_generation`. The clone plan copies it, and the
+v12 clone review, migration audit and cutover review refuse evidence whose target differs, or a report
+that records none (run the report again). Updating the
 game system's version is allowed; changing its package ID or dropping an eligible module requires an explicit
 GM choice. The report never selects a release older than the installed one, for the system or a module: the
 world's data was migrated by the installed release and may not load in an older one. A blocker such as
@@ -136,8 +147,8 @@ this manual check; the receipt only proves the copy passed checksum verification
 In **Prepare an isolated v12 clone**, provide the saved report path, restore receipt path and a new clone
 destination. Review the report and confirm the v12 restore test. Studio re-verifies the backup, checks that
 the report and receipt belong to it, and makes another complete, verified copy. It saves a clone plan beside
-the backup with the target build, selected package releases, module activation choices and the exact enabled
-modules to disable. The clone remains at v12. No module or database changes are made by Studio.
+the backup with the target build and generation, selected package releases, module activation choices and the
+exact enabled modules to disable. The clone remains at v12. No module or database changes are made by Studio.
 
 Next, launch **only the new clone** with Foundry v12 using its separate User Data path. In Manage Modules,
 disable the plan's excluded modules, including Plutonium, and save and reload. Check that they are off and
