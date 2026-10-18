@@ -5,6 +5,7 @@ import json
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -100,6 +101,139 @@ def catalog():
             'unlisted': {'status': 'unlisted', 'releases': []},
         },
     }
+
+
+def system_range(maximum, minimum='4.0'):
+    return {
+        'id': 'dnd5e',
+        'type': 'system',
+        'compatibility': {'minimum': minimum, 'maximum': maximum},
+    }
+
+
+def directory_row(version, foundry, manifest):
+    """One release row in the official package directory's markup."""
+    return (
+        '<li class="package-version flexrow"><div>'
+        f'<h4 class="package-title">Version {version}</h4></div>'
+        '<div class="package-tags"><span class="tag fromver">'
+        f'<i class="fas fa-code-branch"></i> Foundry Version {foundry}</span>'
+        f'<span class="tag install"><a href="{manifest}" title="Manifest Installation URL" '
+        'target="_blank">Manifest URL</a></span></div></li>'
+    )
+
+
+class DirectoryFetcher:
+    """Serve synthetic stable builds, directory pages and manifests, recording each URL read."""
+
+    BUILDS = ('14.369', '13.351', '13.346', '12.343', '12.331')
+
+    def __init__(self):
+        self.calls = []
+        self.rows = {}  # package ID -> [(directory version, Foundry range text, manifest)]
+
+    def add(self, package_id, version, foundry, compatibility, tag='', requires=(), systems=()):
+        manifest = {
+            'id': package_id,
+            'version': tag + version,
+            'compatibility': compatibility,
+            'relationships': {'requires': list(requires), 'systems': list(systems)},
+        }
+        self.rows.setdefault(package_id, []).append((version, foundry, manifest))
+
+    def manifest_reads(self):
+        return sum(1 for url in self.calls if not url.startswith('https://foundryvtt.com/'))
+
+    def __call__(self, url, *_args, **_kwargs):
+        self.calls.append(url)
+        if url == foundry_compat.RELEASES_URL:
+            return ''.join(
+                f'<li class="article release flexrow"><a href="/releases/{build}">Release</a>'
+                '<span class="release-tag stable">Stable</span></li>'
+                for build in self.BUILDS
+            )
+        if url.startswith(foundry_catalog.PACKAGE_URL):
+            package_id = url.split('/')[-2]
+            if package_id not in self.rows:
+                raise urllib.error.HTTPError(url, 404, 'Not Found', {}, None)
+            return ''.join(
+                directory_row(version, foundry, f'https://example.org/{package_id}/{version}.json')
+                for version, foundry, _manifest in self.rows[package_id]
+            )
+        package_id, file_name = url.split('/')[-2:]
+        version = file_name.removesuffix('.json')
+        return json.dumps(
+            next(item for key, _range, item in self.rows[package_id] if key == version)
+        )
+
+
+def large_world():
+    """A synthetic world shaped like a real 33-module one whose upgrade report recommended nothing."""
+    fetcher = DirectoryFetcher()
+    for version, minimum in [
+        ('6.0.6', '14.367'),
+        ('5.3.3', '13.347'),
+        ('5.0.4', '13.341'),
+        ('4.4.4', '12.331'),
+        ('4.3.9', '12.331'),
+        ('3.3.1', '11.315'),
+        ('2.1.5', '10.291'),
+    ]:
+        verified = minimum.split('.')[0]
+        compatibility = {'minimum': minimum, 'verified': verified}
+        fetcher.add('dnd5e', version, f'{minimum}+ (Verified {verified})', compatibility)
+    # libWrapper declares a pre-v9 minimum on every release.
+    for version in [*(f'1.{minor}.0.0' for minor in range(13)), '1.13.5.1']:
+        compatibility = {'minimum': '0.6.5', 'verified': '13'}
+        fetcher.add('lib-wrapper', version, '0.6.5+ (Verified 13)', compatibility)
+    fetcher.add('socketlib', '1.1.4', '11+ (Verified 13)', {'minimum': '11', 'verified': '13'})
+    for patch_number in range(5):
+        compatibility = {'minimum': '0.7.9', 'verified': '0.8.9'}
+        fetcher.add('socketlib', f'1.0.{patch_number}', '0.7.9+ (Verified 0.8.9)', compatibility)
+    # Only dnd5e 4.x: v13 retains it only if the system stays on 4.4.4.
+    fetcher.add(
+        'charges-module',
+        '5.0.0-beta.2',
+        '12+ (Verified 12.331)',
+        {'minimum': '12', 'verified': '12.331', 'maximum': '13.999'},
+        systems=[system_range('4.4.999', '4.3.0')],
+    )
+    fetcher.add('charges-module', '4.2.0', '12+ (Verified 12)', {'minimum': '12', 'maximum': '12'})
+    libraries = [dependency('lib-wrapper'), dependency('socketlib')]
+    names = [f'module-{number:02}' for number in range(1, 31)]
+    for name in names:
+        for generation, systems in (('13', ('5.3.x', '5.0')), ('12', ('4.4.x', '4.0'))):
+            for patch_number in reversed(range(15)):
+                fetcher.add(
+                    name,
+                    f'{generation}.0.{patch_number}',
+                    f'{generation}+ (Verified {generation})',
+                    {'minimum': generation, 'verified': generation, 'maximum': generation + '.999'},
+                    requires=libraries,
+                    systems=[system_range(*systems)],
+                )
+    # Last in the queue, with manifests tagged "v4.6.12" for directory release 4.6.12.
+    fetcher.add(
+        'token-attacher', '4.6.12', '13+ (Verified 13)', {'minimum': 13, 'verified': 13}, 'v'
+    )
+    for version in ('4.6.11', '4.6.10'):
+        compatibility = {'minimum': 12, 'verified': 12, 'maximum': 12}
+        fetcher.add('token-attacher', version, '12+ (Verified 12)', compatibility, 'v')
+    installed = [
+        ('lib-wrapper', '1.13.2.0'),
+        ('socketlib', '1.1.0'),
+        ('charges-module', '5.0.0-beta.2'),
+        *((name, '12.0.10') for name in names),
+        ('token-attacher', 'v4.6.10'),
+    ]
+    data = inventory()
+    data['system']['version'] = '4.4.4'
+    data['modules'] = [
+        {'id': package_id, 'version': version, 'enabled': True, 'relationships': {}}
+        for package_id, version in installed
+    ]
+    data['enabledModuleIds'] = [package_id for package_id, _version in installed]
+    return data, fetcher
 
 
 @contextlib.contextmanager
@@ -207,9 +341,13 @@ class UpgradeTests(unittest.TestCase):
             '<span class="release-tag stable">Stable</span></li>'
         )
 
+        def version(package_id):
+            return '3.0.0' if package_id == 'dnd5e' else '1.0.0'
+
         def package_page(package_id):
             return (
-                f'<li class="package-version flexrow"><h4 class="package-title">Version 1.0.0</h4>'
+                f'<li class="package-version flexrow"><h4 class="package-title">'
+                f'Version {version(package_id)}</h4>'
                 f'<span>Foundry Version 12 - 13 (Verified 13)</span>'
                 f'<a href="https://example.org/{package_id}.json" '
                 f'title="Manifest Installation URL">Manifest URL</a></li>'
@@ -223,14 +361,241 @@ class UpgradeTests(unittest.TestCase):
             package_id = url.rsplit('/', 1)[-1].removesuffix('.json')
             relationships = {'requires': [dependency('beta')]} if package_id == 'alpha' else {}
             return json.dumps(
-                {'id': package_id, 'version': '1.0.0', 'relationships': relationships}
+                {'id': package_id, 'version': version(package_id), 'relationships': relationships}
             )
 
         with patch.object(foundry_catalog, 'fetch', side_effect=fake_fetch):
-            result = foundry_catalog.collect_catalog(data)
-        self.assertEqual(result['builds'], ['13.351', '12.331'])
-        self.assertEqual(result['packages']['alpha']['releases'][0]['requires'][0]['id'], 'beta')
-        self.assertEqual(result['packages']['beta']['status'], 'listed')
+            catalog = foundry_catalog.collect_catalog(data)
+            self.assertEqual(catalog.builds, ['13.351', '12.331'])
+            self.assertEqual(catalog.manifest_reads, 0)  # The solver reads manifests it needs.
+            result = foundry_solver.analyze(data, catalog)
+        packages = result['catalog_evidence']
+        self.assertEqual(packages['alpha']['releases'][0]['requires'][0]['id'], 'beta')
+        self.assertEqual(packages['beta']['status'], 'listed')
+        self.assertNotIn('requires', packages['beta']['releases'][0])
+        beta = next(item for item in result['modules'] if item['id'] == 'beta')
+        self.assertFalse(beta['proposed_enabled'])
+        self.assertIn('GM approval', ' '.join(result['candidates'][0]['blockers']))
+
+    def test_directory_rows_with_pre_v9_bounds_and_wildcard_system_ranges_are_usable(self):
+        # libWrapper lists every release as "Foundry Version 0.6.5+", which no row parse accepted.
+        page = ''.join(
+            directory_row(version, foundry, f'https://example.org/lib-wrapper/{version}.json')
+            for version, foundry in [
+                ('1.13.5.1', '0.6.5+ (Verified 14)'),
+                ('1.9.2.0', '0.6.5+ (Verified 0.8.9)'),
+                ('1.0.0.0', '0.6.5 - 0.7.9 (Verified 0.7.9)'),
+                ('0.9.0.0', '10.285.1.2+ (Verified 10)'),
+            ]
+        )
+        rows = foundry_catalog.package_releases(page, 'lib-wrapper')
+        self.assertEqual([row['version'] for row in rows], ['1.13.5.1', '1.9.2.0', '1.0.0.0'])
+        self.assertEqual(
+            rows[1]['compatibility'], {'minimum': '0.6.5', 'maximum': '', 'verified': '0.8.9'}
+        )
+        build = (13, 351)
+        self.assertTrue(foundry_compat.compatible(rows[0]['compatibility'], build))
+        self.assertFalse(foundry_compat.compatible(rows[2]['compatibility'], build))
+        self.assertTrue(foundry_compat.is_verified(rows[0]['compatibility'], build))
+        self.assertFalse(foundry_compat.is_verified(rows[1]['compatibility'], build))
+        # A module declaring dnd5e maximum "4.4.x" supports 4.4.4, as Foundry reads it.
+        self.assertTrue(foundry_compat.version_covers('4.4.4', {'maximum': '4.4.x'}))
+        self.assertFalse(foundry_compat.version_covers('4.5.0', {'maximum': '4.4.x'}))
+        self.assertTrue(foundry_compat.version_covers('4.0.0', {'minimum': '4.x'}))
+
+    def test_manifest_tagged_with_a_leading_v_matches_its_directory_release(self):
+        def fake_fetch(url, *_args, **_kwargs):
+            version = url.rsplit('/', 1)[-1].removesuffix('.json')
+            return json.dumps({'id': 'token-attacher', 'version': version.replace('-', 'v')})
+
+        catalog = foundry_catalog.Catalog({'builds': [], 'packages': {}}, fake_fetch)
+        tagged = {'version': '4.6.12', 'manifest': 'https://example.org/-4.6.12.json'}
+        renamed = {'version': '4.6.12', 'manifest': 'https://example.org/-4.6.11.json'}
+        catalog.review('token-attacher', tagged)
+        catalog.review('token-attacher', renamed)
+        self.assertNotIn('error', tagged)
+        # The clone installs the manifest, so the plan and audit compare its spelling.
+        self.assertEqual((tagged['version'], tagged['directory_version']), ('v4.6.12', '4.6.12'))
+        self.assertIn('version differs', renamed['error'])
+
+    def test_report_on_a_large_world_reads_only_the_releases_it_needs(self):
+        # The shape of a real 33-module dnd5e world that recommended nothing: long release
+        # histories, libWrapper listed with a pre-v9 minimum, token-attacher last in the queue with
+        # manifests tagged "v4.6.12", and one module tied to dnd5e 4.x while v13 modules need 5.x.
+        data, fake_fetch = large_world()
+        with tempfile.TemporaryDirectory(prefix='upgrade-large-fixture-') as folder:
+            backup = Path(folder)
+            with (
+                selected_backup(backup),
+                patch.object(foundry_catalog, 'fetch', side_effect=fake_fetch),
+            ):
+                stay = upgrade.report(data, str(backup))
+                first_reads = fake_fetch.manifest_reads()
+                fake_fetch.calls.clear()
+                newer = upgrade.report(data, str(backup), disabled_modules=['charges-module'])
+        self.assertEqual(stay['recommended_build'], '12.343')
+        self.assertEqual(stay['system']['selected_version'], '4.4.4')
+        v13 = next(item for item in stay['candidates'] if item['build'] == '13.351')
+        self.assertIn(
+            'charges-module: no release for Foundry 13.351 works with dnd5e 5.3.3',
+            ' '.join(v13['blockers']),
+        )
+        self.assertNotIn('search limit', ' '.join(v13['blockers']))
+        self.assertEqual(newer['recommended_build'], '13.351')
+        self.assertEqual(newer['system']['selected_version'], '5.3.3')
+        modules = {item['id']: item for item in newer['modules']}
+        self.assertEqual(modules['lib-wrapper']['directory_status'], 'listed')
+        self.assertEqual(modules['lib-wrapper']['selected_version'], '1.13.5.1')
+        self.assertEqual(modules['token-attacher']['selected_version'], 'v4.6.12')
+        self.assertEqual(modules['module-30']['selected_version'], '13.0.14')
+        self.assertFalse(modules['charges-module']['proposed_enabled'])
+        # The directory lists over 900 releases; the old collector stopped after reading 600.
+        self.assertLess(first_reads, 120)
+        self.assertLess(fake_fetch.manifest_reads(), 120)
+
+    def test_solver_jumps_back_to_the_package_that_caused_a_conflict(self):
+        data = inventory()
+        data['system']['version'] = '1.0.0'
+        data['modules'] = [
+            {'id': f'module-{number:02}', 'version': '1.0', 'enabled': True}
+            for number in range(1, 31)
+        ]
+        packages = {
+            'dnd5e': {
+                'status': 'listed',
+                'releases': [
+                    release('dnd5e', f'{major}.0.0', '13', '', '13') for major in (1, 2, 3)
+                ],
+            }
+        }
+        for module in data['modules']:
+            packages[module['id']] = {
+                'status': 'listed',
+                'releases': [
+                    release(module['id'], f'1.{minor}', '13', '', '13') for minor in range(10)
+                ],
+            }
+        # Only the last module limits the system, so 10^29 combinations of the others cannot help.
+        for item in packages['module-30']['releases']:
+            item['systems'] = [{'id': 'dnd5e', 'compatibility': {'maximum': '2.x'}}]
+        result = foundry_solver.analyze(data, {'builds': ['13.351'], 'packages': packages})
+        self.assertEqual(result['recommended_build'], '13.351')
+        self.assertEqual(result['system']['selected_version'], '2.0.0')
+        self.assertEqual(result['modules'][0]['selected_version'], '1.9')
+        # A library missing from the directory, required by the last module's newest release, sends
+        # the search straight back to that module.
+        packages['module-30']['releases'][-1]['requires'] = [dependency('missing-library')]
+        packages['missing-library'] = {'status': 'unknown', 'releases': []}
+        result = foundry_solver.analyze(
+            data,
+            {'builds': ['13.351'], 'packages': packages},
+            approved_dependencies=['missing-library'],
+        )
+        self.assertEqual(result['recommended_build'], '13.351')
+        self.assertEqual(result['modules'][29]['selected_version'], '1.8')
+        self.assertEqual(result['modules'][28]['selected_version'], '1.9')
+
+    def test_solver_never_downgrades_an_installed_package(self):
+        data = inventory()
+        data['system']['version'] = '4.4.4'
+        data['modules'] = [{'id': 'sheet', 'version': '9.8.3', 'enabled': True}]
+        packages = {
+            'dnd5e': {
+                'status': 'listed',
+                'releases': [
+                    release('dnd5e', version, '12', '', '12') for version in ('4.4.4', '4.3.9')
+                ],
+            },
+            'sheet': {
+                'status': 'listed',
+                'releases': [
+                    release('sheet', '9.8.4', '12', '', '12', systems=[system_range('4.3.9')]),
+                    release('sheet', '9.8.3', '12', '', '12', systems=[system_range('4.3.9')]),
+                    release('sheet', '9.0.0', '12', '', '12'),
+                ],
+            },
+        }
+        result = foundry_solver.analyze(data, {'builds': ['12.343'], 'packages': packages})
+        # dnd5e 4.3.9 or sheet 9.0.0 would make a full match, but each is older than installed.
+        self.assertIsNone(result['recommended_build'])
+        self.assertEqual(
+            result['candidates'][0]['blockers'],
+            ['sheet: no release for Foundry 12.343 works with dnd5e 4.4.4.'],
+        )
+        packages['sheet']['releases'] = [release('sheet', '9.0.0', '12', '', '12')]
+        result = foundry_solver.analyze(data, {'builds': ['12.343'], 'packages': packages})
+        self.assertEqual(
+            result['candidates'][0]['blockers'],
+            ['sheet: no release for Foundry 12.343 is as new as the installed 9.8.3.'],
+        )
+        # A long history is checked newest first, ten releases per build, and says where it stopped.
+        packages['sheet']['releases'] = [
+            release('sheet', f'9.8.{number}', '12', '', '12', systems=[system_range('4.3.9')])
+            for number in range(3, 15)
+        ]
+        result = foundry_solver.analyze(data, {'builds': ['12.343'], 'packages': packages})
+        self.assertEqual(
+            result['candidates'][0]['blockers'],
+            [
+                'sheet: no release for Foundry 12.343 works with dnd5e 4.4.4.',
+                'sheet: only its newest 10 releases for this build were checked (down to 9.8.5).',
+            ],
+        )
+
+    def test_unreadable_manifest_is_retried_once_and_never_replaced_by_an_older_release(self):
+        limited = {'calls': 0, 'headers': {}}
+
+        def fake_fetch(url, *_args, **_kwargs):
+            version = url.rsplit('/', 2)[-2]
+            if version == '2.0.0' and limited['calls'] < limited['limit']:
+                limited['calls'] += 1
+                headers = limited['headers']
+                raise urllib.error.HTTPError(url, 429, 'Too Many Requests', headers, None)
+            return json.dumps({'id': 'alpha', 'version': version})
+
+        def catalog():
+            releases = [
+                {
+                    'id': 'alpha',
+                    'version': version,
+                    'manifest': f'https://example.org/alpha/{version}/module.json',
+                    'compatibility': {'minimum': '12', 'maximum': '', 'verified': '12'},
+                }
+                for version in ('2.0.0', '1.0.0')
+            ]
+            return foundry_catalog.Catalog(
+                {
+                    'builds': ['12.343'],
+                    'packages': {
+                        'dnd5e': {
+                            'status': 'listed',
+                            'releases': [release('dnd5e', '3.0.0', '12', '', '12')],
+                        },
+                        'alpha': {'status': 'listed', 'releases': releases},
+                    },
+                },
+                fake_fetch,
+            )
+
+        data = inventory()
+        data['modules'] = [{'id': 'alpha', 'version': '1.0.0', 'enabled': True}]
+        with patch.object(foundry_catalog.time, 'sleep') as pause:
+            limited.update(calls=0, limit=1)
+            result = foundry_solver.analyze(data, catalog())
+            self.assertEqual(result['modules'][0]['selected_version'], '2.0.0')
+            pause.reset_mock()
+            limited.update(calls=0, limit=2)
+            result = foundry_solver.analyze(data, catalog())
+            pause.assert_called_once_with(5)
+            self.assertIsNone(result['recommended_build'])
+            self.assertIn('run the report again later', result['candidates'][0]['blockers'][0])
+            self.assertNotIn('requires', result['catalog_evidence']['alpha']['releases'][1])
+            # A host asking for a long pause is not waited for; the blocker says how long.
+            pause.reset_mock()
+            limited.update(calls=0, limit=1, headers={'Retry-After': '2919'})
+            result = foundry_solver.analyze(data, catalog())
+            pause.assert_not_called()
+        self.assertIn('wait about 49 min', result['candidates'][0]['blockers'][0])
 
     def test_report_requires_matching_inventory_and_verified_backup(self):
         with tempfile.TemporaryDirectory(prefix='upgrade-fixture-') as folder:

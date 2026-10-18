@@ -5,6 +5,9 @@ import re
 INVENTORY_FORMAT = 'campaign-studio-foundry-upgrade-inventory'
 RELEASES_URL = 'https://foundryvtt.com/releases/'
 CORE_RE = re.compile(r'^(\d{1,2})(?:\.(\d{1,4}))?$')
+# Before v9 a Foundry version had three parts (0.8.6). Long-lived packages such as libWrapper still
+# declare one as their minimum; it only ever bounds compatibility and sorts below every v9+ build.
+LEGACY_CORE_RE = re.compile(r'^0\.(\d{1,2})\.\d{1,4}$')
 # Foundry library packages may start with an underscore (Custom CSS requires `_CodeMirror`).
 # No dots or slashes, so an ID never names another folder.
 ID_RE = re.compile(r'^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,99}$')
@@ -17,10 +20,16 @@ def core(value):
     return int(match[1]), int(match[2]) if match[2] is not None else None
 
 
+def core_bound(value):
+    """Parse a compatibility bound: a build (12, 12.343) or a pre-v9 version (0.8.6)."""
+    legacy = LEGACY_CORE_RE.fullmatch(str(value or ''))
+    return (0, int(legacy[1])) if legacy else core(value)
+
+
 def core_covers(bound, build, lower):
     if not bound:
         return True
-    generation, number = core(bound)
+    generation, number = core_bound(bound)
     floor = (generation, number or 0)
     ceiling = (generation, number if number is not None else 9999)
     return build >= floor if lower else build <= ceiling
@@ -47,13 +56,19 @@ def version_key(value):
     return numbers[:8] + (0,) * max(0, 8 - len(numbers)), 0 if match[2] else 1, match[2] or ''
 
 
+def _bound_key(value, upper):
+    # Publishers write "4.4.x" to mean any 4.4 release, and Foundry accepts 4.4.4 below it.
+    filler = '999999999' if upper else '0'
+    return version_key(re.sub(r'(?<=\.)[xX*](?=\.|$)', filler, str(value)))
+
+
 def version_covers(version, constraint):
     if not isinstance(constraint, dict):
         return True
     try:
         key = version_key(version)
-        minimum = version_key(constraint['minimum']) if constraint.get('minimum') else None
-        maximum = version_key(constraint['maximum']) if constraint.get('maximum') else None
+        minimum = _bound_key(constraint['minimum'], False) if constraint.get('minimum') else None
+        maximum = _bound_key(constraint['maximum'], True) if constraint.get('maximum') else None
     except ValueError:
         return False
     return (minimum is None or key >= minimum) and (maximum is None or key <= maximum)

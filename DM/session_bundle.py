@@ -27,18 +27,42 @@ MAX_HANDOUTS = 50
 MAX_MANIFEST = 1_000_000
 
 
+def bundle_links(session, scenes, catalogue_items, key_for):
+    """The map slugs, actor IDs and item IDs a session's bundle carries.
+
+    One rule for the export and the prep readiness board: maps a scene links or tagged with the
+    session (scene maps first), NPCs a scene links, and the NPCs and items placed in those maps' keys.
+    `key_for(slug)` returns a map's key, or {} when it has none.
+    """
+    slugs = list(
+        dict.fromkeys(
+            [scene['map'] for scene in scenes if isinstance(scene.get('map'), str) and scene['map']]
+            + [entry['slug'] for entry in catalogue_items if entry.get('session') == session]
+        )
+    )
+    actors = {ident for scene in scenes for ident in scene.get('npcs') or []}
+    items = set()
+    for slug in slugs:
+        for area in key_for(slug).get('areas', []):
+            actors.update(area.get('npcs', []))
+            items.update(area.get('items', []))
+    return slugs, actors, items
+
+
 def _linked(prep, catalogue, read_doc, here):
     """Collect every map and codex record linked by the prep or its map keys."""
     available = {entry['slug']: entry for entry in catalogue.get('items', [])}
-    slugs = set(entry['slug'] for entry in available.values() if entry.get('session') == prep['id'])
-    slugs.update(scene.get('map') for scene in prep['scenes'] if scene.get('map'))
+
+    def key_for(slug):
+        exists = slug in available and SESSION_ID.fullmatch(slug)
+        return (read_doc('mapkey/' + slug) or {}) if exists else {}
+
+    slugs, actors, items = bundle_links(prep['id'], prep['scenes'], available.values(), key_for)
     if len(slugs) > MAX_MAPS:
         raise ValueError(f'A session bundle may contain at most {MAX_MAPS} maps.')
-    missing_maps = slugs - available.keys()
+    missing_maps = set(slugs) - available.keys()
     if missing_maps:
         raise ValueError('A prep scene links a missing map: ' + ', '.join(sorted(missing_maps)))
-    actors = {ident for scene in prep['scenes'] for ident in scene.get('npcs', [])}
-    items = set()
     maps = []
     for slug in sorted(slugs):
         if not SESSION_ID.fullmatch(slug):
@@ -51,10 +75,6 @@ def _linked(prep, catalogue, read_doc, here):
         image = os.path.realpath(os.path.join(files, entry['image']))
         if os.path.commonpath((files, image)) != files or not os.path.isfile(image):
             raise ValueError(f'The image for {entry["name"]} is missing.')
-        key = read_doc('mapkey/' + slug) or {}
-        for area in key.get('areas', []):
-            actors.update(area.get('npcs', []))
-            items.update(area.get('items', []))
         maps.append({'slug': slug, 'name': entry['name']})
     if len(actors | items) > MAX_ENTRIES:
         raise ValueError(f'A session bundle may contain at most {MAX_ENTRIES} linked entries.')

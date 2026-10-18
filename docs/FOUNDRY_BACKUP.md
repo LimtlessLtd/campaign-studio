@@ -61,6 +61,11 @@ Foundry's public stable release list, official package directory release rows an
 It saves the original inventory and generated JSON report beside that backup, outside its `User Data` copy.
 These pages and manifests require network access; unavailable or unreadable package data remains unknown and
 cannot count as a full match. The report is metadata evidence, not an installer or runtime test.
+A release manifest is read only when the search reaches that release, newest first, and at most the newest
+10 releases of a package are checked for each build, so a world with long release histories costs about a
+hundred manifest reads. A manifest host that refuses for now (a rate limit or timeout) stops that package's
+search with a blocker asking to run the report again later; an older release never stands in for it. Studio
+waits once for a short rate-limit pause and reports a longer one instead of waiting.
 If the saved module configuration and v12's active state disagree, the report flags the IDs and conservatively
 counts either enabled indication as enabled until the GM resolves the mismatch in the clone.
 
@@ -74,7 +79,10 @@ enabled in the original world**. It must search stable Foundry builds from newes
 v12 build, then recommend the newest build that can retain the world system and every eligible module
 originally enabled. Record the exact target build and the selected system and module releases. Updating the
 game system's version is allowed; changing its package ID or dropping an eligible module requires an explicit
-GM choice.
+GM choice. The report never selects a release older than the installed one, for the system or a module: the
+world's data was migrated by the installed release and may not load in an older one. A blocker such as
+"no release for Foundry 13.351 works with dnd5e 4.4.4" names the package and the versions it cannot work
+with, so the GM can choose which module to disable for a newer build.
 
 Before changing a clone, a GM-side export must record the installed modules, which ones are enabled in the
 world, their versions and manifest URLs, declared Foundry compatibility, required dependencies, system
