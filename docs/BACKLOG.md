@@ -10,10 +10,11 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W78
+Next ID: W79
 
 | ID  | Priority | Work                                                                                                                       | Acceptance criteria                                                                                 |
 | --- | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| W78 | 1        | Upgrade wizard targets only a Foundry generation Studio can import (v13 today), or one the GM chooses                      | With full matches on v13 and v14, the report and clone plan target v13; the choice is recorded      |
 | W74 | 2        | Owner-assisted live check of recordings to draft: a real recording, Whisper model and Claude run through the automatic run | Requests, cost, window count, limit message and passage quality recorded; failures become rows      |
 | W76 | 2        | Owner-assisted live check of the Codex provider: one small draft through `codex exec`, its events, usage and limit message | Event shapes, flags, tool lock-down and limit wording recorded; the stream guard's lists corrected  |
 | W35 | 2        | Wrap-up, remainder: offer a wrap-up's leads as pitch seeds; start one from a transcript (notes done)                       | The pitch box lists the latest leads; a transcript prefills its wrap-up from the ledger             |

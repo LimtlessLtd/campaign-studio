@@ -76,7 +76,8 @@ def _candidates(catalog, package_id, build, skip=lambda release: False, stops=No
             continue
         if checked == CHECKED_RELEASES:
             stops.append(
-                f'{package_id}: releases older than {previous} were not checked for this build.'
+                f'{package_id}: only its newest {CHECKED_RELEASES} releases for this build were '
+                f'checked (down to {previous}).'
             )
             return
         checked += 1

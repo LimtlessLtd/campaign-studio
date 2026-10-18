@@ -528,6 +528,19 @@ class UpgradeTests(unittest.TestCase):
             result['candidates'][0]['blockers'],
             ['sheet: no release for Foundry 12.343 is as new as the installed 9.8.3.'],
         )
+        # A long history is checked newest first, ten releases per build, and says where it stopped.
+        packages['sheet']['releases'] = [
+            release('sheet', f'9.8.{number}', '12', '', '12', systems=[system_range('4.3.9')])
+            for number in range(3, 15)
+        ]
+        result = foundry_solver.analyze(data, {'builds': ['12.343'], 'packages': packages})
+        self.assertEqual(
+            result['candidates'][0]['blockers'],
+            [
+                'sheet: no release for Foundry 12.343 works with dnd5e 4.4.4.',
+                'sheet: only its newest 10 releases for this build were checked (down to 9.8.5).',
+            ],
+        )
 
     def test_unreadable_manifest_is_retried_once_and_never_replaced_by_an_older_release(self):
         limited = {'calls': 0, 'headers': {}}

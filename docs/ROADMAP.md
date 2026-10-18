@@ -299,6 +299,16 @@ their row and finding say enough.
   Give every linked record (world map nomination, pin, scene or entry link) an unlink or remove action that
   states what stays in Foundry. Shipped so far: remove a world map (nomination and pins); remove an imported world (its codex entries, their links and the library snapshot).
 
+### W78 Upgrade target Studio can import
+
+- The upgrade report recommends the newest full match, and the clone plan targets exactly that build. The
+  import macro supports Foundry v11–v13 (`CORE_ADAPTERS`), so a v14 migration leaves a world Studio cannot
+  import. On the owner's world, disabling the one module tied to dnd5e 4.x makes 13.351 and every v14 build
+  full matches, and the report recommends 14.369. Cap candidate builds at the newest generation the import
+  macro supports, listing newer ones with that reason, or let the GM choose the target generation in the
+  report form (recorded in the report so the plan, audit and cutover checks agree). The migration audit
+  already accepts v13 and v14 targets. Decide with the owner which; their stated target is v13.
+
 ### W77 Before and after for arcs and ledgers
 
 - A request proposal shows what a change to a thread or codex entry does (`record_changes`: the preview
