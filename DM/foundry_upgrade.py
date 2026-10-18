@@ -3,6 +3,7 @@
 import copy
 import datetime
 import json
+import stat
 import uuid
 from pathlib import Path
 
@@ -371,6 +372,8 @@ def _installed_clone_packages(clone, kind):
     packages = {}
     filename = 'system.json' if kind == 'systems' else 'module.json'
     for folder in root.iterdir():
+        if stat.S_ISREG(folder.lstat().st_mode):
+            continue  # Foundry keeps a README.txt beside the package folders; links still fail.
         if (
             not folder.is_dir()
             or folder.is_symlink()
