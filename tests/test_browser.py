@@ -1186,6 +1186,190 @@ class BrowserSmoke(unittest.TestCase):
             requests, [{'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}]
         )
 
+    def test_repair_step_reviews_the_dry_run_then_repairs_and_smoke_tests_the_clone(self):
+        requests = {}
+        scan = {
+            'scan_path': '/synthetic/backup/clone-repair-scan.json',
+            'summary': {
+                'scenes': 2,
+                'floors_before': 6,
+                'floors_after': 4,
+                'source_ids': 1,
+                'formulas': 1,
+                'other_fields': 1,
+                'summons': 1,
+                'macros': 1,
+            },
+            'findings': {
+                'floors': [
+                    {
+                        'scene': 'Lighthouse',
+                        'before': 4,
+                        'after': 2,
+                        'documents_updated': 9,
+                        'changes': ['merge "Lighthouse - Level (0|15)" (0-15) into "Ground"'],
+                        'removed': ['lvlDupGround0001'],
+                        'kept_back': [],
+                    },
+                    {
+                        'scene': 'Ruins',
+                        'before': 2,
+                        'after': 2,
+                        'documents_updated': 0,
+                        'changes': [],
+                        'removed': [],
+                        'kept_back': [
+                            '"Ruins - Level (0|12)" was not merged: its background differs'
+                        ],
+                    },
+                ],
+                'source_ids': ['Aria: Longsword'],
+                'formulas': [{'item': 'world: Wand of Frost', 'field': 'recharge'}],
+                'other_fields': [{'item': 'Bandit: Fury', 'field': 'system.description.value'}],
+                'summons': [
+                    {
+                        'id': 'summon-alpha',
+                        'item': 'Bram: Summon Shade',
+                        'activity': 'Summon',
+                        'profile': 'Alpha',
+                        'uuid': '@creature[shadow wolf (alpha)|xyz]',
+                        'candidates': [{'uuid': 'Actor.actorWolf0000001', 'name': 'Shadow Wolf'}],
+                    }
+                ],
+                'macros': [
+                    {
+                        'id': 'macro-mark',
+                        'name': 'Mark Prey',
+                        'uses': [
+                            {
+                                'line': 3,
+                                'field': 'label',
+                                'replacement': 'name',
+                                'text': 'label: `Marked`,',
+                                'rewrite': True,
+                            }
+                        ],
+                        'rewritable': True,
+                    }
+                ],
+            },
+            'smoke_choices': {
+                'folders': [{'id': 'folderParty00001', 'name': 'Heroes', 'characters': 2}],
+                'scenes': [
+                    {'id': 'sceneKeep0000001', 'name': 'Lighthouse', 'npcs': 2},
+                    {'id': 'scenePlain000001', 'name': 'Market', 'npcs': 0},
+                ],
+            },
+        }
+        repaired = {
+            'status': 'repaired',
+            'error': '',
+            'verification': {
+                'ok': True,
+                'checks': [
+                    {
+                        'name': 'Every floor image kept',
+                        'ok': True,
+                        'detail': ['Every floor background and foreground is kept'],
+                    }
+                ],
+            },
+            'snapshot_path': '/synthetic/backup/clone-repair/world-before',
+            'repair_path': '/synthetic/backup/clone-repair.json',
+        }
+        smoke = {
+            'note': 'Rounds to win are a rough sanity check, not a balance prediction.',
+            'party_folder': 'Heroes',
+            'party': [
+                {
+                    'name': 'Aria',
+                    'ac': 16,
+                    'hp': 40,
+                    'actions': 3,
+                    'failures': 0,
+                    'best': {'name': 'Longsword', 'to_hit': 6, 'average': 7.5},
+                    'runtime_refs': [],
+                }
+            ],
+            'encounters': [
+                {
+                    'scene': 'Lighthouse',
+                    'npcs': 2,
+                    'actions': 4,
+                    'failing_actions': 1,
+                    'enemies': 1,
+                    'enemies_hostile_only': True,
+                    'party_damage_per_round': 9,
+                    'enemy_damage_per_round': 2,
+                    'rounds_for_party_to_win': 2,
+                    'rounds_for_enemies_to_win': None,
+                    'results': [],
+                }
+            ],
+            'problems': ['Bandit › Club: has a corrupted "[object Object]" field'],
+            'report_path': '/synthetic/backup/clone-smoke-test.json',
+        }
+
+        def respond(name, body):
+            def handler(route):
+                requests[name] = route.request.post_data_json
+                route.fulfill(status=200, content_type='application/json', body=json.dumps(body))
+
+            return handler
+
+        self.page.route('**/api/foundry/upgrade/repair-scan', respond('scan', scan))
+        self.page.route('**/api/foundry/upgrade/repair-apply', respond('apply', repaired))
+        self.page.route('**/api/foundry/upgrade/smoke-test', respond('smoke', smoke))
+        self.open('#/settings')
+        self.page.get_by_label('Migrated-clone audit to check').fill('/synthetic/backup/audit.json')
+        self.page.get_by_label('Both Foundry installations are closed').check()
+        self.page.get_by_role('button', name='Dry run: find repairs').click()
+        expect(
+            self.page.get_by_role('heading', name='Repairs found in the migrated clone')
+        ).to_be_visible()
+        self.assertEqual(
+            requests['scan'],
+            {'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True},
+        )
+        expect(self.page.get_by_text('Scene floors 6 → 4 in 2 scenes')).to_be_visible()
+        self.page.get_by_text('Scene floors to merge (2)').click()
+        expect(self.page.get_by_text('was not merged: its background differs')).to_be_visible()
+        self.page.get_by_label(
+            'Bram: Summon Shade › Alpha: @creature[shadow wolf (alpha)|xyz]'
+        ).select_option('Actor.actorWolf0000001')
+        self.page.get_by_label('Rewrite Mark Prey to use name and img').check()
+        self.page.get_by_label('Foundry installation folder').fill('/synthetic/foundry')
+        self.page.get_by_label('I reviewed the dry run and my choices').check()
+        self.page.get_by_role('button', name='Back up the world and repair').click()
+        expect(self.page.get_by_role('heading', name='Clone repaired and verified')).to_be_visible()
+        self.assertEqual(
+            requests['apply'],
+            {
+                'scan_path': scan['scan_path'],
+                'installation': '/synthetic/foundry',
+                'summons': {'summon-alpha': 'Actor.actorWolf0000001'},
+                'macros': ['macro-mark'],
+                'confirmed_closed': True,
+                'confirmed_reviewed': True,
+            },
+        )
+        expect(self.page.get_by_text('Passed: Every floor image kept.')).to_be_visible()
+        self.page.get_by_label('Lighthouse').check()
+        self.page.get_by_role('button', name='Run encounter smoke test').click()
+        expect(self.page.get_by_role('heading', name='1 problem found')).to_be_visible()
+        self.assertEqual(
+            requests['smoke'],
+            {
+                'scan_path': scan['scan_path'],
+                'party_folder': 'folderParty00001',
+                'scene_ids': ['sceneKeep0000001'],
+            },
+        )
+        expect(self.page.get_by_text('not a balance prediction')).to_be_visible()
+        expect(self.page.get_by_text('party 2 (9 damage a round), enemies never')).to_be_visible()
+        self.page.set_viewport_size(NARROW)
+        self.assert_accessible('migrated clone repair step on phone')
+
     def test_upgrade_report_targets_a_generation_and_lists_newer_full_matches(self):
         requests = []
         excluded = (

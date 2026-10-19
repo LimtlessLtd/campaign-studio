@@ -202,7 +202,7 @@ def _target_generation(report_data):
     return generation
 
 
-def _sidecar(path, backup, prefix, limit):
+def sidecar(path, backup, prefix, limit):
     item = foundry_backup.absolute_folder(path, 'Upgrade evidence file')
     if item.parent != backup or not item.name.startswith(prefix) or item.suffix != '.json':
         raise ValueError('Upgrade evidence must be a JSON sidecar beside the backup.')
@@ -232,10 +232,10 @@ def prepare_clone(
         raise ValueError('Invalid compatibility report.')
     backup = foundry_backup.verify(preliminary.get('backup_path'))
     backup_path = Path(backup['path'])
-    report_file, report_data = _sidecar(
+    report_file, report_data = sidecar(
         selected_report, backup_path, 'upgrade-report-', 20 * 1024 * 1024
     )
-    inventory_file, inventory_data = _sidecar(
+    inventory_file, inventory_data = sidecar(
         report_data.get('inventory_path'), backup_path, 'upgrade-inventory-', 2 * 1024 * 1024
     )
     if (
@@ -279,7 +279,7 @@ def prepare_clone(
         for item in modules
     ):
         raise ValueError('The report has unresolved module decisions.')
-    receipt_file, receipt = _sidecar(restore_receipt_path, backup_path, 'restore-test-', 64 * 1024)
+    receipt_file, receipt = sidecar(restore_receipt_path, backup_path, 'restore-test-', 64 * 1024)
     restore = foundry_backup.absolute_folder(receipt.get('restore_path'), 'Restore test copy')
     backup_manifest_hash = storage.sha256_file(backup_path / foundry_backup.MANIFEST)
     if (
@@ -419,11 +419,11 @@ def review_clone(plan_path, inventory, confirmed_clone=False):
         raise ValueError('Invalid clone plan.')
     backup = foundry_backup.verify(preliminary.get('backup_path'))
     backup_path = Path(backup['path'])
-    plan_file, plan = _sidecar(selected_plan, backup_path, 'upgrade-clone-plan-', 256 * 1024)
-    report_file, report_data = _sidecar(
+    plan_file, plan = sidecar(selected_plan, backup_path, 'upgrade-clone-plan-', 256 * 1024)
+    report_file, report_data = sidecar(
         plan.get('report_path'), backup_path, 'upgrade-report-', 20 * 1024 * 1024
     )
-    receipt_file, receipt = _sidecar(
+    receipt_file, receipt = sidecar(
         plan.get('clone_receipt_path'), backup_path, 'restore-test-', 64 * 1024
     )
     clone = foundry_backup.absolute_folder(plan.get('clone_path'), 'Upgrade clone')
@@ -613,17 +613,17 @@ def audit_migration(
         raise ValueError('Invalid v12 clone review.')
     backup = foundry_backup.verify(preliminary.get('backup_path'))
     backup_path = Path(backup['path'])
-    review_file, review = _sidecar(selected_review, backup_path, 'clone-review-', 256 * 1024)
-    plan_file, plan = _sidecar(
+    review_file, review = sidecar(selected_review, backup_path, 'clone-review-', 256 * 1024)
+    plan_file, plan = sidecar(
         review.get('plan_path'), backup_path, 'upgrade-clone-plan-', 256 * 1024
     )
-    report_file, report_data = _sidecar(
+    report_file, report_data = sidecar(
         plan.get('report_path'), backup_path, 'upgrade-report-', 20 * 1024 * 1024
     )
-    reviewed_inventory_file, _ = _sidecar(
+    reviewed_inventory_file, _ = sidecar(
         review.get('inventory_path'), backup_path, 'clone-review-inventory-', 2 * 1024 * 1024
     )
-    clone_receipt_file, clone_receipt = _sidecar(
+    clone_receipt_file, clone_receipt = sidecar(
         plan.get('clone_receipt_path'), backup_path, 'restore-test-', 64 * 1024
     )
     clone = foundry_backup.absolute_folder(plan.get('clone_path'), 'Upgrade clone')
@@ -832,12 +832,12 @@ def audit_migration(
     return result
 
 
-def review_cutover(audit_path, confirmed_closed=False):
-    """Recheck the migrated clone and unchanged original before a manual User Data switch."""
-    if confirmed_closed is not True or foundry_backup.running_foundry():
-        raise ValueError(
-            'Close both the original and isolated Foundry installations before cutover review.'
-        )
+def passing_audit(audit_path):
+    """A saved, passing migrated-clone audit beside its re-verified backup.
+
+    Returns the verified backup, the audit file, the audit and its saved GM inventory. The repair step
+    and the cutover review start from it.
+    """
     selected_audit = foundry_backup.absolute_folder(audit_path, 'Migration audit')
     if not selected_audit.is_file() or selected_audit.stat().st_size > 256 * 1024:
         raise ValueError('Select a passing migrated-clone audit.')
@@ -846,8 +846,8 @@ def review_cutover(audit_path, confirmed_closed=False):
         raise ValueError('Invalid migrated-clone audit.')
     backup = foundry_backup.verify(preliminary.get('backup_path'))
     backup_path = Path(backup['path'])
-    audit_file, audit = _sidecar(selected_audit, backup_path, 'migration-audit-', 256 * 1024)
-    inventory_file, inventory = _sidecar(
+    audit_file, audit = sidecar(selected_audit, backup_path, 'migration-audit-', 256 * 1024)
+    inventory_file, inventory = sidecar(
         audit.get('inventory_path'), backup_path, 'migration-audit-inventory-', 2 * 1024 * 1024
     )
     if (
@@ -860,6 +860,38 @@ def review_cutover(audit_path, confirmed_closed=False):
         or audit.get('cutover_ready') is not False
     ):
         raise ValueError('The saved migration audit is not a passing, unchanged audit.')
+    return backup, audit_file, audit, inventory
+
+
+def clone_world(backup, audit):
+    """The migrated clone's User Data folder and world folder named by a passing audit."""
+    backup_path = Path(backup['path'])
+    clone = foundry_backup.absolute_folder(audit.get('clone_path'), 'Upgrade clone')
+    original = foundry_backup.absolute_folder(
+        foundry_backup.read_manifest(backup_path).get('source_user_data'),
+        'Original Foundry User Data',
+    )
+    world = clone / storage.manifest_path(backup['world']['manifest_path']).parent
+    if (
+        not world.is_dir()
+        or world.is_symlink()
+        or not foundry_backup.within(world.resolve(), clone)
+        or foundry_backup.within(clone, original)
+        or foundry_backup.within(clone, backup_path)
+        or foundry_backup.within(backup_path, clone)
+    ):
+        raise ValueError('The migrated clone world is missing, linked or not isolated.')
+    return clone, world
+
+
+def review_cutover(audit_path, confirmed_closed=False):
+    """Recheck the migrated clone and unchanged original before a manual User Data switch."""
+    if confirmed_closed is not True or foundry_backup.running_foundry():
+        raise ValueError(
+            'Close both the original and isolated Foundry installations before cutover review.'
+        )
+    backup, audit_file, audit, inventory = passing_audit(audit_path)
+    backup_path = Path(backup['path'])
     current = audit_migration(
         audit.get('v12_review_path'), inventory, True, audit.get('manual_checks'), save=False
     )

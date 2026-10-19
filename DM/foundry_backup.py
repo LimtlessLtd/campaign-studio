@@ -1,4 +1,4 @@
-"""Offline Foundry User Data backups and isolated restore rehearsals.
+"""Offline Foundry User Data backups, folder snapshots and isolated restore rehearsals.
 
 This module copies files only. Foundry performs all world database migrations.
 """
@@ -18,6 +18,8 @@ import storage
 
 FORMAT = 1
 MANIFEST = 'campaign-studio-backup.json'
+SNAPSHOT_MANIFEST = 'campaign-studio-folder-snapshot.json'
+SNAPSHOT_FORMAT = 'campaign-studio-folder-snapshot'
 
 
 def within(path, parent):
@@ -195,11 +197,8 @@ def read_manifest(package):
     return manifest
 
 
-def _verify_tree(payload, manifest):
-    if not payload.is_dir() or payload.is_symlink():
-        raise ValueError('Backup User Data folder is missing or linked.')
-    records = manifest.get('files')
-    directories = manifest.get('directories')
+def _verify_files(payload, records, directories):
+    """Check that `payload` holds exactly the recorded files and folders, each with its checksum."""
     if not isinstance(records, list) or not isinstance(directories, list):
         raise ValueError('Invalid Foundry backup manifest.')
     names = []
@@ -226,6 +225,13 @@ def _verify_tree(payload, manifest):
         path = payload / storage.manifest_path(record['path'])
         if path.stat().st_size != record['bytes'] or storage.sha256_file(path) != record['sha256']:
             raise ValueError(f'Backup checksum failed: {record["path"]}')
+
+
+def _verify_tree(payload, manifest):
+    if not payload.is_dir() or payload.is_symlink():
+        raise ValueError('Backup User Data folder is missing or linked.')
+    records = manifest.get('files')
+    _verify_files(payload, records, manifest.get('directories'))
     world = manifest.get('world')
     if not isinstance(world, dict):
         raise ValueError('Invalid Foundry world in backup manifest.')
@@ -310,3 +316,121 @@ def rehearse(path, destination):
         'verified': True,
         'receipt_path': str(receipt_path),
     }
+
+
+def snapshot(source, destination):
+    """Copy a closed Foundry folder, such as one world, to a new folder and verify every file.
+
+    The world-level backup taken before Studio repairs a migrated clone; `restore_snapshot` puts parts
+    of it back.
+    """
+    source = absolute_folder(source, 'Folder to back up')
+    target = absolute_folder(destination, 'Snapshot destination')
+    if not source.is_dir() or source.is_symlink():
+        raise ValueError('The folder to back up is missing or linked.')
+    if target.exists():
+        raise ValueError('Snapshot destination must be a new, empty path.')
+    if within(target, source) or within(source, target):
+        raise ValueError('The snapshot must be outside the folder it copies.')
+    if running_foundry():
+        raise ValueError('Close Foundry VTT before backing up the world.')
+    files, dirs = _inventory(source)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _space(target.parent, sum(size for _, size, _ in files))
+    staging = target.with_name('.incomplete-' + target.name + '-' + uuid.uuid4().hex[:8])
+    staging.mkdir(mode=0o700)
+    payload = staging / 'folder'
+    payload.mkdir(mode=0o700)
+    try:
+        for name in dirs:
+            (payload / storage.manifest_path(name)).mkdir(parents=True, exist_ok=True)
+        records = []
+        for name, expected_size, expected_mtime in files:
+            item = source / storage.manifest_path(name)
+            metadata = item.stat()
+            if (metadata.st_size, metadata.st_mtime_ns) != (expected_size, expected_mtime):
+                raise ValueError(f'A file changed during the backup: {item}')
+            records.append(
+                {'path': name, **storage.copy_and_hash(item, payload / storage.manifest_path(name))}
+            )
+        if running_foundry() or _inventory(source) != (files, dirs):
+            raise ValueError('Foundry started or the folder changed during the backup.')
+        manifest = {
+            'format': SNAPSHOT_FORMAT,
+            'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'source': str(source),
+            'files': records,
+            'directories': dirs,
+        }
+        (staging / SNAPSHOT_MANIFEST).write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+        _verify_files(payload, records, dirs)
+        staging.rename(target)
+    except Exception as error:
+        raise ValueError(f'{error} Incomplete copy retained at {staging}') from error
+    return {
+        'path': str(target),
+        'source': str(source),
+        'files': len(records),
+        'bytes': sum(record['bytes'] for record in records),
+        'verified': True,
+    }
+
+
+def verify_snapshot(path):
+    """Check a folder snapshot against its manifest and return the manifest."""
+    package = absolute_folder(path, 'Snapshot')
+    manifest_path = package / SNAPSHOT_MANIFEST
+    if package.name.startswith('.incomplete-') or not manifest_path.is_file():
+        raise ValueError('This folder is not a complete Campaign Studio folder snapshot.')
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    if not isinstance(manifest, dict) or manifest.get('format') != SNAPSHOT_FORMAT:
+        raise ValueError('Unsupported folder snapshot format.')
+    payload = package / 'folder'
+    if not payload.is_dir() or payload.is_symlink():
+        raise ValueError('The snapshot folder is missing or linked.')
+    _verify_files(payload, manifest.get('files'), manifest.get('directories'))
+    return manifest
+
+
+def restore_snapshot(path, names, set_aside):
+    """Put the snapshot's copy of each named subfolder back where it came from.
+
+    Each replaced folder is moved into `set_aside` for inspection rather than deleted. The snapshot is
+    verified first, and each restored folder is checked against it before it takes the old one's place.
+    """
+    package = absolute_folder(path, 'Snapshot')
+    manifest = verify_snapshot(package)
+    source = absolute_folder(manifest.get('source'), 'Snapshot source')
+    keep = absolute_folder(set_aside, 'Folder for replaced files')
+    if within(keep, source):
+        raise ValueError('Replaced files must be kept outside the restored folder.')
+    if running_foundry():
+        raise ValueError('Close Foundry VTT before restoring the world.')
+    restored = []
+    for name in names:
+        relative = storage.manifest_path(name)
+        prefix = relative.as_posix() + '/'
+        records = [item for item in manifest['files'] if item['path'].startswith(prefix)]
+        directories = [
+            item[len(prefix) :] for item in manifest['directories'] if item.startswith(prefix)
+        ]
+        if relative.as_posix() not in manifest['directories']:
+            raise ValueError(f'The snapshot has no folder {name}.')
+        current = source / relative
+        staging = current.with_name('.restore-' + current.name + '-' + uuid.uuid4().hex[:8])
+        staging.mkdir(mode=0o700)
+        for item in directories:
+            (staging / storage.manifest_path(item)).mkdir(parents=True, exist_ok=True)
+        local = [{**item, 'path': item['path'][len(prefix) :]} for item in records]
+        for item in local:
+            storage.copy_and_hash(
+                package / 'folder' / relative / storage.manifest_path(item['path']),
+                staging / storage.manifest_path(item['path']),
+            )
+        _verify_files(staging, local, directories)
+        keep.mkdir(parents=True, exist_ok=True)
+        if current.exists():
+            shutil.move(str(current), str(keep / f'{current.name}-{uuid.uuid4().hex[:8]}'))
+        staging.rename(current)
+        restored.append(relative.as_posix())
+    return restored

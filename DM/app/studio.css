@@ -1336,6 +1336,25 @@ hr {
 .backup-path {
   overflow-wrap: anywhere;
 }
+.upgrade-card fieldset {
+  margin: 12px 0;
+  min-width: 0;
+}
+.upgrade-card fieldset > legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.upgrade-card li {
+  overflow-wrap: anywhere;
+}
+.repair-scenes {
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.repair-macro {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+}
 .backup-result {
   margin-top: 14px;
   overflow-wrap: anywhere;

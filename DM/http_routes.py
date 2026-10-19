@@ -19,6 +19,7 @@ import context as prompt_context
 import encounter_budget
 import foundry_backup
 import foundry_library
+import foundry_readiness
 import foundry_upgrade
 import map_trash
 import maps_io
@@ -197,6 +198,9 @@ ROUTES = {
         (lambda path: path == '/api/foundry/upgrade/prepare-clone', '_post_prepare_clone'),
         (lambda path: path == '/api/foundry/upgrade/review-clone', '_post_review_clone'),
         (lambda path: path == '/api/foundry/upgrade/audit-migration', '_post_audit_migration'),
+        (lambda path: path == '/api/foundry/upgrade/repair-scan', '_post_repair_scan'),
+        (lambda path: path == '/api/foundry/upgrade/repair-apply', '_post_repair_apply'),
+        (lambda path: path == '/api/foundry/upgrade/smoke-test', '_post_smoke_test'),
         (lambda path: path == '/api/foundry/upgrade/review-cutover', '_post_review_cutover'),
         (
             lambda path: path.startswith('/api/jobs/') and path.endswith('/cancel'),
@@ -1374,6 +1378,30 @@ class Handler(SimpleHTTPRequestHandler):
                 p.get('inventory'),
                 p.get('confirmed_clone') is True,
                 p.get('manual_checks'),
+            )
+        )
+
+    def _post_repair_scan(self, path, query, p):
+        return self.send_json(
+            foundry_readiness.scan(p.get('audit_path'), p.get('confirmed_closed') is True)
+        )
+
+    def _post_repair_apply(self, path, query, p):
+        choices = {'summons': p.get('summons') or {}, 'macros': p.get('macros') or []}
+        return self.send_json(
+            foundry_readiness.apply(
+                p.get('scan_path'),
+                p.get('installation'),
+                choices,
+                p.get('confirmed_closed') is True,
+                p.get('confirmed_reviewed') is True,
+            )
+        )
+
+    def _post_smoke_test(self, path, query, p):
+        return self.send_json(
+            foundry_readiness.smoke_test(
+                p.get('scan_path'), p.get('party_folder'), p.get('scene_ids')
             )
         )
 

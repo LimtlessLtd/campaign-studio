@@ -259,8 +259,13 @@ can then compare a fresh v12 clone inventory with that plan and save a review be
 not install packages, run migration or cut over a live world. After the GM opens the isolated clone in the
 selected newer Foundry build, Foundry migrates it; a second read-only macro and audit compare its build,
 package versions and activation with the plan and record the GM's scene, journal, actor/item and module
-checks. A final cutover review rechecks the migrated clone, unchanged original User Data and verified backup,
-then gives the GM the path for a manual switch. Keep the original v12 installation and backup for rollback.
+checks. With Foundry closed, a repair step then finds known v14 migration defects in the clone (duplicate
+Scene Levels floors from the Levels module, item source IDs that stop AC and HP computing, "[object Object]"
+fields, summon links to no actor, macros using removed effect fields) in a dry run, repairs what the GM reviews
+after a verified backup of the clone's world, and verifies the result. An encounter smoke test rolls every
+action of the party and the NPCs on chosen scenes. A final cutover review rechecks the migrated clone,
+unchanged original User Data and verified backup, then gives the GM the path for a manual switch. Keep the
+original v12 installation and backup for rollback.
 
 ## Your files
 

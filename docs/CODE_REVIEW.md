@@ -104,7 +104,8 @@ report after more than 200 later log lines and ignores oversized numeric reports
    table to handlers under 60 lines. Foundry upgrade catalogue collection, compatibility solving and
    inventory/clone workflows now live in separate modules; its long clone workflows
    still need care when extended. `render2d.prop` is 424 lines. `map-pages.js` has `mapStudio` at over 1,000
-   lines and `foundry-pages.js` has `foundryUpgradeCard` at over 500. Page controllers are separate from
+   lines and `foundry-pages.js` has `foundryUpgradeCard` at over 500 (its repair step is a separate
+   `foundryRepairStep` in `foundry-repair.js`). Page controllers are separate from
    shared controls and autosave; those two complex page functions still need careful decomposition when extended.
 4. **HTTP errors are untyped. Resolved at the transport boundary.** Route handlers raise `Invalid`,
    `NotFound` and `Conflict`; one dispatcher maps them to 400, 404 and 409. Domain `ValueError`s become

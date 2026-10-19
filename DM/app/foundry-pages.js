@@ -174,6 +174,7 @@ function foundryUpgradeCard(hasWorld) {
     modules: false,
   };
   const cutoverForm = { audit: '', closed: false };
+  const repair = foundryRepairStep(hasWorld);
   let inventory = null;
   let cloneInventory = null;
   let migratedInventory = null;
@@ -569,6 +570,7 @@ function foundryUpgradeCard(hasWorld) {
             if (audit.status === 'reviewed') {
               cutoverForm.audit = audit.audit_path;
               cutoverAuditInput.querySelector('input').value = audit.audit_path;
+              repair.useAudit(audit.audit_path);
             }
             render(
               auditOutput,
@@ -762,12 +764,13 @@ function foundryUpgradeCard(hasWorld) {
     formInput(auditForm, 'modules', 'I tested retained module behavior', { type: 'checkbox' }),
     auditMigration,
     auditOutput,
+    ...repair.nodes,
     h('hr'),
     h('h3', {}, 'Review cutover readiness'),
     h(
       'p',
       { class: 'muted' },
-      'After the migrated-clone audit passes, close both Foundry installations. Studio rechecks that the clone still matches the audit, the original User Data is unchanged since backup, and the verified backup remains intact.',
+      'After the migrated-clone audit passes and the clone is repaired, close both Foundry installations. Studio rechecks that the clone still matches the audit, the original User Data is unchanged since backup, and the verified backup remains intact.',
     ),
     cutoverAuditInput,
     formInput(cutoverForm, 'closed', 'I closed both Foundry installations', {
