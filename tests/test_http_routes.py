@@ -188,6 +188,42 @@ class RouteTests(unittest.TestCase):
                 self.assertIn('whole number', result['error'])
         verify.assert_not_called()
 
+    def test_repair_routes_pass_only_explicit_confirmations_and_the_gm_choices(self):
+        readiness = http_routes.foundry_readiness
+        with patch.object(readiness, 'scan', return_value={'scan_path': '/s'}) as scan:
+            body = {'audit_path': '/a', 'confirmed_closed': 'yes'}
+            status, result, _ = self.request('/api/foundry/upgrade/repair-scan', 'POST', body)
+        self.assertEqual((status, result), (200, {'scan_path': '/s'}))
+        scan.assert_called_once_with('/a', False)
+        body = {
+            'scan_path': '/s',
+            'installation': '/foundry',
+            'summons': {'finding': 'Actor.abcdefghijklmnop'},
+            'macros': ['!macros!abcdefghijklmnop'],
+            'confirmed_closed': True,
+            'confirmed_reviewed': True,
+        }
+        with patch.object(readiness, 'apply', return_value={'status': 'repaired'}) as apply:
+            status, _, _ = self.request('/api/foundry/upgrade/repair-apply', 'POST', body)
+        self.assertEqual(status, 200)
+        apply.assert_called_once_with(
+            '/s',
+            '/foundry',
+            {'summons': body['summons'], 'macros': body['macros']},
+            True,
+            True,
+        )
+        body = {'scan_path': '/s', 'party_folder': 'folder', 'scene_ids': ['scene']}
+        with patch.object(readiness, 'smoke_test', return_value={'problems': []}) as smoke:
+            status, _, _ = self.request('/api/foundry/upgrade/smoke-test', 'POST', body)
+        self.assertEqual(status, 200)
+        smoke.assert_called_once_with('/s', 'folder', ['scene'])
+        with patch.object(readiness, 'scan', side_effect=ValueError('Close both Foundry')):
+            status, result, _ = self.request(
+                '/api/foundry/upgrade/repair-scan', 'POST', {'audit_path': '/a'}
+            )
+        self.assertEqual((status, result['error']), (400, 'Close both Foundry'))
+
     def test_ai_settings_only_store_the_environment_variable_name(self):
         settings = {
             'ai': {

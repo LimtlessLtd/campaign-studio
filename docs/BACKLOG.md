@@ -10,7 +10,7 @@ requests take the priority the owner gives, or your judgement against the table.
 never private campaign material. IDs are never reused. Rows added by concurrent PRs conflict on the next ID
 line below: the agent merging second renumbers its rows and edits the Slack replies that announced them.
 
-Next ID: W80
+Next ID: W83
 
 | ID  | Priority | Work                                                                                                                       | Acceptance criteria                                                                                 |
 | --- | -------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -22,6 +22,7 @@ Next ID: W80
 | W41 | 2        | Playable NPCs based on a compendium monster: duplicated, renamed, re-imaged and annotated                                  | The NPC imports with its attacks; reimport changes name, art and notes only                         |
 | W42 | 2        | Art pipeline: style guide, templates per kind, batch per prep, token cut-outs, adapters                                    | One action fills every missing image for a prep; fake-provider tests                                |
 | W43 | 2        | Live Foundry check with the owner on their v14 dnd5e 5.x world, Scene Levels included (owner-assisted)                     | Exact versions and results recorded; failures become backlog rows                                   |
+| W81 | 2        | Owner-assisted check of the upgrade repair step in Foundry: a repaired clone's scenes, actors and Foundry's own rolls      | GM-run rolls, midi-qol and macros on a repaired copy recorded; failures become rows                 |
 | W44 | 2        | AI usage ledger, remainder: totals per session; ask before prompts over a set size (per-job and per-run done)              | A large prompt asks first; totals per session                                                       |
 | W57 | 2        | Phone-first editing of codex, threads, preps and proposal review                                                           | Touch-emulated flow edits an entry, thread and scene, then applies a proposal                       |
 | W58 | 2        | One-click journal entry: text, links to entries and an image prompt                                                        | One click yields reviewed linked text and a ready image prompt                                      |
@@ -32,6 +33,7 @@ Next ID: W80
 | W66 | 2        | AI proposes pins on the overworld map for scenes whose names match its labels                                              | A scene named like a map label gets a reviewed pin proposal; none apply unreviewed                  |
 | W67 | 2        | Studio never deletes from Foundry: every link and Studio-made detail can be unlinked or removed                            | Each linked record offers unlink or remove; Foundry data is never touched                           |
 | W77 | 3        | Before and after for the thread changes in an arc option and a thread ledger (reuse `record_changes`)                      | A review row shows the thread as it is and as it will be; the preview cannot differ from apply      |
+| W82 | 3        | Repair writes through a desktop Foundry v13/v14 installation's own runtime, checked on Windows, macOS and Linux            | Each platform's RunAsNode fuse and a write to a copied world recorded; the docs list what works     |
 | W24 | 3        | Folder picker identifies Foundry folders by ID and shows parent paths (name-only today)                                    | Two folders with one name import separately; older snapshots still open                             |
 | W10 | 3        | Installer and performance budgets for very large maps                                                                      | Clean-machine install test and measured time/memory at documented map sizes                         |
 | W15 | 3        | Serve several campaigns from one process (forge links, map import/export, forge exports, revisions shipped)                | Services receive their `Campaign` explicitly (no process-wide active campaign)                      |

@@ -2,7 +2,9 @@
 
 Campaign Studio has backup and compatibility report steps for upgrading a **local** Foundry world. It does
 not yet upgrade a world or run Foundry's migration. Foundry must perform its own world migration in a later,
-isolated test copy before any live cutover.
+isolated test copy before any live cutover. Studio can then repair known migration defects in that copy's
+world database ([Repair and check the migrated clone](#repair-and-check-the-migrated-clone)); it never writes
+the live world.
 
 ## Before creating a backup
 
@@ -175,7 +177,8 @@ newer Foundry launch, runtime checks and cutover are still separate steps.
 The passing v12 review shows the exact system and module release manifests selected by the compatibility
 report. Use Foundry's package management in the isolated installation to install those releases, including
 approved dependencies, and keep excluded modules disabled. Foundry itself must launch and migrate **only the
-clone** in the selected newer build; Studio does not install releases, launch Foundry or edit database files.
+clone** in the selected newer build; Studio does not install releases or launch Foundry, and changes no
+database before the repair step below.
 
 After migration, run the **migrated-clone audit macro** as GM in the clone on Foundry v13 or v14. Import its
 JSON in Studio with the passing v12 review. Inspect the migrated world and confirm launch, key scenes and
@@ -191,9 +194,77 @@ document or module feature and does not perform live cutover. Keep the verified 
 receipt and v12 installation for rollback. Foundry's [v14 Game API](https://foundryvtt.com/api/v14/classes/foundry.Game.html)
 documents the module collection and running version used by the GM macro.
 
+## Repair and check the migrated clone
+
+Foundry's migration and the modules' own migrations can leave defects that package metadata cannot show. On a
+real v12 to v14 upgrade with dnd5e 5.3 (October 2026) the world opened, yet characters had no AC or hit points,
+attacks were missing and scenes had duplicate floors. This step finds and repairs those defects in the
+**isolated clone**, after its audit passes and before cutover. Close both Foundry installations first.
+
+**Dry run: find repairs** reads the clone's world database with Studio's read-only reader and saves a report
+beside the backup. It changes nothing. It lists:
+
+- **Duplicate Scene Levels floors.** The Levels module's v14 migration adds auto-named
+  `<Scene> - Level (a|b)` floors. One at the base elevation of a floor the GM defined in Levels
+  (`flags.levels.sceneLevels`) merges into the defined floor at that base with the closest top. Several at one
+  base where none was defined merge into the one with a background, else the one with most tokens, which grows
+  to the tallest merged height but never into the next floor up. Every reference moves with them: walls',
+  tiles', lights', sounds', notes', drawings' and regions' `levels`, tokens' `level`, the scene's
+  `initialLevel`, floors' `visibility.levels` and region behaviours. A removed floor's background or
+  foreground moves to the kept floor when that has none. A floor whose image differs from the kept floor's is
+  not merged and is listed for the GM, and a lone auto-named floor takes the name the GM gave its range.
+- **Relative item source IDs.** A `flags.dnd5e.sourceId` of the form `.<id>` with no
+  `_stats.compendiumSource` makes dnd5e 5.3's item preparation fail, so the actor's AC, hit points and save DCs
+  never compute. The flag is removed from world items, actors' items and unlinked tokens' items.
+- **"[object Object]" fields.** Old-format versatile damage, recharge (`uses.recovery`) and consumption
+  targets holding "[object Object]" leave the item invalid or without its attack once dnd5e converts it. They
+  are cleared; set a cleared recharge again in Foundry. "[object Object]" elsewhere in an item is listed, not
+  repaired.
+- **Summon links to no actor.** A summon profile whose uuid is not a Foundry UUID (Plutonium's
+  `@creature[...]`) summons nothing. Studio lists world actors whose names match and changes the link only to
+  the actor the GM chooses.
+- **Macros using removed effect fields.** v14 removed ActiveEffect `label` and `icon` for `name` and `img`. A
+  script macro whose effect data still uses them is listed with its lines, and Studio renames them only in the
+  macros the GM ticks. A field whose replacement the effect already has is left for the GM, and objects
+  without effect fields, such as dialog buttons, are never touched. Other code in a macro is not changed.
+
+**Back up the world and repair** needs the folder of the Foundry installation that opens the clone (the
+target build); another build's installation is refused. Studio writes the database with the classic-level
+library bundled in that installation, the LevelDB library Foundry reads the world with. Node.js 20 or later
+runs it if installed; otherwise a desktop installation's own runtime does, when its Electron RunAsNode fuse
+allows scripts (Studio reads the fuse first, so Foundry itself never starts). Studio:
+
+1. reads the clone again and refuses if anything changed since the dry run;
+2. copies the clone's world folder beside the backup (`clone-repair-<id>/world-before`) and verifies every
+   file by SHA-256;
+3. writes each database's changes as one batch, refusing them all if any document no longer holds the bytes
+   the dry run read, or if Foundry has the database open;
+4. verifies the result against that copy: only the planned documents changed and every other world file
+   matches; document counts change only by the merged floors; no document names a merged floor; nothing that
+   had floors lost all of them; every floor background and foreground is still on a floor; and a new dry run
+   finds no duplicate floors, relative source IDs or "[object Object]" fields left.
+
+If the writer stopped part way or a check fails, Studio puts the copy's databases back, keeps the written ones
+in `clone-repair-<id>/replaced` and records the restore. Each repair is saved beside the backup. Open the
+clone in Foundry and look at the repaired scenes and actors before cutover, and run the dry run again after
+changing the clone.
+
+**Encounter smoke test**: choose the party's actor folder and the scenes to test. Studio reads the clone
+(Foundry may be open) and turns every activity of each party character and of every NPC placed on those scenes
+into its formulas and links: every attack, save, heal, cast, summon and utility roll. Each formula must parse
+and roll to a number with Studio's own dice roller, including a calculated dice count such as
+`(floor(@item.level / 2))d8`; values only dnd5e knows at run time, such as `@scale.*`, count as 0 and are
+listed. Linked spells and summoned actors must exist in the world or an installed compendium, and consumption
+must point at an item the actor has. Each scene then gets a rough number of rounds for each side to win: each
+combatant uses its best attack every round against the other side's average armour class, and the enemies are
+the scene's hostile NPC tokens (every NPC token when none is hostile). This finds broken data; it is **not a
+balance prediction**, since spells, active effects, resistances, module automation and tactics are ignored.
+Foundry's own dice, midi-qol and macros need a logged-in GM in Foundry and are not run. The report is saved
+beside the backup.
+
 ## Review cutover readiness
 
-After the audit passes, close both Foundry installations. In **Review cutover readiness**, select the saved
+After the audit passes and the clone is repaired and checked, close both Foundry installations. In **Review cutover readiness**, select the saved
 audit and confirm Foundry is closed. Studio repeats the migration audit against the current isolated clone,
 verifies the original User Data still matches the offline backup byte for byte, and checks the backup again.
 It saves a cutover review beside the backup only when all checks pass. A changed original means the clone may

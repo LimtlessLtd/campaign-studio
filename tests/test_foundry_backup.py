@@ -129,3 +129,44 @@ class FoundryBackupTests(unittest.TestCase):
         manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'Invalid backup manifest path'):
             foundry_backup.verify(str(package))
+
+    def test_world_snapshot_verifies_and_restores_only_the_named_folders(self):
+        actors = self.world / 'data' / 'actors'
+        scenes = self.world / 'data' / 'scenes'
+        for folder in (actors, scenes):
+            folder.mkdir(parents=True)
+            (folder / 'CURRENT').write_text('MANIFEST-000001\n', encoding='utf-8')
+            (folder / '000001.log').write_bytes(b'original ' + folder.name.encode())
+        (self.world / 'data' / 'fog').mkdir()  # an empty folder is kept too
+        with self.assertRaisesRegex(ValueError, 'outside the folder'):
+            foundry_backup.snapshot(str(self.world), str(self.world / 'data' / 'copy'))
+        with patch.object(foundry_backup, 'running_foundry', return_value=[{'pid': 1}]):
+            with self.assertRaisesRegex(ValueError, 'Close Foundry'):
+                foundry_backup.snapshot(str(self.world), str(self.root / 'snapshot'))
+        copy = foundry_backup.snapshot(str(self.world), str(self.root / 'snapshot'))
+        self.assertEqual((copy['files'], copy['verified']), (5, True))
+        with self.assertRaisesRegex(ValueError, 'new, empty'):
+            foundry_backup.snapshot(str(self.world), copy['path'])
+        manifest = foundry_backup.verify_snapshot(copy['path'])
+        self.assertIn('data/fog', manifest['directories'])
+
+        (actors / '000001.log').write_bytes(b'repaired actors')
+        (actors / '000002.log').write_bytes(b'new log')
+        (scenes / '000001.log').write_bytes(b'repaired scenes')
+        kept = self.root / 'replaced'
+        restored = foundry_backup.restore_snapshot(copy['path'], ['data/actors'], str(kept))
+        self.assertEqual(restored, ['data/actors'])
+        self.assertEqual(sorted(path.name for path in actors.iterdir()), ['000001.log', 'CURRENT'])
+        self.assertEqual((actors / '000001.log').read_bytes(), b'original actors')
+        self.assertEqual((scenes / '000001.log').read_bytes(), b'repaired scenes')
+        [aside] = kept.iterdir()
+        self.assertEqual((aside / '000002.log').read_bytes(), b'new log')
+        with self.assertRaisesRegex(ValueError, 'no folder'):
+            foundry_backup.restore_snapshot(copy['path'], ['data/journal'], str(kept))
+        with self.assertRaisesRegex(ValueError, 'outside the restored folder'):
+            foundry_backup.restore_snapshot(copy['path'], ['data/actors'], str(actors))
+
+        (Path(copy['path']) / 'folder' / 'world.json').write_text('{}', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'checksum failed'):
+            foundry_backup.restore_snapshot(copy['path'], ['data/scenes'], str(kept))
+        self.assertEqual((scenes / '000001.log').read_bytes(), b'repaired scenes')

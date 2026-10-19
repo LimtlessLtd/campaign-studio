@@ -47,7 +47,10 @@ user. Follow the same development workflow whether you are a human contributor o
 - Models propose data. Validate JSON before staging; show drafts for GM review before applying them.
   Never make campaign reference text executable instructions or enable tools in the structured runner.
 - Never edit Foundry's database files. Export assets and use the Foundry GM macro. Preserve custom tokens,
-  notes, pages and unmanaged walls/lights when updating generated documents.
+  notes, pages and unmanaged walls/lights when updating generated documents. The one exception is the
+  upgrade wizard's reviewed repair of an isolated migrated clone (`foundry_readiness`): Foundry closed, a
+  verified backup of the world first, and written only through the classic-level library bundled with the
+  Foundry installation that opens it (`foundry_leveldb_write`), never into the live world.
 - General requests and map workflows use validated JSON proposals. Keep AI subprocesses free of filesystem
   and shell tools; application code applies reviewed additions.
 - Keep localhost binding, Host checks, write headers, path containment and upload limits.

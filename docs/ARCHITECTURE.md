@@ -38,6 +38,11 @@ flowchart LR
 | `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                        |
 | `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts           |
 | `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review       |
+| `DM/foundry_readiness.py`             | Upgrade repair step: dry run, world backup, write, verify or restore, smoke test      |
+| `DM/foundry_repair.py`                | Known v14 migration defects found and their document fixes planned; verification      |
+| `DM/foundry_smoke.py`                 | Encounter smoke test: every action's formulas and links, rough rounds to win          |
+| `DM/foundry_roll.py`                  | Dice formula parser and roller, no code evaluation                                    |
+| `DM/foundry_leveldb_write.py`         | Writes a reviewed plan with the installation's classic-level (`.cjs` helper)          |
 | `DM/foundry_compat.py`                | Shared build, version and package relationship rules                                  |
 | `DM/foundry_catalog.py`               | Official Foundry releases, directory pages and manifests, read as the solver needs    |
 | `DM/foundry_solver.py`                | Compatible build and dependency selection (newest first, conflict-directed backjumps) |
@@ -549,3 +554,17 @@ future work.
 The Foundry backup service reads the selected world manifest to locate its User Data folder. It copies that
 whole folder only while Foundry is closed, records and verifies every file checksum, and can materialize a
 restore in a separate new folder. The app does not migrate a Foundry database or overwrite a live world.
+
+After Foundry migrates the isolated clone, the upgrade wizard's repair step (`foundry_readiness`) is the only
+code that writes a Foundry database, and only the clone's. `foundry_repair` reads the world with
+`foundry_leveldb` and plans document changes for known migration defects; nothing is written until the GM
+has reviewed the dry run. Applying it re-reads the clone (refusing one that changed since), copies the world
+folder beside the upgrade backup with checksums (`foundry_backup.snapshot`), and hands the plan to
+`foundry_leveldb_write`. That runs a small Node.js helper with the classic-level library bundled in the
+Foundry installation that opens the clone, by Node.js or by that installation's Electron runtime when its
+RunAsNode fuse allows it, so the bytes are written by the library Foundry reads them with and LevelDB's lock
+refuses a database Foundry has open. Each planned change names the hash of the bytes it was planned from;
+the helper refuses every write if one differs. Python then verifies the result against the copy and restores
+the written databases from it if any check fails. A pure-Python writer was rejected: it would be a second
+LevelDB implementation checked only by Studio's own reader. The encounter smoke test (`foundry_smoke`) only
+reads.

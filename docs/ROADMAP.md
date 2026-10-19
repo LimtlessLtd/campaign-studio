@@ -302,6 +302,19 @@ their row and finding say enough.
   Give every linked record (world map nomination, pin, scene or entry link) an unlink or remove action that
   states what stays in Foundry. Shipped so far: remove a world map (nomination and pins); remove an imported world (its codex entries, their links and the library snapshot).
 
+### W81, W82 Upgrade repair step
+
+- The repair step (`foundry_readiness`, shipped as W80) is checked offline: its dry run on a copy of the
+  owner's migrated world found what the owner's own scripts had fixed, the write path ran through Foundry
+  v14's bundled classic-level on that copy, and the smoke test flags the same problems as the owner's script
+  on the world before its fixes. W81: what only Foundry shows. The owner opens a repaired copy, looks at the
+  merged floors and the actors whose AC and HP now compute, and rolls the smoke-tested actions with
+  Foundry's own dice, midi-qol and macros, because an agent cannot sign in as GM. Turn differences into rows,
+  and add any new migration defect found on a real upgrade to `foundry_repair` with a synthetic fixture.
+- W82: only Node.js builds of Foundry and the v12 desktop build's fuse were checked. Check that a v13 and
+  v14 desktop installation on each platform still allows `ELECTRON_RUN_AS_NODE` (Studio reads the fuse
+  first and refuses otherwise) and loads its classic-level, so a GM without Node.js can repair a clone.
+
 ### W77 Before and after for arcs and ledgers
 
 - A request proposal shows what a change to a thread or codex entry does (`record_changes`: the preview

@@ -932,6 +932,18 @@ class UpgradeTests(unittest.TestCase):
                 self.assertEqual(audited['target_generation'], 14)
                 self.assertFalse(audited['cutover_ready'])
                 self.assertTrue(Path(audited['audit_path']).is_file())
+                # The repair step starts from the passing audit and the clone's world folder.
+                verified, _, passing, _ = upgrade.passing_audit(audited['audit_path'])
+                self.assertEqual(passing['clone_path'], plan['clone_path'])
+                self.assertEqual(
+                    upgrade.clone_world(verified, passing),
+                    (
+                        Path(plan['clone_path']),
+                        Path(plan['clone_path']) / 'Data' / 'worlds' / 'fixture-world',
+                    ),
+                )
+                with self.assertRaisesRegex(ValueError, 'not a passing'):
+                    upgrade.passing_audit(pending['audit_path'])
                 with self.assertRaisesRegex(ValueError, 'Close both'):
                     upgrade.review_cutover(audited['audit_path'])
                 with self.assertRaisesRegex(ValueError, 'passing'):
