@@ -144,6 +144,19 @@ class SmokeTests(unittest.TestCase):
         result = smoke._test(world, world.actors['actorBare0000001'], 1, random.Random(1), [])
         self.assertEqual((result['ac'], result['hp'], result['actions']), (10, 1, 0))
 
+    def test_a_compendium_link_is_looked_up_only_in_this_user_data(self):
+        world = smoke._World(dict.fromkeys(smoke.COLLECTIONS, {}), self.world, self.user_data)
+        self.assertTrue(world.exists('Compendium.dnd5e.spells.Item.' + PACK_SPELL))
+        self.assertFalse(world.exists('Compendium.dnd5e.spells.Item.spellMissing0001'))
+        # An absolute folder in place of the package ID (its path must not hold a dot, which splits).
+        outside = Path(self.temp.name) / 'outside'
+        fixture.pack(outside, ['spellOutside0001'])
+        absolute = str(outside / 'Data' / 'systems' / 'dnd5e')
+        self.assertNotIn('.', absolute)
+        for scope in (absolute, '', 'dnd5e/sub'):
+            with self.subTest(scope=scope):
+                self.assertIsNone(world.exists(f'Compendium.{scope}.spells.Item.spellOutside0001'))
+
     def test_choices_must_belong_to_the_world(self):
         for folder, scenes, message in (
             ('folderScenes0001', [LIGHTHOUSE], 'actor folder'),

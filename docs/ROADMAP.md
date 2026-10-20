@@ -315,6 +315,17 @@ their row and finding say enough.
   v14 desktop installation on each platform still allows `ELECTRON_RUN_AS_NODE` (Studio reads the fuse
   first and refuses otherwise) and loads its classic-level, so a GM without Node.js can repair a clone.
 
+### W84 Live cutover check
+
+- The switch and rollback (`foundry_cutover`, shipped as W83) are checked on synthetic User Data folders, and
+  the comparison on the owner's real v12 folder: against the 16 October backup it reports exactly the test
+  world the owner uninstalled (97 files, 17 folders), with Foundry's rotated logs ignored, in about 80
+  seconds. The owner's own v14 switch on 18 October was done by hand before this existed. At the next real
+  upgrade, the owner runs the switch from the wizard and records whether the target installation opens the
+  switched folder on the live port with the rewritten `Config/options.json`, and whether Roll back reopens
+  the old build. Desktop builds that keep their User Data path elsewhere than the folder's own options would
+  show up here; turn any difference into a row.
+
 ### W77 Before and after for arcs and ledgers
 
 - A request proposal shows what a change to a thread or codex entry does (`record_changes`: the preview

@@ -2366,6 +2366,9 @@ class StudioIntegration(unittest.TestCase):
         (plutonium / 'module.json').write_text(json.dumps({'id': 'Plutonium', 'version': '1.0.0'}))
         (user_data / 'Data' / 'assets').mkdir()
         (user_data / 'Data' / 'assets' / 'fixture.png').write_bytes(self.png)
+        test_world = user_data / 'Data' / 'worlds' / 'test-world'
+        test_world.mkdir()
+        (test_world / 'world.json').write_text(json.dumps({'id': 'test-world'}))
         self.request('/api/settings', {'world_path': str(world)})
         with patch.object(foundry_backup, 'running_foundry', return_value=[]):
             plan = self.request('/api/foundry/backup/plan')
@@ -2499,10 +2502,47 @@ class StudioIntegration(unittest.TestCase):
                 {'audit_path': audit['audit_path']},
                 expected=400,
             )
+            # Foundry wrote a log and the GM uninstalled a test world after the backup.
+            (user_data / 'Logs').mkdir()
+            (user_data / 'Logs' / 'debug.log').write_text('launch')
+            (test_world / 'world.json').unlink()
+            test_world.rmdir()
+            removed = self.request('/api/foundry/upgrade/review-cutover', cutover_payload)
+            self.assertEqual(removed['status'], 'needs_confirmation')
+            self.assertEqual(removed['unconfirmed_changes'], ['Data/worlds/test-world'])
+            self.assertNotIn('review_path', removed)
+            cutover_payload['confirmed_changes'] = removed['unconfirmed_changes']
             cutover = self.request('/api/foundry/upgrade/review-cutover', cutover_payload)
-            self.assertEqual(cutover['status'], 'ready_for_manual_cutover')
+            self.assertEqual(cutover['status'], 'ready_for_cutover')
             self.assertTrue(cutover['cutover_ready'])
             self.assertTrue(Path(cutover['review_path']).is_file())
+            switch = {'review_path': cutover['review_path'], 'confirmed_closed': True}
+            self.request('/api/foundry/upgrade/cut-over', switch, expected=403, writable=False)
+            self.request(
+                '/api/foundry/upgrade/cut-over',
+                {'review_path': cutover['review_path']},
+                expected=400,
+            )
+            done = self.request('/api/foundry/upgrade/cut-over', switch)
+            self.assertEqual(done['status'], 'cut_over')
+            self.assertEqual(
+                json.loads((world / 'world.json').read_text())['coreVersion'], '13.351'
+            )
+            self.assertTrue(Path(done['rollback_user_data'], 'Logs', 'debug.log').is_file())
+            self.assertEqual(done['left_out_worlds'], ['test-world'])
+            self.assertTrue(Path(prepared['clone_path'], 'Data/worlds/test-world').is_dir())
+            self.assertFalse(test_world.exists())
+            options = json.loads((user_data / 'Config' / 'options.json').read_text())
+            self.assertEqual(options['dataPath'], str(user_data.resolve()))
+            back = self.request(
+                '/api/foundry/upgrade/roll-back',
+                {'cutover_path': done['receipt_path'], 'confirmed_closed': True},
+            )
+            self.assertEqual(back['status'], 'rolled_back')
+            self.assertEqual(
+                json.loads((world / 'world.json').read_text())['coreVersion'], '12.331'
+            )
+            self.assertTrue(Path(back['set_aside_user_data'], 'Config', 'options.json').is_file())
 
     def test_first_run_world_picker_and_read_only_library(self):
         user_data = self.root / 'Foundry User Data'

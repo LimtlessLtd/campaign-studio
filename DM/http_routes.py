@@ -18,6 +18,7 @@ import config
 import context as prompt_context
 import encounter_budget
 import foundry_backup
+import foundry_cutover
 import foundry_library
 import foundry_readiness
 import foundry_upgrade
@@ -202,6 +203,8 @@ ROUTES = {
         (lambda path: path == '/api/foundry/upgrade/repair-apply', '_post_repair_apply'),
         (lambda path: path == '/api/foundry/upgrade/smoke-test', '_post_smoke_test'),
         (lambda path: path == '/api/foundry/upgrade/review-cutover', '_post_review_cutover'),
+        (lambda path: path == '/api/foundry/upgrade/cut-over', '_post_cut_over'),
+        (lambda path: path == '/api/foundry/upgrade/roll-back', '_post_roll_back'),
         (
             lambda path: path.startswith('/api/jobs/') and path.endswith('/cancel'),
             '_post_cancel_job',
@@ -1407,7 +1410,21 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _post_review_cutover(self, path, query, p):
         return self.send_json(
-            foundry_upgrade.review_cutover(p.get('audit_path'), p.get('confirmed_closed') is True)
+            foundry_cutover.review(
+                p.get('audit_path'),
+                p.get('confirmed_closed') is True,
+                p.get('confirmed_changes') or [],
+            )
+        )
+
+    def _post_cut_over(self, path, query, p):
+        return self.send_json(
+            foundry_cutover.cut_over(p.get('review_path'), p.get('confirmed_closed') is True)
+        )
+
+    def _post_roll_back(self, path, query, p):
+        return self.send_json(
+            foundry_cutover.roll_back(p.get('cutover_path'), p.get('confirmed_closed') is True)
         )
 
     def _post_request(self, path, query, p):

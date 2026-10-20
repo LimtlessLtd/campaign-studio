@@ -1,10 +1,10 @@
 # Foundry backup and restore test
 
 Campaign Studio has backup and compatibility report steps for upgrading a **local** Foundry world. It does
-not yet upgrade a world or run Foundry's migration. Foundry must perform its own world migration in a later,
-isolated test copy before any live cutover. Studio can then repair known migration defects in that copy's
-world database ([Repair and check the migrated clone](#repair-and-check-the-migrated-clone)); it never writes
-the live world.
+not run Foundry's migration: Foundry migrates an isolated test copy (the clone). Studio can then repair known
+migration defects in that copy's world database ([Repair and check the migrated clone](#repair-and-check-the-migrated-clone));
+it never writes the live world's database. Its last step switches the live User Data folder to a copy of the
+audited clone and can switch it back ([Review cutover readiness and switch](#review-cutover-readiness-and-switch)).
 
 ## Before creating a backup
 
@@ -44,7 +44,8 @@ v12-to-latest upgrade. Only after this manual launch and inspection is rollback 
 
 If a later upgrade fails, stop the new Foundry version, preserve its changed User Data separately, restore
 the verified pre-upgrade User Data copy, and launch the original Foundry version. Changes made after the
-backup will not appear in the restored world. Campaign Studio does **not** yet automate this live rollback.
+backup will not appear in the restored world. After a switch made by the upgrade wizard, **Roll back** does
+this with the original folder it kept ([Roll back](#roll-back)).
 
 Foundry's own instructions: [Backups and Snapshots](https://foundryvtt.com/article/backups/),
 [Backing Up and Moving User Data](https://foundryvtt.com/article/user-data-backup/), and
@@ -155,9 +156,9 @@ exact enabled modules to disable. The clone remains at v12. No module or databas
 Next, launch **only the new clone** with Foundry v12 using its separate User Data path. In Manage Modules,
 disable the plan's excluded modules, including Plutonium, and save and reload. Check that they are off and
 that required eligible modules remain on. Keep the backup and v12 installer intact. Installing selected
-releases, starting a newer Foundry build and running its migration remain manual. Studio can audit the clone
-after those steps, but live cutover is not implemented. Do not open the clone in a newer build before its v12
-module review is complete.
+releases, starting a newer Foundry build and running its migration remain manual. Studio audits the clone
+after those steps and switches the live User Data to it at the end. Do not open the clone in a newer build
+before its v12 module review is complete.
 
 ## Review the v12 clone's module state
 
@@ -262,18 +263,54 @@ balance prediction**, since spells, active effects, resistances, module automati
 Foundry's own dice, midi-qol and macros need a logged-in GM in Foundry and are not run. The report is saved
 beside the backup.
 
-## Review cutover readiness
+## Review cutover readiness and switch
 
-After the audit passes and the clone is repaired and checked, close both Foundry installations. In **Review cutover readiness**, select the saved
-audit and confirm Foundry is closed. Studio repeats the migration audit against the current isolated clone,
-verifies the original User Data still matches the offline backup byte for byte, and checks the backup again.
-It saves a cutover review beside the backup only when all checks pass. A changed original means the clone may
-be missing later edits: take a new backup and repeat the upgrade. A changed clone needs a fresh GM audit.
-The world selected in Studio Settings must still be the original world named by the backup.
+After the audit passes and the clone is repaired and checked, close both Foundry installations. Under
+**Switch to the upgraded world**, select the saved audit, confirm Foundry is closed and click **Review cutover
+readiness**. Studio repeats the migration audit against the current clone (a changed clone needs a fresh GM
+audit), checks the backup again, and compares the live User Data with the backup, reading every file. The
+world selected in Studio Settings must still be the original world named by the backup.
 
-The cutover review shows the exact isolated User Data path, target build and world ID. Configure the target
-Foundry installation to use that path, then open the world. Studio does not change the target installation or
-move any folders. Keep the original v12 User Data, backup and v12 installer for rollback; do not open the
-migrated clone in v12. Run the cutover review again immediately before switching if time has passed or files
-may have changed. Foundry documents the [`--dataPath` and `--world` launch flags](https://foundryvtt.com/article/configuration/)
-and [the backup prompt before migration on a newer generation](https://foundryvtt.com/article/backups/).
+The comparison leaves out `Logs`, which Foundry writes and rotates on every launch, and lists every other
+difference by **area**: a world, system or module folder (`Data/worlds/<id>`, `Data/systems/<id>`,
+`Data/modules/<id>`), another folder under `Data` (such as `Data/assets`), or a top-level folder (such as
+`Config`). Each area is shown as gone, new or changed since the backup, with how many files and folders were
+added, removed or changed and a few of their paths.
+
+- Any change to **the world being upgraded** blocks the cutover and cannot be confirmed: the clone does not
+  have it. Take a new backup and repeat the upgrade.
+- Every other change must be confirmed by the GM, such as a test world uninstalled on purpose. A confirmed
+  world that is gone from the live folder is left out of the switched copy. Any other confirmed change is not
+  in the switched copy, because the clone was made from the backup; the original folder keeps it for rollback.
+
+Click **Review cutover readiness** again after ticking. The review is saved beside the backup only when nothing
+is left to confirm, and it shows the live User Data path, the clone, the backup and the target build.
+
+**Switch live User Data to the migrated clone** then, with Foundry still closed:
+
+1. repeats the review and refuses if the clone, the backup or the live folder differs from what the GM
+   reviewed;
+2. copies the clone to a new folder beside the live one and verifies every file by SHA-256, leaving out the
+   worlds the GM confirmed as removed and stale lock folders (empty `*.lock` folders, such as
+   `Config/options.json.lock`, which Foundry leaves behind when it stops without releasing them);
+3. points the copy's `Config/options.json` at the live User Data path (`dataPath`) and the live folder's
+   `port` (the clone was opened from its own folder, often on another port), keeping its other options;
+4. checks that Foundry is still closed and the live folder unchanged, saves a cutover receipt beside the
+   backup, renames the live folder to a dated rollback folder beside it, such as
+   `FoundryVTT-v12-before-v14-20261020-101500`, and gives the copy the live folder's name.
+
+The clone itself is not changed, and nothing is deleted. If the live folder cannot be renamed (a program has
+a file in it open), or the copy cannot take its name, the original is put back and nothing is switched. If
+even that fails, the receipt names both folders and **Roll back** finishes it. Studio's selected world keeps
+its path and is now the migrated world. Open it with the target Foundry installation. Foundry documents the
+[`dataPath` option and the `--dataPath` launch flag](https://foundryvtt.com/article/configuration/).
+
+### Roll back
+
+With Foundry closed, **Roll back to the original User Data** takes the cutover receipt (the switch fills it
+in), renames the upgraded live folder aside, such as `FoundryVTT-v14-rolled-back-20261020-111500`, and gives
+the rollback folder the live name again. It refuses if the rollback folder no longer holds the original world
+at its original build. Then open the world with the original installation; never open the upgraded copy with
+it. Anything played on the upgraded world stays in the folder set aside. Keep the rollback folder, the backup
+and the old installation until you have played on the upgraded world; delete them yourself when you no longer
+need them.
