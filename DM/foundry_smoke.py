@@ -15,6 +15,7 @@ from pathlib import Path
 
 import foundry_leveldb
 import foundry_repair
+from foundry_compat import ID_RE
 from foundry_roll import FormulaError, average
 
 COLLECTIONS = ('actors', 'items', 'scenes', 'folders')
@@ -68,6 +69,8 @@ class _World:
         self.packs = {}
 
     def _pack(self, scope, name):
+        if not ID_RE.fullmatch(scope) or not ID_RE.fullmatch(name):
+            return None  # Not a package and pack name, so never a folder of this User Data.
         if (scope, name) not in self.packs:
             if scope == 'world':
                 folders = [self.world / 'packs' / name]
