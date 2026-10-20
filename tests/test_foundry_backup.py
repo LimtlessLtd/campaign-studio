@@ -77,6 +77,40 @@ class FoundryBackupTests(unittest.TestCase):
             b'synthetic map bytes',
         )
 
+    def test_changes_since_the_backup_are_grouped_by_area_without_logs(self):
+        for name, directory, expected in (
+            ('Data/worlds/w/data/actors/000001.ldb', False, 'Data/worlds/w'),
+            ('Data/worlds/w', True, 'Data/worlds/w'),
+            ('Data/modules/README.txt', False, 'Data/modules'),
+            ('Data/modules', True, 'Data/modules'),
+            ('Data/assets/map.png', False, 'Data/assets'),
+            ('Data/assets', True, 'Data/assets'),
+            ('Data/loose.txt', False, 'Data'),
+            ('Config/options.json', False, 'Config'),
+            ('Config', True, 'Config'),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(foundry_backup.area(name, directory), expected)
+        backup = foundry_backup.create(str(self.root / 'copies'), confirmed_closed=True)
+        self.assertEqual(foundry_backup.compare_source(backup['path'])['changes'], [])
+        (self.live / 'Logs' / 'debug.log').write_text('rotated', encoding='utf-8')
+        (self.live / 'Data' / 'assets' / 'map.png').write_bytes(b'synthetic map bytes, edited')
+        added = self.live / 'Data' / 'worlds' / 'new-world'
+        added.mkdir()
+        (added / 'world.json').write_text('{}', encoding='utf-8')
+        changes = foundry_backup.compare_source(backup['path'])['changes']
+        self.assertEqual(
+            [(item['area'], item['kind'], item['id'], item['change']) for item in changes],
+            [
+                ('Data/assets', 'folder', None, 'changed'),
+                ('Data/worlds/new-world', 'world', 'new-world', 'added'),
+            ],
+        )
+        self.assertEqual(
+            (changes[1]['added'], changes[1]['examples']),
+            (2, ['Data/worlds/new-world/', 'Data/worlds/new-world/world.json']),
+        )
+
     def test_corrupt_backup_is_rejected_before_rehearsal(self):
         backup = foundry_backup.create(str(self.root / 'copies'), confirmed_closed=True)
         package = Path(backup['path'])

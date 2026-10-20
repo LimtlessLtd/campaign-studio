@@ -256,16 +256,19 @@ report are saved beside the backup. After a verified restore test copy is opened
 can make a separate v12 clone with a saved plan of modules to disable and package releases to install. The GM
 must disable excluded modules such as Plutonium in the clone before its first launch in newer Foundry. Studio
 can then compare a fresh v12 clone inventory with that plan and save a review beside the backup. Studio does
-not install packages, run migration or cut over a live world. After the GM opens the isolated clone in the
+not install packages or run migration. After the GM opens the isolated clone in the
 selected newer Foundry build, Foundry migrates it; a second read-only macro and audit compare its build,
 package versions and activation with the plan and record the GM's scene, journal, actor/item and module
 checks. With Foundry closed, a repair step then finds known v14 migration defects in the clone (duplicate
 Scene Levels floors from the Levels module, item source IDs that stop AC and HP computing, "[object Object]"
 fields, summon links to no actor, macros using removed effect fields) in a dry run, repairs what the GM reviews
 after a verified backup of the clone's world, and verifies the result. An encounter smoke test rolls every
-action of the party and the NPCs on chosen scenes. A final cutover review rechecks the migrated clone,
-unchanged original User Data and verified backup, then gives the GM the path for a manual switch. Keep the
-original v12 installation and backup for rollback.
+action of the party and the NPCs on chosen scenes. A final cutover review rechecks the migrated clone and
+verified backup and lists what changed in the live User Data since the backup, by world or package (Foundry's
+logs are ignored): the upgraded world must be unchanged, and the GM confirms anything else, such as an
+uninstalled test world. Studio then switches the live User Data folder to a verified copy of the clone, keeping
+the original under a dated rollback name, and can roll back. Keep the original installation and backup until
+the upgraded world has been played.
 
 ## Your files
 

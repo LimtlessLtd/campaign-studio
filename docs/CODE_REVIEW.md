@@ -219,8 +219,9 @@ owner's product goal and the design notes behind the rows are in `docs/ROADMAP.m
 - Browser smoke and accessibility checks now run in CI. The current axe gate covers serious and critical
   WCAG 2 A/AA findings; minor and moderate findings are not yet gated.
 - Foundry backup, isolated restore-copy verification, v12 clone preparation, module review, migrated-clone
-  audit and cutover readiness review are available for local User Data. Opening the clone in Foundry, its
-  migration, the actual User Data switch and live rollback remain manual.
+  audit, cutover review, the live User Data switch and rollback are available for local User Data. Opening
+  the clone in Foundry and its migration remain manual. The switch is checked on synthetic folders and its
+  comparison on the owner's real v12 folder; no switch through the wizard has opened in Foundry yet (W84).
 - The v12 package report reads declared directory and manifest metadata. Package URLs may be unavailable;
   unknown results block automatic retention. No live Foundry migration or package behavior was verified.
 

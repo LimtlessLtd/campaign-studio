@@ -1,4 +1,5 @@
-"""Offline Foundry User Data backups, folder snapshots and isolated restore rehearsals.
+"""Offline Foundry User Data backups, folder snapshots and isolated restore rehearsals, and the
+comparison of User Data with its backup.
 
 This module copies files only. Foundry performs all world database migrations.
 """
@@ -10,6 +11,7 @@ import re
 import shutil
 import stat
 import uuid
+from collections import defaultdict
 from pathlib import Path
 
 import config
@@ -20,6 +22,10 @@ FORMAT = 1
 MANIFEST = 'campaign-studio-backup.json'
 SNAPSHOT_MANIFEST = 'campaign-studio-folder-snapshot.json'
 SNAPSHOT_FORMAT = 'campaign-studio-folder-snapshot'
+# Top-level User Data folders a comparison with the backup leaves out: Foundry writes and rotates its
+# logs on every launch.
+IGNORED = ('Logs',)
+PACKAGES = {'worlds': 'world', 'systems': 'system', 'modules': 'module'}
 
 
 def within(path, parent):
@@ -78,8 +84,11 @@ def running_foundry():
     return found
 
 
-def _inventory(root):
-    """Return every regular file and directory; reject links and special files."""
+def listing(root):
+    """Every regular file (relative path, size, mtime) and directory; refuses links and special files.
+
+    Two equal listings of a closed folder mean nothing was added, removed or rewritten in between.
+    """
     files, dirs = [], []
     for current, directory_names, file_names in os.walk(root, followlinks=False):
         directory_names.sort()
@@ -106,7 +115,7 @@ def _inventory(root):
 
 def plan():
     root, world, _ = _source()
-    files, _ = _inventory(root)
+    files, _ = listing(root)
     return {
         'world': world,
         'user_data': str(root),
@@ -122,6 +131,25 @@ def _space(path, bytes_needed):
         raise ValueError('The destination does not have enough free space for this copy.')
 
 
+def _copy(source, files, dirs, target):
+    """Copy a listing of `source` into `target`; returns each file's record with its SHA-256.
+
+    Fails if a file changed after it was listed.
+    """
+    for name in dirs:
+        (target / storage.manifest_path(name)).mkdir(parents=True, exist_ok=True)
+    records = []
+    for name, expected_size, expected_mtime in files:
+        item = source / storage.manifest_path(name)
+        metadata = item.stat()
+        if (metadata.st_size, metadata.st_mtime_ns) != (expected_size, expected_mtime):
+            raise ValueError(f'A file changed during the copy: {item}')
+        records.append(
+            {'path': name, **storage.copy_and_hash(item, target / storage.manifest_path(name))}
+        )
+    return records
+
+
 def create(destination, confirmed_closed=False):
     root, world, relative_world = _source()
     target_root = absolute_folder(destination, 'Backup destination')
@@ -131,7 +159,7 @@ def create(destination, confirmed_closed=False):
         raise ValueError('Confirm that Foundry VTT is closed before making an offline backup.')
     if running_foundry():
         raise ValueError('Close Foundry VTT before making an offline backup.')
-    files, dirs = _inventory(root)
+    files, dirs = listing(root)
     target_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     _space(target_root, sum(size for _, size, _ in files))
     safe_id = re.sub(r'[^a-z0-9-]', '-', str(world['id']).lower()).strip('-')[:48] or 'world'
@@ -142,19 +170,10 @@ def create(destination, confirmed_closed=False):
     payload = staging / 'User Data'
     payload.mkdir(mode=0o700)
     try:
-        for name in dirs:
-            (payload / storage.manifest_path(name)).mkdir(parents=True, exist_ok=True)
-        records = []
-        for name, expected_size, expected_mtime in files:
-            source = root / storage.manifest_path(name)
-            metadata = source.stat()
-            if (metadata.st_size, metadata.st_mtime_ns) != (expected_size, expected_mtime):
-                raise ValueError(f'A source file changed during backup: {source}')
-            record = storage.copy_and_hash(source, payload / storage.manifest_path(name))
-            records.append({'path': name, **record})
+        records = _copy(root, files, dirs, payload)
         if running_foundry():
             raise ValueError('Foundry VTT started during the backup. This copy is incomplete.')
-        if _inventory(root) != (files, dirs):
+        if listing(root) != (files, dirs):
             raise ValueError('Foundry User Data changed during the backup.')
         manifest = {
             'format': FORMAT,
@@ -197,8 +216,8 @@ def read_manifest(package):
     return manifest
 
 
-def _verify_files(payload, records, directories):
-    """Check that `payload` holds exactly the recorded files and folders, each with its checksum."""
+def _records(records, directories):
+    """A manifest's file records by path and its set of folders, refusing an invalid manifest."""
     if not isinstance(records, list) or not isinstance(directories, list):
         raise ValueError('Invalid Foundry backup manifest.')
     names = []
@@ -216,10 +235,14 @@ def _verify_files(payload, records, directories):
         storage.manifest_path(name)
     if len(set(names)) != len(names) or len(set(directories)) != len(directories):
         raise ValueError('Duplicate path in Foundry backup manifest.')
-    actual_files, actual_dirs = _inventory(payload)
-    if sorted(names) != sorted(name for name, _, _ in actual_files) or sorted(
-        directories
-    ) != sorted(actual_dirs):
+    return dict(zip(names, records)), set(directories)
+
+
+def _verify_files(payload, records, directories):
+    """Check that `payload` holds exactly the recorded files and folders, each with its checksum."""
+    names, folders = _records(records, directories)
+    actual_files, actual_dirs = listing(payload)
+    if set(names) != {name for name, _, _ in actual_files} or folders != set(actual_dirs):
         raise ValueError('Backup file list differs from its manifest.')
     for record in records:
         path = payload / storage.manifest_path(record['path'])
@@ -256,12 +279,78 @@ def verify(path):
     return {'path': str(package), **_verify_tree(package / 'User Data', manifest), 'verified': True}
 
 
-def verify_source(path):
-    """Refuse cutover if the original User Data has changed since its offline backup."""
+def area(name, directory=False):
+    """The part of User Data a relative path belongs to.
+
+    `Data/worlds|systems|modules/<id>` for a package's own files, `Data/<folder>` for anything else
+    under Data, otherwise the top-level folder or file, such as `Config`.
+    """
+    parts = name.split('/') + ([''] if directory else [])
+    if parts[0] == 'Data' and len(parts) > 2:
+        return '/'.join(parts[:3] if parts[1] in PACKAGES and len(parts) > 3 else parts[:2])
+    return parts[0]
+
+
+def _ignored(name):
+    return name.split('/', 1)[0] in IGNORED
+
+
+def compare_source(path):
+    """What changed in the original User Data since its offline backup, per world, package or folder.
+
+    Each changed area (see `area`) counts its files and folders added, removed or changed (by size or
+    SHA-256) and names a few of them. Its `change` is 'removed' when nothing of it is left, 'added' when
+    the backup had none of it, else 'changed'. Foundry's `Logs` are left out. Reads every file.
+    """
     package = absolute_folder(path, 'Backup folder')
     manifest = read_manifest(package)
     root = absolute_folder(manifest.get('source_user_data'), 'Original Foundry User Data')
-    return {'path': str(root), **_verify_tree(root, manifest), 'unchanged': True}
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError(f'The original Foundry User Data folder is missing or linked: {root}')
+    records, folders = _records(manifest.get('files'), manifest.get('directories'))
+    saved = {name: record for name, record in records.items() if not _ignored(name)}
+    saved_folders = {name for name in folders if not _ignored(name)}
+    files, dirs = listing(root)
+    live = {name: size for name, size, _ in files if not _ignored(name)}
+    live_folders = {name for name in dirs if not _ignored(name)}
+    found = defaultdict(lambda: {'added': [], 'removed': [], 'changed': []})
+    for name in saved.keys() - live.keys():
+        found[area(name)]['removed'].append(name)
+    for name in live.keys() - saved.keys():
+        found[area(name)]['added'].append(name)
+    for name in saved.keys() & live.keys():
+        if live[name] != saved[name]['bytes'] or (
+            storage.sha256_file(root / storage.manifest_path(name)) != saved[name]['sha256']
+        ):
+            found[area(name)]['changed'].append(name)
+    for name in saved_folders - live_folders:
+        found[area(name, True)]['removed'].append(name + '/')
+    for name in live_folders - saved_folders:
+        found[area(name, True)]['added'].append(name + '/')
+    before = {area(name) for name in saved} | {area(name, True) for name in saved_folders}
+    after = {area(name) for name in live} | {area(name, True) for name in live_folders}
+    changes = []
+    for name in sorted(found):
+        paths = found[name]
+        parts = name.split('/')
+        package_kind = PACKAGES.get(parts[1]) if len(parts) == 3 else None
+        if name not in after:
+            change = 'removed'
+        elif name not in before:
+            change = 'added'
+        else:
+            change = 'changed'
+        changes.append(
+            {
+                'area': name,
+                'kind': package_kind or 'folder',
+                'id': parts[2] if package_kind else None,
+                'change': change,
+                **{key: len(items) for key, items in paths.items()},
+                'examples': sorted(paths['added'] + paths['removed'] + paths['changed'])[:5],
+            }
+        )
+    return {'path': str(root), 'world': manifest.get('world'), 'changes': changes}
 
 
 def rehearse(path, destination):
@@ -334,7 +423,7 @@ def snapshot(source, destination):
         raise ValueError('The snapshot must be outside the folder it copies.')
     if running_foundry():
         raise ValueError('Close Foundry VTT before backing up the world.')
-    files, dirs = _inventory(source)
+    files, dirs = listing(source)
     target.parent.mkdir(parents=True, exist_ok=True)
     _space(target.parent, sum(size for _, size, _ in files))
     staging = target.with_name('.incomplete-' + target.name + '-' + uuid.uuid4().hex[:8])
@@ -342,18 +431,8 @@ def snapshot(source, destination):
     payload = staging / 'folder'
     payload.mkdir(mode=0o700)
     try:
-        for name in dirs:
-            (payload / storage.manifest_path(name)).mkdir(parents=True, exist_ok=True)
-        records = []
-        for name, expected_size, expected_mtime in files:
-            item = source / storage.manifest_path(name)
-            metadata = item.stat()
-            if (metadata.st_size, metadata.st_mtime_ns) != (expected_size, expected_mtime):
-                raise ValueError(f'A file changed during the backup: {item}')
-            records.append(
-                {'path': name, **storage.copy_and_hash(item, payload / storage.manifest_path(name))}
-            )
-        if running_foundry() or _inventory(source) != (files, dirs):
+        records = _copy(source, files, dirs, payload)
+        if running_foundry() or listing(source) != (files, dirs):
             raise ValueError('Foundry started or the folder changed during the backup.')
         manifest = {
             'format': SNAPSHOT_FORMAT,
@@ -434,3 +513,52 @@ def restore_snapshot(path, names, set_aside):
         staging.rename(current)
         restored.append(relative.as_posix())
     return restored
+
+
+def stale_locks(root):
+    """Folders named `*.lock` that hold no files, such as `Config/options.json.lock`.
+
+    Foundry takes these locks while it runs; with Foundry closed, one left behind is stale.
+    """
+    files, dirs = listing(root)
+    names = [name for name, _, _ in files]
+    locks = [
+        name
+        for name in dirs
+        if name.rsplit('/', 1)[-1].lower().endswith('.lock')
+        and not any(item.startswith(name + '/') for item in names)
+    ]
+    return [name for name in locks if not any(name.startswith(other + '/') for other in locks)]
+
+
+def copy_folder(source, destination, leave_out=()):
+    """Copy the closed folder `source` to the new path `destination` and verify every copied file.
+
+    `leave_out` names relative folders that are not copied. Returns the counts of files and bytes.
+    """
+    source = absolute_folder(source, 'Folder to copy')
+    target = absolute_folder(destination, 'Copy destination')
+    if not source.is_dir() or source.is_symlink():
+        raise ValueError('The folder to copy is missing or linked.')
+    if target.exists():
+        raise ValueError('The copy destination must be a new, empty path.')
+    if within(target, source) or within(source, target):
+        raise ValueError('The copy must be outside the folder it copies.')
+    skipped = [storage.manifest_path(name).as_posix() for name in leave_out]
+
+    def copied(name):
+        return not any(name == folder or name.startswith(folder + '/') for folder in skipped)
+
+    def selection(found):
+        files, dirs = found
+        return [item for item in files if copied(item[0])], [name for name in dirs if copied(name)]
+
+    files, dirs = selection(listing(source))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _space(target.parent, sum(size for _, size, _ in files))
+    target.mkdir()
+    records = _copy(source, files, dirs, target)
+    if running_foundry() or selection(listing(source)) != (files, dirs):
+        raise ValueError('Foundry started or the folder changed during the copy.')
+    _verify_files(target, records, dirs)
+    return {'files': len(records), 'bytes': sum(record['bytes'] for record in records)}

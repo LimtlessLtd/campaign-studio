@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'DM'))
 import foundry_backup
 import foundry_catalog
 import foundry_compat
+import foundry_cutover
 import foundry_solver
 import foundry_upgrade as upgrade
 
@@ -945,10 +946,11 @@ class UpgradeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'not a passing'):
                     upgrade.passing_audit(pending['audit_path'])
                 with self.assertRaisesRegex(ValueError, 'Close both'):
-                    upgrade.review_cutover(audited['audit_path'])
+                    foundry_cutover.review(audited['audit_path'])
                 with self.assertRaisesRegex(ValueError, 'passing'):
-                    upgrade.review_cutover(pending['audit_path'], True)
-                cutover = upgrade.review_cutover(audited['audit_path'], True)
+                    foundry_cutover.review(pending['audit_path'], True)
+                cutover = foundry_cutover.review(audited['audit_path'], True)
+                self.assertEqual((cutover['status'], cutover['changes']), ('ready_for_cutover', []))
                 self.assertTrue(cutover['cutover_ready'])
                 self.assertEqual(
                     (cutover['target_build'], cutover['target_generation']), ('14.368', 14)
@@ -956,36 +958,40 @@ class UpgradeTests(unittest.TestCase):
                 self.assertEqual(cutover['clone_path'], plan['clone_path'])
                 self.assertTrue(Path(cutover['original_user_data']).samefile(user_data))
                 self.assertEqual(
-                    upgrade.review_cutover(audited['audit_path'], True)['review_path'],
+                    foundry_cutover.review(audited['audit_path'], True)['review_path'],
                     cutover['review_path'],
                 )
                 with patch.object(foundry_backup, 'running_foundry', return_value=[{'pid': 1}]):
                     with self.assertRaisesRegex(ValueError, 'Close both'):
-                        upgrade.review_cutover(audited['audit_path'], True)
+                        foundry_cutover.review(audited['audit_path'], True)
                 with patch.object(
                     foundry_backup, 'running_foundry', side_effect=[[], [{'pid': 1}]]
                 ):
                     with self.assertRaisesRegex(ValueError, 'started during'):
-                        upgrade.review_cutover(audited['audit_path'], True)
+                        foundry_cutover.review(audited['audit_path'], True)
                 with patch.object(
                     upgrade.config,
                     'world_info',
                     return_value={'id': 'different-world', 'path': str(world_path)},
                 ):
                     with self.assertRaisesRegex(ValueError, 'Select the original'):
-                        upgrade.review_cutover(audited['audit_path'], True)
+                        foundry_cutover.review(audited['audit_path'], True)
                 original_world = world_path / 'world.json'
                 original_world.write_text(
                     json.dumps({**world_json, 'title': 'Changed after backup'}), encoding='utf-8'
                 )
-                with self.assertRaisesRegex(ValueError, 'checksum failed'):
-                    upgrade.review_cutover(audited['audit_path'], True)
+                changed = foundry_cutover.review(audited['audit_path'], True)
+                self.assertEqual(changed['status'], 'blocked')
+                self.assertEqual(
+                    [(item['area'], item['changed']) for item in changed['changes']],
+                    [('Data/worlds/fixture-world', 1)],
+                )
                 original_world.write_text(json.dumps(world_json), encoding='utf-8')
                 migrated_world_path.write_text(
                     json.dumps({**migrated_world, 'coreVersion': '12.331'}), encoding='utf-8'
                 )
                 with self.assertRaisesRegex(ValueError, 'changed after the audit'):
-                    upgrade.review_cutover(audited['audit_path'], True)
+                    foundry_cutover.review(audited['audit_path'], True)
                 migrated_world_path.write_text(json.dumps(migrated_world), encoding='utf-8')
                 migrated_inventory['enabledModuleIds'].append('Plutonium')
                 migrated_inventory['modules'][3]['enabled'] = True

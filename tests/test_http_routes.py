@@ -224,6 +224,37 @@ class RouteTests(unittest.TestCase):
             )
         self.assertEqual((status, result['error']), (400, 'Close both Foundry'))
 
+    def test_cutover_routes_pass_only_explicit_confirmations(self):
+        cutover = http_routes.foundry_cutover
+        calls = (
+            ('review-cutover', 'review', {'audit_path': '/a', 'confirmed_changes': ['Data/x']}),
+            ('cut-over', 'cut_over', {'review_path': '/r'}),
+            ('roll-back', 'roll_back', {'cutover_path': '/c'}),
+        )
+        for route, name, body in calls:
+            for confirmed, expected in (('yes', False), (True, True)):
+                with (
+                    self.subTest(route=route, confirmed=confirmed),
+                    patch.object(cutover, name, return_value={'status': 'ok'}) as step,
+                ):
+                    status, _, _ = self.request(
+                        '/api/foundry/upgrade/' + route,
+                        'POST',
+                        {**body, 'confirmed_closed': confirmed},
+                    )
+                    self.assertEqual(status, 200)
+                    arguments = list(body.values())
+                    if name == 'review':
+                        arguments.insert(1, expected)
+                    else:
+                        arguments.append(expected)
+                    step.assert_called_once_with(*arguments)
+        with patch.object(cutover, 'cut_over', side_effect=ValueError('Nothing was switched.')):
+            status, result, _ = self.request(
+                '/api/foundry/upgrade/cut-over', 'POST', {'review_path': '/r'}
+            )
+        self.assertEqual((status, result['error']), (400, 'Nothing was switched.'))
+
     def test_ai_settings_only_store_the_environment_variable_name(self):
         settings = {
             'ai': {

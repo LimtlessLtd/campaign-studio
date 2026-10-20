@@ -37,7 +37,8 @@ flowchart LR
 | `DM/config.py`                        | Local settings, world manifest and Data directory detection                           |
 | `DM/context.py`                       | Bounded, deterministic reference selection and prompt previews                        |
 | `DM/foundry_backup.py`                | Offline full User Data copy, SHA-256 verification and restore copy receipts           |
-| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence, migration audit and cutover review       |
+| `DM/foundry_upgrade.py`               | Upgrade workflow: inventory, clone evidence and migration audit                       |
+| `DM/foundry_cutover.py`               | Cutover review, live User Data switch to the audited clone, and rollback              |
 | `DM/foundry_readiness.py`             | Upgrade repair step: dry run, world backup, write, verify or restore, smoke test      |
 | `DM/foundry_repair.py`                | Known v14 migration defects found and their document fixes planned; verification      |
 | `DM/foundry_smoke.py`                 | Encounter smoke test: every action's formulas and links, rough rounds to win          |
@@ -568,3 +569,11 @@ the helper refuses every write if one differs. Python then verifies the result a
 the written databases from it if any check fails. A pure-Python writer was rejected: it would be a second
 LevelDB implementation checked only by Studio's own reader. The encounter smoke test (`foundry_smoke`) only
 reads.
+
+The last step (`foundry_cutover`) moves whole folders and never writes a database. Its review compares the
+live User Data with the backup manifest per area (`foundry_backup.compare_source`, which leaves out `Logs`);
+only a change to the world being upgraded blocks, and the GM confirms the rest. The switch copies the clone
+next to the live folder with `foundry_backup.copy_folder` and verifies it before either folder moves, then
+swaps them with two renames on one volume, so the live path is missing only between those renames. Its
+receipt is saved first, so an interrupted switch can be rolled back. Nothing is deleted: the original
+folder stays under a dated rollback name, and a rollback keeps the upgraded folder under its own.

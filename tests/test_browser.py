@@ -1155,35 +1155,113 @@ class BrowserSmoke(unittest.TestCase):
             (area['name'], area['text']), ('Lantern landing', 'Fog hangs over the water.')
         )
 
-    def test_cutover_review_shows_the_manual_switch_path(self):
+    def test_cutover_confirms_changes_then_switches_and_rolls_back(self):
         requests = []
+        world_area = 'Data/worlds/fixture-world'
+        removed = {
+            'area': 'Data/worlds/test-world',
+            'kind': 'world',
+            'id': 'test-world',
+            'change': 'removed',
+            'added': 0,
+            'removed': 3,
+            'changed': 0,
+            'examples': ['Data/worlds/test-world/world.json'],
+        }
+        review = {
+            'status': 'needs_confirmation',
+            'target_build': '14.369',
+            'world_id': 'fixture-world',
+            'world_area': world_area,
+            'blockers': [],
+            'changes': [removed],
+            'confirmed_changes': [],
+            'removed_worlds': [],
+            'original_user_data': '/synthetic/FoundryVTT',
+            'clone_path': '/synthetic/clone',
+            'backup_path': '/synthetic/backup',
+        }
+        ready = {
+            **review,
+            'status': 'ready_for_cutover',
+            'confirmed_changes': [removed['area']],
+            'removed_worlds': ['test-world'],
+            'review_path': '/synthetic/backup/cutover-review.json',
+        }
+        done = {
+            'status': 'cut_over',
+            'target_build': '14.369',
+            'world_id': 'fixture-world',
+            'live_user_data': '/synthetic/FoundryVTT',
+            'rollback_user_data': '/synthetic/FoundryVTT-v12-before-v14-20261020-101500',
+            'options': {
+                'before': {'dataPath': '/synthetic/clone', 'port': 30001},
+                'after': {'dataPath': '/synthetic/FoundryVTT', 'port': 30000},
+            },
+            'left_out_worlds': ['test-world'],
+            'stale_locks_left_out': ['Config/options.json.lock'],
+            'receipt_path': '/synthetic/backup/live-cutover-1.json',
+        }
+        back = {
+            'status': 'rolled_back',
+            'original_build': '12.343',
+            'live_user_data': '/synthetic/FoundryVTT',
+            'set_aside_user_data': '/synthetic/FoundryVTT-v14-rolled-back-20261020-111500',
+        }
+        reviews = [review, ready]
 
-        def cutover_response(route):
-            requests.append(route.request.post_data_json)
-            route.fulfill(
-                status=200,
-                content_type='application/json',
-                body=json.dumps(
-                    {
-                        'target_build': '13.351',
-                        'world_id': 'fixture-world',
-                        'clone_path': '/synthetic/clone',
-                        'original_user_data': '/synthetic/original',
-                        'backup_path': '/synthetic/backup',
-                        'review_path': '/synthetic/backup/cutover-review.json',
-                    }
-                ),
-            )
+        def respond(body):
+            def handler(route):
+                requests.append(
+                    (route.request.url.rsplit('/', 1)[-1], route.request.post_data_json)
+                )
+                value = reviews.pop(0) if body is None else body
+                route.fulfill(status=200, content_type='application/json', body=json.dumps(value))
 
-        self.page.route('**/api/foundry/upgrade/review-cutover', cutover_response)
+            return handler
+
+        self.page.route('**/api/foundry/upgrade/review-cutover', respond(None))
+        self.page.route('**/api/foundry/upgrade/cut-over', respond(done))
+        self.page.route('**/api/foundry/upgrade/roll-back', respond(back))
         self.open('#/settings')
         self.page.get_by_label('Passing migrated-clone audit').fill('/synthetic/backup/audit.json')
         self.page.get_by_label('I closed both Foundry installations').check()
         self.page.get_by_role('button', name='Review cutover readiness').click()
-        expect(self.page.get_by_role('heading', name='Ready for manual cutover')).to_be_visible()
-        expect(self.page.get_by_text('Use this User Data path: /synthetic/clone')).to_be_visible()
+        expect(
+            self.page.get_by_role('heading', name='Confirm the changes since the backup')
+        ).to_be_visible()
+        expect(
+            self.page.get_by_text('Data/worlds/test-world: gone since the backup')
+        ).to_be_visible()
+        self.page.get_by_label(
+            'I removed this world on purpose: leave it out of the upgraded User Data'
+        ).check()
+        self.page.get_by_role('button', name='Review cutover readiness').click()
+        expect(self.page.get_by_role('heading', name='Ready for cutover')).to_be_visible()
+        self.page.get_by_role('button', name='Switch live User Data to the migrated clone').click()
+        expect(
+            self.page.get_by_role('heading', name='Switched to the migrated clone')
+        ).to_be_visible()
+        expect(
+            self.page.get_by_text(f'Original kept at: {done["rollback_user_data"]}')
+        ).to_be_visible()
+        expect(self.page.get_by_label('Saved cutover receipt')).to_have_value(done['receipt_path'])
+        expect(
+            self.page.get_by_role('button', name='Switch live User Data to the migrated clone')
+        ).to_be_disabled()
+        self.page.get_by_role('button', name='Roll back to the original User Data').click()
+        expect(
+            self.page.get_by_role('heading', name='Rolled back to the original User Data')
+        ).to_be_visible()
+        audit = {'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}
         self.assertEqual(
-            requests, [{'audit_path': '/synthetic/backup/audit.json', 'confirmed_closed': True}]
+            requests,
+            [
+                ('review-cutover', {**audit, 'confirmed_changes': []}),
+                ('review-cutover', {**audit, 'confirmed_changes': [removed['area']]}),
+                ('cut-over', {'review_path': ready['review_path'], 'confirmed_closed': True}),
+                ('roll-back', {'cutover_path': done['receipt_path'], 'confirmed_closed': True}),
+            ],
         )
 
     def test_repair_step_reviews_the_dry_run_then_repairs_and_smoke_tests_the_clone(self):

@@ -173,8 +173,8 @@ function foundryUpgradeCard(hasWorld) {
     actorsItems: false,
     modules: false,
   };
-  const cutoverForm = { audit: '', closed: false };
   const repair = foundryRepairStep(hasWorld);
+  const cutover = foundryCutoverStep(hasWorld);
   let inventory = null;
   let cloneInventory = null;
   let migratedInventory = null;
@@ -187,7 +187,6 @@ function foundryUpgradeCard(hasWorld) {
   const cloneOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reviewOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const auditOutput = h('div', { class: 'upgrade-report', role: 'status' });
-  const cutoverOutput = h('div', { class: 'upgrade-report', role: 'status' });
   const reportInput = formInput(cloneForm, 'report', 'Saved compatibility report', {
     help: 'The latest report fills this in automatically. You can paste an earlier report path.',
   });
@@ -199,9 +198,6 @@ function foundryUpgradeCard(hasWorld) {
   });
   const auditReviewInput = formInput(auditForm, 'review', 'Passing v12 clone review', {
     help: 'A passing review fills this in automatically. You can paste an earlier review path.',
-  });
-  const cutoverAuditInput = formInput(cutoverForm, 'audit', 'Passing migrated-clone audit', {
-    help: 'A passing audit fills this in automatically. You can paste an earlier audit path.',
   });
   const input = h('input', {
     type: 'file',
@@ -568,9 +564,8 @@ function foundryUpgradeCard(hasWorld) {
               },
             });
             if (audit.status === 'reviewed') {
-              cutoverForm.audit = audit.audit_path;
-              cutoverAuditInput.querySelector('input').value = audit.audit_path;
               repair.useAudit(audit.audit_path);
+              cutover.useAudit(audit.audit_path);
             }
             render(
               auditOutput,
@@ -606,7 +601,7 @@ function foundryUpgradeCard(hasWorld) {
               h(
                 'p',
                 { class: 'small-note' },
-                'Package metadata and GM checks cannot certify module behavior. Keep the v12 backup and installer for rollback. Studio does not cut over the live world.',
+                'Package metadata and GM checks cannot certify module behavior. Keep the v12 backup and installer for rollback. The live world changes only at the switch below.',
               ),
             );
           } finally {
@@ -615,45 +610,6 @@ function foundryUpgradeCard(hasWorld) {
         }),
     },
     'Audit migrated clone',
-  );
-  const reviewCutover = h(
-    'button',
-    {
-      class: 'primary',
-      disabled: !hasWorld,
-      onclick: () =>
-        attempt(async () => {
-          reviewCutover.disabled = true;
-          render(cutoverOutput, 'Rechecking the audit, clone, original User Data and backup…');
-          try {
-            const review = await post('/api/foundry/upgrade/review-cutover', {
-              audit_path: cutoverForm.audit,
-              confirmed_closed: cutoverForm.closed,
-            });
-            render(
-              cutoverOutput,
-              h('h4', {}, 'Ready for manual cutover'),
-              h('p', {}, `Target Foundry ${review.target_build} · world ${review.world_id}.`),
-              h('p', { class: 'backup-path' }, `Use this User Data path: ${review.clone_path}`),
-              h(
-                'p',
-                { class: 'backup-path' },
-                `Keep the original at: ${review.original_user_data}`,
-              ),
-              h('p', { class: 'backup-path' }, `Keep the verified backup: ${review.backup_path}`),
-              h('p', {}, `Saved cutover review: ${review.review_path}`),
-              h(
-                'p',
-                { class: 'small-note' },
-                'Studio has not moved any data or changed Foundry settings. Point the target installation to the clone only after this check, and keep the original v12 installation and backup for rollback. Recheck here if either User Data folder changes before switching.',
-              ),
-            );
-          } finally {
-            reviewCutover.disabled = false;
-          }
-        }),
-    },
-    'Review cutover readiness',
   );
   return h(
     'section',
@@ -765,19 +721,7 @@ function foundryUpgradeCard(hasWorld) {
     auditMigration,
     auditOutput,
     ...repair.nodes,
-    h('hr'),
-    h('h3', {}, 'Review cutover readiness'),
-    h(
-      'p',
-      { class: 'muted' },
-      'After the migrated-clone audit passes and the clone is repaired, close both Foundry installations. Studio rechecks that the clone still matches the audit, the original User Data is unchanged since backup, and the verified backup remains intact.',
-    ),
-    cutoverAuditInput,
-    formInput(cutoverForm, 'closed', 'I closed both Foundry installations', {
-      type: 'checkbox',
-    }),
-    reviewCutover,
-    cutoverOutput,
+    ...cutover.nodes,
   );
 }
 
