@@ -22,7 +22,8 @@ if (!game.user.isGM) return ui.notifications.warn('Run Campaign Studio imports a
 // The exported scene uses the v12 shape. Keep version and system differences here so the import
 // workflow below only manages document ownership and stable Studio IDs. An adapter turns the export into
 // a new scene's fields, updates an imported scene's generated fields, places the generated walls, lights,
-// roofs and pins, and lifts a roof to the elevation of the scene's overhead tiles.
+// roofs and pins, and lifts a roof to the elevation of the scene's overhead tiles. A roof's `x`/`y` is its
+// top-left corner, which is where a tile sits in v11-v13 but not in v14 (see the v14 adapter).
 const sceneChanges = (source) => ({
   width: source.width,
   height: source.height,
@@ -103,6 +104,9 @@ const CORE_ADAPTERS = {
         ...base,
         // Overhead tiles sit at the top of their Level, where its foreground image is drawn.
         elevation: Number.isFinite(top) ? top : (scene.grid.distance ?? 5) * 4,
+        // A v14 tile is positioned by its texture anchor, centred unless told otherwise. The export gives the
+        // roof's top-left corner, so anchor it there to cover exactly that rectangle.
+        texture: { ...base.texture, anchorX: 0, anchorY: 0 },
         occlusion: { modes: [CONST.OCCLUSION_MODES.FADE], alpha: 0 },
         restrictions: { light: false, weather: true },
       };
