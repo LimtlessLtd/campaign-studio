@@ -25,7 +25,9 @@ until v16. The v14 adapter writes the v14 fields instead:
   elevation range is Foundry's default (top at four times the grid distance). Fog exploration
   `fog.exploration: true` becomes `fog.mode` `INDIVIDUAL` (`false` becomes `DISABLED`).
 - Roof tiles sit at the top of that Level, where v12/v13 put them at the scene's foreground elevation, with
-  `occlusion.modes: [FADE]` (v14 allows several occlusion modes) and weather blocked under them.
+  `occlusion.modes: [FADE]` (v14 allows several occlusion modes) and weather blocked under them. A v14 tile
+  is positioned by its texture anchor, which is its centre unless set, so each roof is anchored at its
+  top-left corner (`texture.anchorX` and `anchorY` 0) to cover exactly the building the export placed it on.
 - Generated walls, lights, roofs and area pins list that Level in their `levels`, so a Level the GM adds
   (a cellar, a rooftop) is not crossed by the map's walls or covered by its roofs. GM-made documents keep
   their own Levels.

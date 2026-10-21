@@ -20,6 +20,14 @@ const macro = new AsyncFunction(
 
 const clone = (value) => structuredClone(value);
 const tag = (value) => value.flags?.world?.wotgForge;
+// The rectangle a tile covers: its x/y is the top-left corner before v14 and its texture anchor in v14.
+const covers = (tile) => {
+  const { anchorX = 0, anchorY = 0 } = tile.texture;
+  const left = tile.x - anchorX * tile.width;
+  const top = tile.y - anchorY * tile.height;
+  return [left, top, left + tile.width, top + tile.height];
+};
+const ROOF_RECTANGLE = [40, 60, 141, 140];
 const fixture = () => ({
   name: 'Fixture map',
   width: 200,
@@ -35,7 +43,7 @@ const fixture = () => ({
       wotgForge: {
         plan: 'fixture-map',
         targetWorld: 'fixture-world',
-        roofs: [{ src: 'wotg-maps/fixture-map/roof.webp', x: 0, y: 0, width: 100, height: 100 }],
+        roofs: [{ src: 'wotg-maps/fixture-map/roof.webp', x: 40, y: 60, width: 101, height: 80 }],
         key: {
           areas: [
             {
@@ -115,6 +123,12 @@ function world(generation, systemId, bundleMode = false) {
     Level: 'levels',
   };
   const makeEmbedded = (item) => ({ ...clone(item), id: id() });
+  // Foundry v14 anchors a new tile's texture at its centre unless the data says otherwise.
+  const makeTile = (item) => {
+    const tile = makeEmbedded(item);
+    if (levels) tile.texture = { anchorX: 0.5, anchorY: 0.5, ...tile.texture };
+    return tile;
+  };
   // Foundry v14 sets a Level's top to four times the grid distance when none is given.
   const makeLevel = (grid) => (item) => ({
     ...clone(item),
@@ -149,7 +163,7 @@ function world(generation, systemId, bundleMode = false) {
         this[kinds[kind]] = this[kinds[kind]].filter((entry) => !ids.includes(entry.id));
       },
       async createEmbeddedDocuments(kind, entries) {
-        const make = kind === 'Level' ? makeLevel(this.grid) : makeEmbedded;
+        const make = { Level: makeLevel(this.grid), Tile: makeTile }[kind] ?? makeEmbedded;
         this[kinds[kind]].push(...entries.map(make));
       },
       async updateEmbeddedDocuments(kind, entries) {
@@ -364,6 +378,7 @@ async function check(generation, systemId) {
     assert.equal(scene.tiles[0].elevation, 20);
     assert.equal(scene.tiles[0].restrictions.weather, true);
   }
+  assert.deepEqual(covers(scene.tiles[0]), ROOF_RECTANGLE, 'the roof covers its building');
   if (generation >= 14) {
     // One Studio Level holds the background; the roof sits at its top and fades for tokens below.
     assert.equal(scene.background, undefined);
@@ -399,6 +414,16 @@ async function check(generation, systemId) {
   scene.walls.push(clone(custom));
   scene.lights.push(clone(custom));
   scene.tiles.push(clone(custom));
+  // A roof the GM already moved by hand (its tile carries the Studio tag) is replaced, never moved again.
+  scene.tiles.push({
+    id: 'hand-centred',
+    x: 90,
+    y: 100,
+    width: 101,
+    height: 80,
+    texture: { src: 'wotg-maps/fixture-map/roof.webp', anchorX: 0.5, anchorY: 0.5 },
+    flags: { world: { wotgForge: { roof: true, centred: true } } },
+  });
   scene.notes.push(clone(custom));
   scene.tokens.push(clone(custom));
   const customPage = {
@@ -454,6 +479,10 @@ async function check(generation, systemId) {
   assert.equal(scene.walls.length, 2);
   assert.equal(scene.lights.length, 2);
   assert.equal(scene.tiles.length, 2);
+  const roofs = scene.tiles.filter((tile) => tag(tile)?.roof);
+  assert.equal(roofs.length, 1, 'reimport replaces the roof');
+  assert.deepEqual(covers(roofs[0]), ROOF_RECTANGLE, 'the reimported roof covers its building');
+  assert.equal(tag(roofs[0]).centred, undefined);
   assert.equal(scene.notes.length, 3);
   assert.equal(
     game.journal[0].pages.find((page) => page.id === 'custom').text.content,

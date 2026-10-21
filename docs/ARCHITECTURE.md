@@ -545,7 +545,8 @@ scene fields and roof tiles; D&D 5e gets descriptive NPC/item sheets, while othe
 content. An adapter turns the export into a new scene's fields, updates an imported scene's generated
 fields, places the generated walls, lights, roofs and pins, and sets a roof's elevation; the import workflow
 around it only manages ownership tags and stable IDs. The v14 adapter puts the background on one tagged
-Studio Scene Level, places generated documents on that Level only and lifts roofs to its top; a scene
+Studio Scene Level, places generated documents on that Level only and lifts roofs to its top, anchored at
+their top-left corner because a v14 tile is positioned by its texture anchor; a scene
 imported before the world moved to v14 adopts its migrated initial Level (`docs/FOUNDRY_IMPORT.md`).
 `foundry_compat.IMPORT_GENERATION` names the newest adapter, and a test keeps it equal to `CORE_ADAPTERS`.
 Fixture contracts cover these combinations and tagged reimport ownership. The live GM checks in
