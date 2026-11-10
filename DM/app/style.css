@@ -300,6 +300,11 @@ button.danger {
 .scene.done {
   opacity: 0.6;
 }
+.scene-brief {
+  border-left: 3px solid var(--line2);
+  padding-left: 10px;
+  margin: 8px 0;
+}
 .codex .card {
   display: grid;
   grid-template-columns: 64px 1fr;

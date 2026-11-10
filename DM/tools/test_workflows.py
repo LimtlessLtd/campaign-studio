@@ -295,15 +295,20 @@ class StudioIntegration(unittest.TestCase):
         entry['scene'] = ''  # a catalogue row without its rendered scene is not ready
         self.seed('maps/index', index)
         initial = self.request('/api/prep/s1/readiness')
-        self.assertEqual(initial['gaps'], 11)
+        self.assertEqual(initial['gaps'], 12)
         checks = {row['id']: row for row in initial['checks']}
         self.assertEqual({row['status'] for row in checks.values()}, {'needs-work'})
         self.assertEqual(checks['npc_stats']['action']['section'], 'scenes')
+        self.assertIn('no key points', checks['scene-layout']['detail'])
+        self.assertIn('no checks', checks['scene-layout']['detail'])
         self.assertEqual(checks['maps']['action']['tab'], 'foundry')
         self.assertEqual(checks['art']['action']['href'], '#/art')
 
         prep['scenes'][0].update(
             purpose='The guard tests their story.',
+            key_points=['The guard wants a reason to let them through.'],
+            read_aloud='The guard blocks the bridge and eyes your packs.',
+            checks=[{'skill': 'Persuasion', 'dc': 10, 'result': 'The guard lets them pass.'}],
             encounter_detail={
                 'creatures': [{'name': 'Guard', 'count': 1, 'cr': '1/4'}],
                 'difficulty': 'easy',
@@ -979,6 +984,11 @@ class StudioIntegration(unittest.TestCase):
                     'title': 'At the gate',
                     'where': 'Harbour gate',
                     'encounter': 'The watcher challenges the party.',
+                    'key_points': ['The watcher wants a bribe or a good story.'],
+                    'read_aloud': 'A watcher steps out of the gatehouse and raises a lantern.',
+                    'checks': [
+                        {'skill': 'Insight', 'dc': 11, 'result': 'Learn the watcher is afraid.'}
+                    ],
                     'notes': 'A cautious conversation.',
                     'npcs': ['watcher'],
                 }
@@ -1017,7 +1027,18 @@ class StudioIntegration(unittest.TestCase):
                 'npcs': npcs,
                 'encounter': encounter,
                 'clues': clues,
+                'key_points': [
+                    'Captain Rook wants the party gone before the tide turns.',
+                    'The smugglers pay the watch to look away.',
+                ],
                 'read_aloud': 'The tide rises.',
+                'checks': [
+                    {
+                        'skill': 'Perception',
+                        'dc': 12,
+                        'result': 'Spot the freshly cut rope on the quay.',
+                    }
+                ],
                 'notes': 'The captain knows more than she says.',
             }
 
@@ -1229,6 +1250,12 @@ class StudioIntegration(unittest.TestCase):
         self.assertEqual(prep['scenes'][1]['map'], new_slug)
         self.assertEqual(prep['scenes'][1]['npcs'], ['req-session-watcher'])
         self.assertEqual(prep['scenes'][1]['clues'][0]['thread'], 'req-session-smugglers')
+        self.assertEqual(prep['scenes'][1]['read_aloud'], 'The tide rises.')
+        self.assertEqual(len(prep['scenes'][1]['key_points']), 2)
+        self.assertEqual(
+            prep['scenes'][1]['checks'],
+            [{'skill': 'Perception', 'dc': 12, 'result': 'Spot the freshly cut rope on the quay.'}],
+        )
         self.assertEqual(prep['threads'], ['old-thread', 'req-session-smugglers'])
         self.assertEqual(self.stored('mapbrief/' + new_slug)['session'], 's1')
         self.assertEqual(self.stored('workflows/wf-' + new_slug)['status'], 'ready')
@@ -1304,6 +1331,48 @@ class StudioIntegration(unittest.TestCase):
             len(campaign_core.read_json(campaign_core.doc_path('prep/s1'))['goals']), 1
         )
         self.assert_shaped()
+
+    def test_session_scenes_follow_the_gm_layout_and_older_drafts_still_apply(self):
+        slug, _ = self.seed_session_request()
+        pack = self.request('/api/requests/req-session/pack')
+        self.assertIn('exactly one sentence', pack['prompt'])
+        scene_schema = pack['schema']['properties']['scenes']['items']['properties']
+        self.assertEqual(scene_schema['checks']['items']['required'], ['skill', 'dc', 'result'])
+
+        def stage(change, expected=200):
+            draft = copy.deepcopy(self.session_proposal(slug))
+            change(draft['scenes'][0])
+            return self.request(
+                '/api/requests/req-session/stage', {'draft': draft}, expected=expected
+            )
+
+        two_sentences = {'read_aloud': 'The tide rises. A bell tolls.'}
+        for label, change in {
+            'two sentences to read aloud': lambda scene: scene.update(two_sentences),
+            'no read-aloud': lambda scene: scene.update(read_aloud=' '),
+            'no key points': lambda scene: scene.update(key_points=[]),
+            'a blank key point': lambda scene: scene.update(key_points=[' ']),
+            'a DC that is out of range': lambda scene: scene['checks'][0].update(dc=31),
+            'a check without a skill': lambda scene: scene['checks'][0].update(skill=''),
+            'a check without a result': lambda scene: scene['checks'][0].update(result=' '),
+        }.items():
+            with self.subTest(label):
+                stage(change, 400)
+        self.assertEqual(self.stored('prep/s1')['scenes'], [])
+
+        # A draft staged before the layout existed has no key points or checks; it is not refused,
+        # and applying it leaves them empty for the GM to fill.
+        def old(scene):
+            del scene['key_points'], scene['checks']
+            scene['read_aloud'] = 'The tide rises. The gulls scatter.'
+
+        stage(old)
+        self.request('/api/requests/req-session/apply', {})
+        first = self.stored('prep/s1')['scenes'][0]
+        self.assertEqual(
+            (first['key_points'], first['checks'], first['read_aloud']),
+            ([], [], 'The tide rises. The gulls scatter.'),
+        )
 
     def stage_session_draft(self):
         slug, _ = self.seed_session_request()

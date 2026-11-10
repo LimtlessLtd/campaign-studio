@@ -124,6 +124,9 @@ ART_ITEM = Shape(
     'art_item', ['id', 'prompt'], dict(title='', codex='', image='', status='queued', created=0)
 )
 SCENE_CLUE = Shape('scene_clue', [], dict(thread='', text=''))
+# One roll the players can make in a scene: a skill and DC, and what success gets them (information, an
+# item, or help for an NPC). See `scene_format`.
+SCENE_CHECK = Shape('scene_check', [], dict(skill='', dc=10, result=''))
 ENCOUNTER_CREATURE = Shape('encounter_creature', [], dict(name='', count=1, cr=''))
 ENCOUNTER_DETAIL = Shape(
     'encounter_detail',
@@ -144,11 +147,13 @@ SCENE = Shape(
         encounter='',
         encounter_detail=ENCOUNTER_DETAIL.new(),
         clues=[],
+        key_points=[],
         read_aloud='',
+        checks=[],
         notes='',
         done=False,
     ),
-    {'clues': SCENE_CLUE},
+    {'clues': SCENE_CLUE, 'checks': SCENE_CHECK},
     {'encounter_detail': ENCOUNTER_DETAIL},
 )
 HANDOUT = Shape('handout', ['id'], dict(title='', player_text='', secrets='', image_prompt=''))
@@ -336,6 +341,7 @@ SHAPES = {
         THREAD_CLUE,
         ART_ITEM,
         SCENE_CLUE,
+        SCENE_CHECK,
         ENCOUNTER_CREATURE,
         ENCOUNTER_DETAIL,
         SCENE,

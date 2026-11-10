@@ -172,8 +172,9 @@ their row and finding say enough.
 
   W38 uses (a): a versioned manifest under `Data/wotg-maps/sessions`; W47 can reuse it.
 
-- W39: a GM journal with an overview page, one page per scene (read-aloud, secrets, encounter, `@UUID` links
-  to scenes, actors and items) and loot. Handouts go in a separate journal whose ownership the GM sets per
+- W39: a GM journal with an overview page, one page per scene (key points, read-aloud, checks, then secrets,
+  encounter and `@UUID` links to scenes, actors and items, in the order and wording of `scene_format`: the
+  owner reads Key points, one Read aloud sentence and Checks at a glance) and loot. Handouts go in a separate journal whose ownership the GM sets per
   handout.
 - W40: token art separate from the portrait (W42's round cut-out by default); prototype token disposition,
   size and vision; hidden tokens placed around each location's position for its linked creatures, tagged

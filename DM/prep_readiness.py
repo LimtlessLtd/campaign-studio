@@ -14,6 +14,7 @@ from urllib.parse import quote
 import config
 import foundry_library
 import records
+import scene_format
 import session_bundle
 import storage
 
@@ -145,6 +146,23 @@ def report(name, here):
             incomplete_scenes or (['No scenes planned'] if not scenes else []),
             'Every scene has a title and a purpose or read-aloud text.',
             prep_action('Edit scenes', 'scenes'),
+        )
+    )
+
+    # The owner's layout: key points, one sentence to read aloud and checks (`scene_format`).
+    unready_scenes = [
+        f'{s.get("title") or "Untitled scene"}: {", ".join(problems)}'
+        for s in scenes
+        if (problems := scene_format.layout_problems(s))
+    ]
+    checks.append(
+        _check(
+            'scene-layout',
+            'Scenes ready to run',
+            unready_scenes,
+            'Every scene has key points, one sentence to read aloud and checks.',
+            prep_action('Edit scenes', 'scenes'),
+            applicable=bool(scenes),
         )
     )
 

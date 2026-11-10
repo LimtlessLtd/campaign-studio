@@ -593,6 +593,51 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(self.migrate()['status'], 'current')
         self.assertEqual(self.read('data/prep/s2.json'), migrated)
 
+    def test_version_seventeen_scenes_gain_key_points_and_checks_and_keep_their_text(self):
+        self.migrate()
+        schema.write_marker(self.data, 17, 'Synthetic version 17 campaign')
+        path = self.dm / 'data/prep/s2.json'
+        legacy_scene = {
+            'id': 'gate',
+            'title': 'The gate',
+            'purpose': 'Meet the guard.',
+            'where': 'Harbour gate',
+            'map': '',
+            'area': 0,
+            'npcs': ['guard'],
+            'encounter': 'A tense talk.',
+            'encounter_detail': {
+                'creatures': [{'name': 'Guard', 'count': 1, 'cr': '1/4'}],
+                'difficulty': 'easy',
+                'terrain': '',
+                'tactics': '',
+                'resolution': '',
+            },
+            'clues': [{'thread': 'bridge', 'text': 'The guard wears a bridge-keeper badge.'}],
+            'read_aloud': 'Rain beads on the gate. A guard steps out. She raises her lantern.',
+            'notes': 'Keep this twist.',
+            'done': False,
+        }
+        prep = shapes.PREP.new(n=2, title='Two')
+        prep['scenes'] = [legacy_scene]
+        path.write_text(json.dumps(prep), encoding='utf-8')
+
+        result = self.migrate()
+
+        self.assertEqual((result['from'], result['version']), (17, schema.CURRENT))
+        self.assertTrue(result['backup'])
+        migrated = self.read('data/prep/s2.json')
+        scene = migrated['scenes'][0]
+        self.assertEqual((scene['key_points'], scene['checks']), ([], []))
+        # Nothing the GM wrote is rewritten: the long read-aloud stays as it was.
+        self.assertEqual(
+            {**scene, 'key_points': None, 'checks': None},
+            {**legacy_scene, 'key_points': None, 'checks': None},
+        )
+        self.assertEqual(shapes.PREP.problems(migrated), [])
+        self.assertEqual(self.migrate()['status'], 'current')
+        self.assertEqual(self.read('data/prep/s2.json'), migrated)
+
     def test_version_one_campaign_gains_the_records_completed_in_version_two(self):
         self.migrate()
         schema.write_marker(self.data, 1, 'Synthetic version 1 campaign')

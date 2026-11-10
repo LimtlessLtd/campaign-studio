@@ -105,6 +105,60 @@ function encounterCreatures(docName, creatures, redraw) {
   ];
 }
 
+/* The rolls players can make in a scene: a skill and DC, and what success gets them. */
+function sceneChecks(docName, checks, redraw) {
+  return [
+    ...checks.map((check) =>
+      h(
+        'div',
+        { class: 'row' },
+        field(docName, check, 'skill', { label: 'Skill', placeholder: 'e.g. Perception' }),
+        h(
+          'label',
+          {},
+          'DC',
+          h('input', {
+            type: 'number',
+            min: 1,
+            max: 30,
+            value: check.dc,
+            oninput: (e) => {
+              check.dc = Math.max(1, Math.min(30, Math.round(Number(e.target.value)) || 10));
+              save(docName);
+            },
+          }),
+        ),
+        field(docName, check, 'result', {
+          label: 'Success gets (information, an item, or help for an NPC)',
+        }),
+        h(
+          'button',
+          {
+            class: 'danger',
+            onclick: () => {
+              checks.splice(checks.indexOf(check), 1);
+              save(docName);
+              redraw();
+            },
+          },
+          'Remove check',
+        ),
+      ),
+    ),
+    h(
+      'button',
+      {
+        onclick: () => {
+          checks.push(blank('scene_check'));
+          save(docName);
+          redraw();
+        },
+      },
+      '+ Check',
+    ),
+  ];
+}
+
 async function queueArt({
   map = '',
   area = null,
@@ -906,6 +960,22 @@ async function prepPage(name, context) {
               ),
             ),
           ),
+          // The GM's at-a-glance layout: key points, one sentence to read aloud, then the checks.
+          h(
+            'div',
+            { class: 'scene-brief' },
+            h('label', {}, 'Key points'),
+            listEditor(docName, (sc.key_points ||= []), {
+              placeholder: 'Who is there and what they want, what is going on, GM-only truth',
+            }),
+            field(docName, sc, 'read_aloud', {
+              label: 'Read aloud (one sentence)',
+              type: 'textarea',
+              rows: 2,
+            }),
+            h('label', {}, 'Checks'),
+            ...sceneChecks(docName, (sc.checks ||= []), drawScenes),
+          ),
           h(
             'div',
             { class: 'two' },
@@ -1030,7 +1100,6 @@ async function prepPage(name, context) {
             },
             '+ Thread clue',
           ),
-          field(docName, sc, 'read_aloud', { label: 'Read-aloud text', type: 'textarea', rows: 3 }),
           field(docName, sc, 'notes', {
             label: 'GM notes and twists',
             type: 'textarea',

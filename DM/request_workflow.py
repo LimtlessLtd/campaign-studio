@@ -11,6 +11,7 @@ import context as prompt_context
 import item_review
 import record_changes
 import redraft
+import scene_format
 import session_workflow
 import workflow
 import wrapup_workflow
@@ -84,6 +85,7 @@ SCHEMA = workflow.obj(
                     'title': workflow.STR,
                     'where': workflow.STR,
                     'encounter': workflow.STR,
+                    **scene_format.SCHEMA_FIELDS,
                     'notes': workflow.STR,
                     'npcs': workflow.arr(workflow.STR, 12),
                 }
@@ -239,6 +241,7 @@ def prompt_pack(
     if session:
         instruction += (
             'Session prep additions go in scenes, handouts, goals, loot, checklist and notes. '
+            + scene_format.INSTRUCTION
         )
     else:
         instruction += 'There is no linked session. Leave scenes, handouts, goals, loot, checklist and notes empty. '
@@ -284,10 +287,11 @@ def validate(item, draft, read_doc):
     if len(json.dumps(draft, ensure_ascii=False)) > 240000:
         raise ValueError('The proposal is too large.')
     draft = {
-        **draft,
+        **deepcopy(draft),
         'focus': draft.get('focus', EMPTY_FOCUS),
     }  # proposals from before focus existed
-    workflow.validate_schema(draft, SCHEMA)
+    staged_scenes = scene_format.staged_flags(draft)  # and from before the scene layout
+    workflow.validate_schema(scene_format.schema_view(draft, staged_scenes), SCHEMA)
     if not draft['summary'].strip():
         raise ValueError('Summarise the proposal.')
     focus = draft['focus']
@@ -321,9 +325,11 @@ def validate(item, draft, read_doc):
         raise ValueError('The codex entry to expand no longer exists.')
     if any(link not in known and link not in proposed for link in focus['links']):
         raise ValueError('The focus entry links to an unknown entry.')
-    for scene in draft['scenes']:
+    for scene, staged in zip(draft['scenes'], staged_scenes, strict=True):
         if any(npc not in known_npcs | proposed_npcs for npc in scene['npcs']):
             raise ValueError('A scene refers to an unknown NPC.')
+        if not staged:
+            scene_format.validate(scene)
     for kind in ('goals', 'checklist'):
         if any(not text.strip() for text in draft[kind]):
             raise ValueError(f'{kind} cannot contain blank entries.')
@@ -614,6 +620,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
                         where=row['where'],
                         npcs=[prefix + npc if npc in proposed_npcs else npc for npc in row['npcs']],
                         encounter=row['encounter'],
+                        **scene_format.stored(row),
                         notes=row['notes'],
                         request=item['id'],
                     ),

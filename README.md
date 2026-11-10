@@ -175,7 +175,15 @@ write just that row again, with an optional note on what to change: the rest of 
 reviewed it, and the new row starts ticked. A map's content proposal has the same button on each proposed
 NPC, item, journal entry, event and thread.
 
-Each session prep has a **Session readiness** board. It checks saved scene outlines, linked map files,
+Every scene is laid out the way a GM reads it at the table: **Key points** (one to three short bullets: who is
+there and what they want, what is going on, any GM-only truth), **Read aloud** (one sentence of at most 50 words)
+and **Checks** (each is one skill, a DC from 1 to 30 and what success gets: information, an item, or help for an
+NPC), above the scene's map, cast, encounter plan, clues and GM notes. Plan whole session and general requests
+draft scenes in that layout and refuse a scene whose read-aloud is more than one sentence; a scene planned before
+this layout keeps its text and gets empty key points and checks to fill in.
+
+Each session prep has a **Session readiness** board. It checks saved scene outlines, whether each scene has key
+points, a one-sentence read-aloud and checks, linked map files,
 stocking and Foundry copy freshness, NPC mechanics and portraits, queued art, handouts, chosen threads and
 encounter plans and the complete session bundle. Use a gap's action to open the relevant editor, then
 **Recheck** after saving. It checks the current export files; token art is still planned.

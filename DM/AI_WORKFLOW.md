@@ -30,6 +30,8 @@ schema and GM review flow. Use the map workflow for map-based content.
 
 For a complete session, open its prep and choose **Plan whole session**. The session proposal uses a bounded
 context that begins with recent played-session logs and selected threads. Review the recap, scene links,
-map briefs, NPCs, handouts and thread changes before applying. New map briefs wait for separate layout
+map briefs, NPCs, handouts and thread changes before applying. Every drafted scene follows the GM's
+three-part layout (`DM/scene_format.py`): one to three key points, exactly one sentence to read aloud, and checks
+(skill, DC and what success gets: information, an item, or help for an NPC). New map briefs wait for separate layout
 proposals and GM review in the map studio; art briefs wait in the image queue. Applying a session never
 imports anything into Foundry.
