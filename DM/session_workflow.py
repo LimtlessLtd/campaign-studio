@@ -10,6 +10,7 @@ import encounter_budget
 import item_review
 import record_changes
 import records
+import scene_format
 import shapes
 import workflow
 
@@ -106,7 +107,7 @@ SCHEMA = workflow.obj(
                         'clues': workflow.arr(
                             workflow.obj({'thread': workflow.STR, 'text': workflow.STR}), 12
                         ),
-                        'read_aloud': workflow.STR,
+                        **scene_format.SCHEMA_FIELDS,
                         'notes': workflow.STR,
                     }
                 ),
@@ -205,7 +206,8 @@ def prompt_pack(item, read_doc, campaign, budget_chars, prep_names, recent_logs)
         'Size encounters for campaign.party (size and average level) when it is present. '
         'Give each encounter creature its D&D 5e challenge rating as 0, 1/8, 1/4, 1/2 or 1 to 30; '
         'use a blank CR when it is unknown. '
-        'Do not claim to have generated maps, images or Foundry documents. '
+        + scene_format.INSTRUCTION
+        + 'Do not claim to have generated maps, images or Foundry documents. '
     )
     built, preview = prompt_context.build(
         instruction + '\nREFERENCE DATA:\n',
@@ -232,15 +234,16 @@ def validate(item, draft, read_doc):
     prep, _ = options(item, read_doc)
     if not isinstance(draft, dict) or len(json.dumps(draft, ensure_ascii=False)) > 240000:
         raise ValueError('The session proposal must be a bounded JSON object.')
-    # Proposals staged before encounter CR existed remain reviewable and applicable.
+    # Proposals staged before encounter CR or the scene layout existed remain reviewable and applicable.
     draft = deepcopy(draft)
+    staged_scenes = scene_format.staged_flags(draft)
     for scene in draft.get('scenes', []) if isinstance(draft.get('scenes'), list) else []:
         if isinstance(scene, dict) and isinstance(scene.get('encounter'), dict):
             creatures = scene['encounter'].get('creatures')
             for creature in creatures if isinstance(creatures, list) else []:
                 if isinstance(creature, dict):
                     creature.setdefault('cr', '')
-    workflow.validate_schema(draft, SCHEMA)
+    workflow.validate_schema(scene_format.schema_view(draft, staged_scenes), SCHEMA)
     if not draft['summary'].strip() or not draft['goals']:
         raise ValueError('A session proposal needs a summary and at least one goal.')
     ids = set()
@@ -275,9 +278,11 @@ def validate(item, draft, read_doc):
         or proposed_maps & existing_maps
     ):
         raise ValueError('Proposed IDs cannot reuse an existing link ID.')
-    for scene in draft['scenes']:
+    for scene, staged in zip(draft['scenes'], staged_scenes, strict=True):
         if not scene['purpose'].strip() or not scene['title'].strip():
             raise ValueError('Every scene needs a title and purpose.')
+        if not staged:
+            scene_format.validate(scene)
         if any(npc not in known_npcs | proposed_npcs for npc in scene['npcs']):
             raise ValueError('A scene refers to an unknown NPC.')
         ref, area = scene['map'], scene['area']
@@ -471,7 +476,7 @@ def apply(item, read_doc, commit, inbox, rejected=(), party_level=5):
                     )
                     for clue in row['clues']
                 ],
-                read_aloud=row['read_aloud'],
+                **scene_format.stored(row),
                 notes=row['notes'],
                 request=item['id'],
             )

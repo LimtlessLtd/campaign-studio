@@ -134,6 +134,72 @@ class BrowserSmoke(unittest.TestCase):
         ]
         self.assertEqual(found, [], label)
 
+    def test_scene_shows_key_points_read_aloud_and_checks_first_and_saves_them(self):
+        scene = fixtures.shapes.SCENE.new(
+            id='gate',
+            title='The gate',
+            purpose='Meet the guard.',
+            where='Harbour gate',
+            key_points=['Rook wants the party gone before the tide turns.'],
+            read_aloud='A watcher raises a lantern at the gate.',
+            checks=[
+                fixtures.shapes.SCENE_CHECK.new(
+                    skill='Insight', dc=11, result='Learn that Rook is afraid.'
+                )
+            ],
+        )
+        self.studio.seed(
+            'prep/s1', fixtures.shapes.PREP.new(n=1, title='Session 1', scenes=[scene])
+        )
+        for viewport in (DESKTOP, NARROW):
+            self.page.set_viewport_size(viewport)
+            self.open('#/prep/s1')
+            card = self.page.locator('.scene').first
+            top = {
+                text: card.get_by_text(text, exact=True).bounding_box()['y']
+                for text in ('Key points', 'Read aloud (one sentence)', 'Checks', 'Where')
+            }
+            self.assertLess(top['Key points'], top['Read aloud (one sentence)'])
+            self.assertLess(top['Read aloud (one sentence)'], top['Checks'])
+            self.assertLess(top['Checks'], top['Where'])
+            self.assertLessEqual(
+                self.page.evaluate('document.documentElement.scrollWidth'), viewport['width']
+            )
+            self.assert_accessible('scene layout at ' + str(viewport['width']))
+
+        self.page.set_viewport_size(DESKTOP)
+        self.open('#/prep/s1')
+        card = self.page.locator('.scene').first
+        brief = card.locator('.scene-brief')
+        box = brief.get_by_label('Who is there and what they want', exact=False).last
+        box.fill('The smugglers pay the watch to look away.')
+        box.press('Enter')
+        brief.get_by_label('Read aloud (one sentence)').fill('The tide rises and the bell tolls.')
+        brief.get_by_role('button', name='+ Check').click()
+        row = brief.locator('.row').nth(1)
+        row.get_by_label('Skill').fill('Perception')
+        row.get_by_label('DC').fill('13')
+        row.get_by_label('Success gets', exact=False).fill('Spot the cut rope on the quay.')
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        saved = self.stored('prep/s1')['scenes'][0]
+        self.assertEqual(
+            saved['key_points'],
+            [
+                'Rook wants the party gone before the tide turns.',
+                'The smugglers pay the watch to look away.',
+            ],
+        )
+        self.assertEqual(saved['read_aloud'], 'The tide rises and the bell tolls.')
+        self.assertEqual(
+            saved['checks'][1],
+            {'skill': 'Perception', 'dc': 13, 'result': 'Spot the cut rope on the quay.'},
+        )
+        brief.get_by_role('button', name='Remove check').first.click()
+        expect(self.page.locator('#saved')).to_contain_text('Saved')
+        self.assertEqual(
+            [c['skill'] for c in self.stored('prep/s1')['scenes'][0]['checks']], ['Perception']
+        )
+
     def test_prep_readiness_rechecks_saved_state_and_opens_the_map_fix(self):
         slug, _ = self.studio.import_map()
         prep = fixtures.shapes.PREP.new(

@@ -173,23 +173,23 @@ the shapes of the records in its lists (a map key's areas, an area's journal ent
 records with `Shape.new`, and the browser builds them with `blank(kind, fields)` from `GET /api/shapes`.
 Links and provenance such as `map`, `area`, `workflow` or `request` are optional extra fields.
 
-| Document                     | Shape         | Records in its lists                                                 |
-| ---------------------------- | ------------- | -------------------------------------------------------------------- |
-| `data/codex/<id>.json`       | `codex_entry` | one codex entry; unsafe legacy IDs use a hashed storage key          |
-| `data/threads/<id>.json`     | `thread`      | one thread                                                           |
-| `data/art.json`              | `art`         | art items                                                            |
-| `data/world-maps.json`       | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image) |
-| `data/transcripts/<id>.json` | `transcript`  | segments, and the passages sorted from them (`transcript_passage`)   |
-| `data/ledger/<id>.json`      | `ledger`      | reviewed evidence events for one transcript (`ledger_event`)         |
-| `data/arcs/<id>.json`        | `arc`         | options proposed for chosen loose threads (`arc_option`)             |
-| `data/table-lore.json`       | `table_lore`  | notes on gags the GM confirmed as banter (`table_lore_item`)         |
-| `data/prep/<session>.json`   | `prep`        | scenes with clues, handouts, checklist, loot, and a `session_log`    |
-| `maps/<slug>/key.json`       | `map_key`     | areas (with journal entries, events, loot), events                   |
+| Document                     | Shape         | Records in its lists                                                                  |
+| ---------------------------- | ------------- | ------------------------------------------------------------------------------------- |
+| `data/codex/<id>.json`       | `codex_entry` | one codex entry; unsafe legacy IDs use a hashed storage key                           |
+| `data/threads/<id>.json`     | `thread`      | one thread                                                                            |
+| `data/art.json`              | `art`         | art items                                                                             |
+| `data/world-maps.json`       | `world_maps`  | world maps and their pins (positions are 0-1 fractions of the image)                  |
+| `data/transcripts/<id>.json` | `transcript`  | segments, and the passages sorted from them (`transcript_passage`)                    |
+| `data/ledger/<id>.json`      | `ledger`      | reviewed evidence events for one transcript (`ledger_event`)                          |
+| `data/arcs/<id>.json`        | `arc`         | options proposed for chosen loose threads (`arc_option`)                              |
+| `data/table-lore.json`       | `table_lore`  | notes on gags the GM confirmed as banter (`table_lore_item`)                          |
+| `data/prep/<session>.json`   | `prep`        | scenes with key points, checks, clues, handouts, checklist, loot, and a `session_log` |
+| `maps/<slug>/key.json`       | `map_key`     | areas (with journal entries, events, loot), events                                    |
 
 Migrations complete stored documents with `Shape.fill_all`, filling only missing or null fields; existing
 values, unknown fields and other documents are kept. Schema 1 completed codex entries, threads, prep,
 scenes, map keys and areas; schema 2 completed every shaped record. Schema 4 replaced copied Foundry import
-values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, schema 15 adds thread map, pin and clue links, schema 16 adds loot given, who appeared and leads to each session log, and schema 17 adds CR to prep encounter creatures. The migration
+values with a hash; schema 5 added prep archive; schema 6 added the played-session log; schema 7 split codex and thread collections into individual documents. Schema 8 added thread entry and touched-session links; schema 9 added session pitch, scene plan and handout image-brief fields; schema 10 added transcripts, schema 11 adds their passages, sorting progress and the table-lore list, schema 12 adds separate thread ledgers, schema 13 adds arc proposals, schema 14 adds automatic runs, schema 15 adds thread map, pin and clue links, schema 16 adds loot given, who appeared and leads to each session log, schema 17 adds CR to prep encounter creatures, and schema 18 adds key points and checks to prep scenes. The migration
 backs up old files before writing records and removes the old collections after recording the new version.
 Adding a field to a shape changes
 `shapes.fields_digest()`, and `tests/test_shapes.py` fails until a new schema version fills it and
@@ -217,7 +217,12 @@ before applying; stable request-prefixed IDs and a prep application marker make 
 Editing request text or session after drafting invalidates the proposal.
 The `session` request kind uses `DM/session_workflow.py`: a pitch, length, combat/social mix and selected threads
 produce a recap and three to six scenes with validated NPC, thread, map and area links. It also proposes
-up to two map briefs, handouts, art and thread changes. Apply checks the prep and affected threads against
+up to two map briefs, handouts, art and thread changes. Scenes there and in general requests follow the owner's
+GM layout, defined once in `DM/scene_format.py`: `key_points` (one to three bullets), `read_aloud` (exactly one
+sentence of at most 50 words, counted by `sentence_count`) and `checks` (`{skill, dc, result}`, DC 1 to 30). That
+module holds the schema fields, the prompt instruction, the validation, the stored fields and the readiness
+rule for both workflows. A staged draft whose scenes have neither key points nor checks predates the layout:
+it is validated against the older schema, left unchanged, and applies with empty key points and checks. Apply checks the prep and affected threads against
 the staged review snapshot, then commits the prep, records, art, map briefs and ready layout workflows with
 the request's done status last. Map briefs remain pending until their separate layout workflow is reviewed;
 the session apply makes no Foundry write or paid call. The GM may reject any proposed map, entry, thread,
