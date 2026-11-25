@@ -150,6 +150,43 @@ class AIProviderTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'not installed'):
                 ai_provider.PROVIDERS['codex'].command(clean, 'request', {})
 
+    def test_gemini_is_a_subscription_provider_started_through_its_worker(self):
+        clean = ai_provider.clean_settings({'provider': 'gemini'})  # no model, no key name needed
+        self.assertEqual(clean['provider'], 'gemini')
+        with patch.object(ai_provider.shutil, 'which', return_value='/usr/bin/gemini'):
+            gemini = ai_provider.PROVIDERS['gemini']
+            self.assertTrue(gemini.available(clean))
+            command = gemini.command(clean, 'thread-ledger', {})
+            self.assertEqual(
+                ai_provider.status(clean) | {'key_available': False},
+                {
+                    'provider': 'gemini',
+                    'label': 'Gemini',
+                    'available': True,
+                    'key_available': False,
+                },
+            )
+            with_model = gemini.command(dict(clean, model='gemini-2.5-pro'), 'request', {})
+            # On Windows `gemini` is a .cmd shim that cmd.exe parses, so a name stays plain.
+            for bad in ('gemini & calc', 'x"y', '--yolo', 'a|b'):
+                with self.subTest(model=bad), self.assertRaisesRegex(ValueError, 'model name'):
+                    gemini.command(dict(clean, model=bad), 'request', {})
+        self.assertIn('gemini_worker.py', command[2])
+        self.assertEqual(command[3:], ['thread-ledger', '/usr/bin/gemini'])
+        self.assertEqual(with_model[3:], ['request', '/usr/bin/gemini', 'gemini-2.5-pro'])
+        self.assertEqual(
+            ai_provider.clean_settings({'provider': 'gemini', 'model': 'gemini-3.5-flash'})[
+                'model'
+            ],
+            'gemini-3.5-flash',
+        )
+        with self.assertRaisesRegex(ValueError, 'model name'):
+            ai_provider.clean_settings({'provider': 'gemini', 'model': 'gemini & calc'})
+        with patch.object(ai_provider.shutil, 'which', return_value=None):
+            self.assertFalse(ai_provider.PROVIDERS['gemini'].available(clean))
+            with self.assertRaisesRegex(ValueError, 'not installed'):
+                ai_provider.PROVIDERS['gemini'].command(clean, 'request', {})
+
     def test_every_draft_kind_the_server_queues_has_an_openai_schema(self):
         # A kind the worker does not know fails its job under the OpenAI provider (it did for the
         # thread ledger), so adding a kind to the server needs its schema here too.

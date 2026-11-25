@@ -10,7 +10,7 @@ flowchart LR
   Core --> Docs[JSON documents and history]
   Core --> WF[workflow.py: validate, stage, apply]
   Core --> Queue[job_service.py: job lanes]
-  Queue --> AI[ai_provider: Claude CLI, Codex CLI or OpenAI Responses]
+  Queue --> AI[ai_provider: Claude CLI, Codex CLI, Gemini CLI or OpenAI Responses]
   AI --> WF
   Queue --> Forge[forge: render plan and scene]
   Queue --> Art[image_worker: configured provider]
@@ -332,8 +332,8 @@ Read-only `Website/content` references are disabled by default; enable `legacy_r
 for an existing compatible site. Local reference notes can be added as `DM/data/notes.txt`.
 
 The image adapter posts `{model, prompt, size, n: 1}` and requires `data[0].b64_json`. It uses an environment
-variable for the key and permits HTTP only on loopback. `ai_provider.py` selects Claude Code, Codex or OpenAI
-API for structured drafts. Claude runs without file/shell tools; `openai_worker.py` sends the existing schema
+variable for the key and permits HTTP only on loopback. `ai_provider.py` selects Claude Code, Codex, Gemini or
+OpenAI API for structured drafts. Claude runs without file/shell tools; `openai_worker.py` sends the existing schema
 through the Responses API with an empty tool list and `store: false`. The fixed HTTPS endpoint receives the
 prompt and an environment-provided API key; settings keep only the variable name. All providers use the
 same validation, GM review, cancellation and retry flow. Exported prompt packs permit other assistants.
@@ -341,7 +341,7 @@ Old `/api/claude` calls use the selected structured request runner. The OpenAI p
 it has not been exercised with a paid API call.
 
 `draft_schemas.for_kind` is the one table from a draft kind to the strict JSON schema that OpenAI and Codex
-enforce (every property required, no extras); a new kind adds its schema there, and a test keeps every kind
+enforce (and that Gemini is given in its prompt) (every property required, no extras); a new kind adds its schema there, and a test keeps every kind
 the server queues in step with it. Claude Code is given the schema the caller built.
 
 **Codex (W73).** `tools/codex_worker.py` runs `codex exec` for one draft and prints the same envelope as the
@@ -362,7 +362,32 @@ the other providers. A Codex stopped by Cancel cannot remove its scratch folder,
 Codex: the CLI's event shapes and flags come from its help and public documentation, so W76 records what
 a live draft shows.
 
-The owner's own use needs no API key: drafting goes through the signed-in Claude Code or Codex CLI, and session
+**Gemini.** `tools/gemini_worker.py` runs the signed-in Gemini CLI headless for one draft (`gemini
+--prompt=... --output-format=stream-json`, the prompt on standard input, an optional `--model=`) and prints
+the same envelope. Running the command, its timeout, the scratch-folder sweep and reading the final text as
+one JSON object are shared with the Codex worker in `tools/cli_draft.py`; each worker keeps only how its tool
+is locked down, signed in and read. Gemini has no switch that removes every tool, so the worker applies three
+layers. (1) Gemini starts with `--approval-mode=plan` (read-only), `--policy=` a TOML file of the worker's
+own that denies every tool and every MCP tool (`--policy` replaces the user's policy folder, so no user rule
+outranks it), `--extensions=none`, `--allowed-mcp-server-names=` a name no server has, and `--skip-trust`
+for an empty scratch workspace. The prompt starts with a fixed line (never a slash command) and every `@` in
+it is escaped, so campaign text cannot pull a file in. Gemini has no schema switch, so the strict schema is
+appended to the prompt; the server validates the draft as for every provider. (2) It uses the Google
+sign-in only: `GEMINI_API_KEY`, `GOOGLE_API_KEY`, the Vertex AI, gateway and cloud-credential variables are
+removed from its environment, `GOOGLE_GENAI_USE_GCA=true` selects the Google login, and a user or system
+`settings.json` whose `selectedType` or `enforcedType` names another sign-in is refused before Gemini
+starts. A Gemini that is not signed in exits with status 41, which the worker reports with how to sign in.
+(3) The worker reads the `stream-json` events and fails the draft, after stopping Gemini's process tree, at
+the first event that is not `init`, `message`, `error` or `result` (Gemini announces a `tool_use` before the
+tool runs), and refuses a `result` whose `stats.tool_calls` is not zero. The answer is the concatenated
+`assistant` message deltas; `result.stats` gives `input_tokens`, `output_tokens` and `cached`. A model name
+is limited to letters, digits, dots, dashes and underscores, because on Windows `gemini` is a `.cmd` shim
+that cmd.exe parses. The event names, flags, auth types, the 8 MB standard-input limit and exit status 41
+were read from the installed Gemini CLI 0.71.1; nothing here has run against a signed-in Gemini, so W85
+records what a live draft shows. Gemini still loads the owner's own `GEMINI.md` memory and hooks from their
+user settings, which the worker cannot switch off.
+
+The owner's own use needs no API key: drafting goes through the signed-in Claude Code, Codex or Gemini CLI, and session
 recordings are transcribed locally (W68), sorted into play and banter (W69), then proposed as a reviewed
 thread ledger (W70) and arc options for loose threads (W71). An automatic run (W72) chains these steps and stops at each review. The OpenAI provider is optional.
 

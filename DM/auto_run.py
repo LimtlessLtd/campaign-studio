@@ -27,7 +27,8 @@ LABELS = {
     'draft': 'Draft the next session',
 }
 LIMIT = re.compile(
-    r'usage limit|limit reached|hit your limit|rate.?limit|5-hour limit|weekly limit|quota|overloaded',
+    r'usage limit|limit reached|hit your limit|rate.?limit|5-hour limit|weekly limit|quota|overloaded'
+    r'|resource.?exhausted|exhausted your capacity',
     re.IGNORECASE,
 )
 LIMIT_NOTE = 'A usage limit was probably reached. Run again after it resets: nothing is lost.'
