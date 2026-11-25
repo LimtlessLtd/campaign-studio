@@ -744,11 +744,12 @@ async function studioSettings(_arg, context) {
           options: [
             ['claude', 'Claude Code'],
             ['codex', 'Codex'],
+            ['gemini', 'Gemini'],
             ['openai', 'OpenAI API'],
           ],
         }),
         formInput(f.ai, 'model', 'AI model', {
-          placeholder: 'Optional; required for OpenAI API',
+          placeholder: 'Optional (such as gemini-2.5-pro); required for OpenAI API',
         }),
         formInput(f.ai, 'key_env', 'OpenAI API key environment variable', {
           help: result.ai.key_available
@@ -766,7 +767,7 @@ async function studioSettings(_arg, context) {
         h(
           'p',
           { class: 'muted' },
-          'The selected provider drafts a structured proposal from your campaign context. You review it before applying. Claude Code and Codex use the account you are signed in to, never an API key; OpenAI API drafts may incur charges. Prompt packs work with other assistants too.',
+          'The selected provider drafts a structured proposal from your campaign context. You review it before applying. Claude Code, Codex and Gemini use the account you are signed in to, never an API key; OpenAI API drafts may incur charges. Prompt packs work with other assistants too.',
         ),
         h(
           'p',

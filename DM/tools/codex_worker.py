@@ -14,28 +14,25 @@ layers apply:
 
 The worker prints the same envelope as the OpenAI worker: the draft as `structured_output` and the tokens
 Codex reported as `usage` (a subscription states no price). The server validates the draft before review.
+Running the command, its timeout and reading the answer as JSON are shared with the Gemini worker
+(`cli_draft`).
 """
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import threading
-import time
 from collections import deque
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # app modules
+import cli_draft
 import draft_schemas
 import storage
-from job_service import SubprocessProcess
 
 MAX_PROMPT = 8 * 1024 * 1024
-MAX_ANSWER = 8 * 1024 * 1024
 TIMEOUT = 30 * 60  # seconds; a draft that takes longer is stopped rather than holding the lane
-STALE_AFTER = 24 * 3600  # scratch folders of draft runs that were cancelled are removed after a day
 SCRATCH = 'campaign-studio-codex-'
 # Items Codex may stream while it answers. Anything else (a command, a file change, an MCP or web call, a
 # sub-agent) is the model reaching for a tool, which a draft never has.
@@ -69,10 +66,9 @@ CONFIG = (
 )
 # What would make Codex bill an API key instead of the subscription.
 KEY_ENV = ('OPENAI_API_KEY', 'CODEX_API_KEY')
-NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
 
-class CodexError(ValueError):
+class CodexError(cli_draft.DraftError):
     """A draft that Codex could not or must not produce. The message is shown to the GM."""
 
 
@@ -94,7 +90,7 @@ def run_quietly(codex, args, env, timeout=30):
             errors='replace',
             env=env,
             timeout=timeout,
-            creationflags=NO_WINDOW,
+            creationflags=cli_draft.NO_WINDOW,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise CodexError(f'Codex did not answer `{" ".join(args)}`: {error}') from error
@@ -148,18 +144,8 @@ def command_line(codex, schema_path, workdir, model, features):
 
 
 def sweep_stale(root=None, now=None):
-    """Remove scratch folders that a cancelled draft could not clean up (it is stopped without warning)."""
-    root = root or tempfile.gettempdir()
-    for name in os.listdir(root):
-        path = os.path.join(root, name)
-        try:
-            if (
-                name.startswith(SCRATCH)
-                and (now or time.time()) - os.path.getmtime(path) > STALE_AFTER
-            ):
-                shutil.rmtree(path, ignore_errors=True)
-        except OSError:
-            pass  # another worker removed it first
+    """Remove Codex scratch folders that a cancelled draft could not clean up."""
+    cli_draft.sweep_stale(SCRATCH, root, now)
 
 
 class Answer:
@@ -216,63 +202,14 @@ class Answer:
                 'Codex returned no answer.'
                 + (' It said: ' + ' | '.join(self.tail) if self.tail else '')
             )
-        if len(self.text) > MAX_ANSWER:
-            raise CodexError('Codex returned an answer larger than 8 MB.')
-        try:
-            draft = json.loads(re.sub(r'^```(?:json)?\s*|\s*```$', '', self.text.strip()))
-        except ValueError as error:
-            raise CodexError('Codex did not return JSON.') from error
-        if not isinstance(draft, dict):
-            raise CodexError('Codex returned a proposal that is not an object.')
-        return draft
-
-
-def feed(process, prompt):
-    """Send the prompt on a thread, so a large one cannot block Codex's own output."""
-
-    def write():
-        try:
-            process.stdin.write(prompt)
-            process.stdin.close()
-        except OSError:
-            pass  # Codex stopped reading: its exit says why
-
-    threading.Thread(target=write, daemon=True).start()
+        return cli_draft.json_draft(self.text, 'Codex', CodexError)
 
 
 def run(command, prompt, env, answer):
     """Run Codex and feed `answer` its output. Stops Codex on a forbidden event or when it takes too long."""
-    with subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        env=env,
-        creationflags=NO_WINDOW,
-    ) as process:
-        expired = threading.Event()
-
-        def give_up():
-            expired.set()
-            SubprocessProcess(process).terminate()
-
-        timer = threading.Timer(TIMEOUT, give_up)
-        timer.start()
-        try:
-            feed(process, prompt)
-            for line in process.stdout:
-                answer.add(line)
-        except CodexError:
-            SubprocessProcess(process).terminate()
-            raise
-        finally:
-            timer.cancel()
-        code = process.wait()
-    if expired.is_set():
-        raise CodexError('Codex took too long and was stopped.')
+    code = cli_draft.run(
+        command, prompt, env, answer.add, name='Codex', timeout=TIMEOUT, error=CodexError
+    )
     if code != 0 and not answer.failure:
         clue = ' | '.join(answer.tail)
         raise CodexError(

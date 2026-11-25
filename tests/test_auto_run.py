@@ -158,6 +158,8 @@ class ChoiceTests(unittest.TestCase):
         note = auto_run.limit_hint('Claude AI usage limit reached|1760000000')
         self.assertIn('Run again after it resets', note)
         self.assertIn('usage limit reached', note)
+        for gemini in ('You have exhausted your capacity on this model.', 'RESOURCE_EXHAUSTED'):
+            self.assertIn('Run again after it resets', auto_run.limit_hint(gemini))
         self.assertEqual(auto_run.limit_hint('The command failed.'), 'The command failed.')
         self.assertEqual(auto_run.limit_hint(''), '')
 

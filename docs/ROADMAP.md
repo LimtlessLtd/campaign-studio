@@ -135,6 +135,21 @@ their row and finding say enough.
 - Turn each failure into a row. If a tool cannot be kept out, say so in the README and keep Claude Code the
   only automatic drafter.
 
+### W85 Live check of the Gemini provider
+
+- The Gemini provider (`tools/gemini_worker.py`) was tested only against a fake `gemini` command, because
+  a live draft needs the owner's one-time Google sign-in and spends their subscription. Its flags, the
+  `stream-json` event shapes, the auth types and exit status 41 were read from the installed CLI (0.71.1).
+- With the owner signed in (`gemini` in a terminal, trust the folder, Sign in with Google), run one small
+  draft (a thread-ledger or arc-options window on a synthetic campaign) with Gemini chosen in Settings and
+  record `gemini --version`. Confirm that Gemini accepts the worker's policy file and flags, that the
+  assistant deltas join into the schema's JSON object, that `result.stats` reports the tokens the worker
+  reads (`input_tokens`, `output_tokens`, `cached`) with `tool_calls` 0, and that no `tool_use` appeared.
+  If the stream guard stops a harmless event, add its type to `ALLOWED_EVENTS`.
+- Check what Gemini prints when the subscription limit is reached and that `auto_run.LIMIT` matches it, what
+  it prints when it is not signed in, and that a cancelled draft leaves no Gemini process and its scratch
+  folder is swept. Turn each failure into a row.
+
 ### W35 Threads and wrap-up
 
 - W34 is complete: a thread links codex entries, maps, numbered map pins and touched sessions; its clues
